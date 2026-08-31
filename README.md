@@ -7,9 +7,12 @@ npx create-expo-updates-server@latest my-server
 cd my-server
 ```
 
+Or run `npx create-expo-updates-server@latest .` from an empty directory.
+
 The downloaded initializer uses its bundled, checksum-verified template. It
 does not fetch source code, install project dependencies, initialize Git, or
-create secrets while scaffolding. The target path must not already exist.
+create secrets while scaffolding. A named target path must not already exist;
+`.` is supported only when it resolves to the empty current directory.
 Continue with either Docker:
 
 ```bash

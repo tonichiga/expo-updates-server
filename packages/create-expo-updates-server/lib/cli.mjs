@@ -9,6 +9,8 @@ import {
   readFile,
   readdir,
   rename,
+  rmdir,
+  unlink,
 } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -32,7 +34,8 @@ Options:
   -h, --help       Show this help
   -v, --version    Show the package version
 
-The target path must not already exist.
+The target path must not already exist, unless it is "." and the current
+directory is empty.
 `;
 
 function cliError(message) {
@@ -261,6 +264,25 @@ async function assertTargetAbsent(target) {
   throw cliError(`Target path already exists: ${target}`);
 }
 
+async function captureEmptyCurrentDirectory(target) {
+  let identity;
+  try {
+    identity = await lstat(target);
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      throw cliError(`Current directory does not exist: ${target}`);
+    }
+    throw error;
+  }
+  if (!identity.isDirectory() || identity.isSymbolicLink()) {
+    throw cliError(`Current directory is not a real directory: ${target}`);
+  }
+  if ((await readdir(target)).length !== 0) {
+    throw cliError(`Current directory is not empty: ${target}`);
+  }
+  return identity;
+}
+
 function expectedDirectories(manifest) {
   return new Set(
     manifest.files.flatMap(({ path: file }) => {
@@ -366,6 +388,34 @@ async function assertOwnedStaging(staging, expected) {
   }
 }
 
+async function assertCurrentDirectoryIdentity(target, expected) {
+  let actual;
+  try {
+    actual = await lstat(target);
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      throw cliError(
+        `Current directory disappeared before installation: ${target}`,
+      );
+    }
+    throw error;
+  }
+  if (!sameIdentity(actual, expected)) {
+    throw cliError(
+      `Current directory was replaced before installation: ${target}`,
+    );
+  }
+}
+
+async function assertEmptyCurrentDirectory(target, expected) {
+  await assertCurrentDirectoryIdentity(target, expected);
+  if ((await readdir(target)).length !== 0) {
+    throw cliError(
+      `Current directory is no longer empty; installation was not started: ${target}`,
+    );
+  }
+}
+
 export async function installStagedProject({
   staging,
   target,
@@ -400,15 +450,136 @@ export async function installStagedProject({
   }
 }
 
+function sortedDirectories(manifest, deepestFirst = false) {
+  return [...expectedDirectories(manifest)].sort((left, right) => {
+    const depth =
+      left.split("/").length - right.split("/").length;
+    return (
+      (deepestFirst ? -depth : depth) ||
+      left.localeCompare(right, "en")
+    );
+  });
+}
+
+function concurrentEntryError(target, relativePath) {
+  return cliError(
+    `Destination entry appeared during installation and was not overwritten: ${path.join(
+      target,
+      ...relativePath.split("/"),
+    )}`,
+  );
+}
+
+async function copyStagingIntoCurrentDirectory({
+  staging,
+  target,
+  manifest,
+  currentDirectoryIdentity,
+  beforeTransfer,
+}) {
+  let transferStarted = false;
+  try {
+    if (beforeTransfer) {
+      await beforeTransfer({ staging, target, manifest });
+    }
+    await assertEmptyCurrentDirectory(target, currentDirectoryIdentity);
+
+    transferStarted = true;
+    for (const directory of sortedDirectories(manifest)) {
+      await assertCurrentDirectoryIdentity(target, currentDirectoryIdentity);
+      const destination = path.join(target, ...directory.split("/"));
+      try {
+        await mkdir(destination);
+      } catch (error) {
+        if (error?.code === "EEXIST") {
+          throw concurrentEntryError(target, directory);
+        }
+        throw error;
+      }
+    }
+
+    for (const entry of manifest.files) {
+      await assertCurrentDirectoryIdentity(target, currentDirectoryIdentity);
+      const source = path.join(staging, ...entry.path.split("/"));
+      const destination = path.join(target, ...entry.path.split("/"));
+      try {
+        await copyFile(source, destination, constants.COPYFILE_EXCL);
+      } catch (error) {
+        if (error?.code === "EEXIST") {
+          throw concurrentEntryError(target, entry.path);
+        }
+        throw error;
+      }
+    }
+
+    await assertCurrentDirectoryIdentity(target, currentDirectoryIdentity);
+    await verifyStagedProject(target, manifest);
+    await assertCurrentDirectoryIdentity(target, currentDirectoryIdentity);
+  } catch (error) {
+    if (transferStarted) {
+      error.hasPartialCurrentDirectoryInstall = true;
+    }
+    throw error;
+  }
+}
+
+async function removeStagingSnapshot(staging, manifest, stagingIdentity) {
+  await assertOwnedStaging(staging, stagingIdentity);
+  for (const entry of manifest.files) {
+    await unlink(path.join(staging, ...entry.path.split("/")));
+  }
+  for (const directory of sortedDirectories(manifest, true)) {
+    await rmdir(path.join(staging, ...directory.split("/")));
+  }
+  await rmdir(staging);
+}
+
+export async function installStagedProjectIntoCurrentDirectory({
+  staging,
+  target,
+  manifest,
+  stagingIdentity,
+  currentDirectoryIdentity,
+  beforeTransfer,
+}) {
+  await assertOwnedStaging(staging, stagingIdentity);
+  await verifyStagedProject(staging, manifest);
+  await assertOwnedStaging(staging, stagingIdentity);
+  await assertEmptyCurrentDirectory(target, currentDirectoryIdentity);
+
+  await copyStagingIntoCurrentDirectory({
+    staging,
+    target,
+    manifest,
+    currentDirectoryIdentity,
+    beforeTransfer,
+  });
+
+  try {
+    await removeStagingSnapshot(staging, manifest, stagingIdentity);
+  } catch (error) {
+    throw cliError(
+      `The project was installed and verified, but staging cleanup failed: ${error.message}`,
+    );
+  }
+}
+
 function shellQuote(value) {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
 export async function scaffold(targetArgument, options = {}) {
   const packageRoot = options.packageRoot ?? defaultPackageRoot;
+  const cwd = path.resolve(options.cwd ?? process.cwd());
+  const target = path.resolve(cwd, targetArgument);
+  const installIntoCurrentDirectory = targetArgument === "." && target === cwd;
+  const currentDirectoryIdentity = installIntoCurrentDirectory
+    ? await captureEmptyCurrentDirectory(target)
+    : undefined;
+  if (!installIntoCurrentDirectory) {
+    await assertTargetAbsent(target);
+  }
   const { manifest, templateRoot } = await verifyTemplate(packageRoot);
-  const target = path.resolve(options.cwd ?? process.cwd(), targetArgument);
-  await assertTargetAbsent(target);
   const parent = path.dirname(target);
   const parentStat = await lstat(parent).catch((error) => {
     if (error?.code === "ENOENT") {
@@ -449,16 +620,33 @@ export async function scaffold(targetArgument, options = {}) {
     if (options.beforeInstall) {
       await options.beforeInstall({ staging, target });
     }
-    await installStagedProject({
-      staging,
-      target,
-      manifest,
-      stagingIdentity,
-    });
+    if (installIntoCurrentDirectory) {
+      await installStagedProjectIntoCurrentDirectory({
+        staging,
+        target,
+        manifest,
+        stagingIdentity,
+        currentDirectoryIdentity,
+        beforeTransfer: options.beforeCurrentDirectoryTransfer,
+      });
+    } else {
+      await installStagedProject({
+        staging,
+        target,
+        manifest,
+        stagingIdentity,
+      });
+    }
   } catch (error) {
     if (stagingCreated) {
+      const partialInstallWarning = error.hasPartialCurrentDirectoryInstall
+        ? `
+Installation into the current directory did not complete and may have left installer-created partial output.
+Nothing was removed because doing so could delete user data.
+Review the current directory and staging snapshot manually.`
+        : "";
       throw cliError(
-        `${error.message}
+        `${error.message}${partialInstallWarning}
 Staging directory retained at: ${staging}
 Inspect or remove it manually.`,
       );
@@ -468,19 +656,52 @@ Inspect or remove it manually.`,
 
   return {
     target,
-    nextSteps: `Created Expo Updates Server in ${target}
-
-Next steps (Docker):
-  cd -- ${shellQuote(targetArgument)}
-  cp .env.docker.example .env
-  docker compose up -d --build
-
-Next steps (npm):
-  cd -- ${shellQuote(targetArgument)}
-  npm ci
-  cp .env.example .env.local
-  npm run dev`,
+    targetArgument,
+    installIntoCurrentDirectory,
   };
+}
+
+function style(value, code, color) {
+  return color ? `\u001B[${code}m${value}\u001B[0m` : value;
+}
+
+export function formatSuccess(
+  { target, targetArgument, installIntoCurrentDirectory },
+  { color = false } = {},
+) {
+  const commandText = (value) => style(value, "93", color);
+  const section = (value) => style(value, "36", color);
+  const locationStep = installIntoCurrentDirectory
+    ? []
+    : [`cd -- ${shellQuote(targetArgument)}`];
+  const dockerSteps = [
+    ...locationStep,
+    "cp .env.docker.example .env",
+    "docker compose up -d --build",
+    "docker compose exec app npm run create-admin",
+  ];
+  const npmSteps = [
+    ...locationStep,
+    "npm ci",
+    "cp .env.example .env.local",
+    "npm run dev",
+  ];
+  const numbered = (steps) =>
+    steps
+      .map(
+        (step, index) =>
+          `  ${commandText(`${index + 1}.`)} ${commandText(step)}`,
+      )
+      .join("\n");
+
+  return `${style("✓ Expo Updates Server is ready", "1;32", color)}
+${section("Project:")} ${target}
+
+${section("Next steps (Docker):")}
+${numbered(dockerSteps)}
+
+${section("Next steps (npm):")}
+${numbered(npmSteps)}`;
 }
 
 function parseArguments(args) {
@@ -506,6 +727,9 @@ function parseArguments(args) {
         ? "Exactly one target directory is required"
         : "Only one target directory is allowed",
     );
+  }
+  if (positionals[0].length === 0) {
+    throw cliError("Target directory cannot be empty");
   }
   return { action: "scaffold", target: positionals[0] };
 }
@@ -539,7 +763,12 @@ export async function main(args, io = console, options = {}) {
       ...options,
       packageRoot,
     });
-    io.log(result.nextSteps);
+    const color =
+      typeof options.color === "boolean"
+        ? options.color
+        : Boolean(process.stdout.isTTY) &&
+          !Object.prototype.hasOwnProperty.call(process.env, "NO_COLOR");
+    io.log(formatSuccess(result, { color }));
     return 0;
   } catch (error) {
     io.error(`Error: ${error.message}`);
