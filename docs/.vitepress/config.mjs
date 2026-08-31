@@ -4,7 +4,7 @@ const repository = "https://github.com/tonichiga/expo-updates-server";
 
 export default defineConfig({
   base: "/expo-updates-server/",
-  title: "Expo Update Custom Server",
+  title: "Expo Updates Server",
   description:
     "Self-hosted Expo OTA updates with signed manifests, controlled releases, rollback, and emergency recovery.",
   lastUpdated: true,
@@ -72,7 +72,7 @@ export default defineConfig({
     },
     footer: {
       message: "Released under the MIT License.",
-      copyright: "Copyright © 2025-present Expo Update Custom Server contributors",
+      copyright: "Copyright © 2025-present Expo Updates Server contributors",
     },
   },
 });
