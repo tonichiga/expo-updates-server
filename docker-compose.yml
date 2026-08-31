@@ -1,0 +1,100 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-expo_updates}
+      POSTGRES_USER: ${POSTGRES_USER:-expo_updates}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-expo_updates_local}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docs/migrations/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-expo_updates} -d ${POSTGRES_DB:-expo_updates}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-expo_updates}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-expo_updates_local}
+    ports:
+      - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >
+        mc alias set local http://minio:9000
+        "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}" &&
+        mc mb --ignore-existing "local/$${OTA_STORAGE_BUCKET}"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-expo_updates}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-expo_updates_local}
+      OTA_STORAGE_BUCKET: ${OTA_STORAGE_BUCKET:-expo-updates}
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_PROVIDER: pg
+      DATABASE_URL: postgresql://${POSTGRES_USER:-expo_updates}:${POSTGRES_PASSWORD:-expo_updates_local}@postgres:5432/${POSTGRES_DB:-expo_updates}
+      DATABASE_SSL: "false"
+      R2_ENDPOINT: http://minio:9000
+      R2_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-expo_updates}
+      R2_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-expo_updates_local}
+      R2_BUCKET: ${OTA_STORAGE_BUCKET:-expo-updates}
+      R2_REGION: us-east-1
+      S3_FORCE_PATH_STYLE: "true"
+      OTA_STORAGE_BUCKET: ${OTA_STORAGE_BUCKET:-expo-updates}
+      OTA_PUBLIC_BASE_URL: ${OTA_PUBLIC_BASE_URL:-http://localhost:3000}
+      OTA_CDN_BASE_URL: ${OTA_CDN_BASE_URL:-}
+      CODE_SIGNING_PRIVATE_KEY: ${CODE_SIGNING_PRIVATE_KEY:-}
+      CODE_SIGNING_PRIVATE_KEY_PATH: /run/secrets/ota/code-signing-private-key.pem
+    volumes:
+      - ./secrets:/run/secrets/ota:ro
+    ports:
+      - "${OTA_HTTP_PORT:-3000}:3000"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://127.0.0.1:3000/api/health >/dev/null || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  postgres-data:
+  minio-data:

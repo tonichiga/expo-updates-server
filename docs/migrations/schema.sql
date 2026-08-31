@@ -1,0 +1,363 @@
+create extension if not exists pgcrypto;
+
+create table if not exists public.ota_updates (
+  id uuid primary key default gen_random_uuid(),
+  update_id uuid not null unique,
+  build_id uuid not null,
+  runtime_version text not null,
+  channel text not null,
+  platform text not null check (platform in ('ios', 'android')),
+  created_at timestamptz not null,
+  created_at_path text not null,
+  storage_bucket text not null,
+  storage_base_path text not null,
+  is_active boolean not null default false,
+  updated_at timestamptz null,
+  disabled_at timestamptz null,
+  assets_count integer not null default 0,
+  launch_asset_path text null,
+  comment text null,
+  rolled_back_from_update_id uuid null,
+  manifest jsonb not null,
+  inserted_at timestamptz not null default now(),
+  modified_at timestamptz not null default now(),
+  constraint ota_updates_active_dates_chk check (
+    not is_active or disabled_at is null
+  )
+);
+
+create index if not exists idx_ota_updates_lookup
+  on public.ota_updates (runtime_version, channel, platform, created_at desc);
+
+create unique index if not exists idx_ota_updates_one_active_per_scope
+  on public.ota_updates (runtime_version, channel, platform)
+  where is_active;
+
+create table if not exists public.ota_update_channels (
+  id bigserial primary key,
+  runtime_version text not null,
+  channel text not null,
+  platform text not null check (platform in ('ios', 'android')),
+  latest_update_id uuid null references public.ota_updates(update_id) on delete set null,
+  latest_created_at timestamptz null,
+  latest_created_at_path text null,
+  active_update_id uuid null references public.ota_updates(update_id) on delete set null,
+  active_changed_at timestamptz null,
+  inserted_at timestamptz not null default now(),
+  modified_at timestamptz not null default now(),
+  unique (runtime_version, channel, platform)
+);
+
+create or replace function public.set_modified_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.modified_at = now();
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_ota_updates_modified_at on public.ota_updates;
+create trigger trg_ota_updates_modified_at
+before update on public.ota_updates
+for each row execute function public.set_modified_at();
+
+drop trigger if exists trg_ota_update_channels_modified_at on public.ota_update_channels;
+create trigger trg_ota_update_channels_modified_at
+before update on public.ota_update_channels
+for each row execute function public.set_modified_at();
+
+alter table public.ota_update_channels
+  add column if not exists served_manifest_id uuid not null default gen_random_uuid();
+
+alter table public.ota_update_channels
+  add column if not exists served_manifest_changed_at timestamptz not null default now();
+
+create or replace function public.ota_channels_rotate_served_manifest_id()
+returns trigger
+language plpgsql
+as $$
+begin
+  if (
+    old.latest_update_id is distinct from new.latest_update_id
+    or old.active_update_id is distinct from new.active_update_id
+  ) then
+    new.served_manifest_id := gen_random_uuid();
+    new.served_manifest_changed_at := now();
+  end if;
+
+  return new;
+end;
+$$;
+
+-- 4) Триггер
+drop trigger if exists trg_ota_channels_rotate_served_manifest_id on public.ota_update_channels;
+
+create trigger trg_ota_channels_rotate_served_manifest_id
+before update on public.ota_update_channels
+for each row
+execute function public.ota_channels_rotate_served_manifest_id();
+
+-- 5) Индекс (не обязателен, но полезен для отладки/поиска)
+create index if not exists idx_ota_channels_served_manifest_id
+  on public.ota_update_channels(served_manifest_id);
+
+create or replace function public.ota_channels_validate_scope_pointers()
+returns trigger
+language plpgsql
+as $$
+declare
+  latest_row record;
+  active_row record;
+begin
+  if new.latest_update_id is not null then
+    select runtime_version, channel, platform
+      into latest_row
+      from public.ota_updates
+     where update_id = new.latest_update_id;
+
+    if not found then
+      raise exception
+        'latest_update_id % does not exist in ota_updates',
+        new.latest_update_id;
+    end if;
+
+    if latest_row.runtime_version is distinct from new.runtime_version
+       or latest_row.channel is distinct from new.channel
+       or latest_row.platform is distinct from new.platform then
+      raise exception
+        'latest_update_id % points outside scope (%/%/%), row scope is (%/%/%)',
+        new.latest_update_id,
+        latest_row.runtime_version,
+        latest_row.channel,
+        latest_row.platform,
+        new.runtime_version,
+        new.channel,
+        new.platform;
+    end if;
+  end if;
+
+  if new.active_update_id is not null then
+    select runtime_version, channel, platform
+      into active_row
+      from public.ota_updates
+     where update_id = new.active_update_id;
+
+    if not found then
+      raise exception
+        'active_update_id % does not exist in ota_updates',
+        new.active_update_id;
+    end if;
+
+    if active_row.runtime_version is distinct from new.runtime_version
+       or active_row.channel is distinct from new.channel
+       or active_row.platform is distinct from new.platform then
+      raise exception
+        'active_update_id % points outside scope (%/%/%), row scope is (%/%/%)',
+        new.active_update_id,
+        active_row.runtime_version,
+        active_row.channel,
+        active_row.platform,
+        new.runtime_version,
+        new.channel,
+        new.platform;
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_ota_channels_validate_scope_pointers
+  on public.ota_update_channels;
+create trigger trg_ota_channels_validate_scope_pointers
+before insert or update on public.ota_update_channels
+for each row
+execute function public.ota_channels_validate_scope_pointers();
+
+create table if not exists public.ota_embedded_updates (
+  id uuid primary key default gen_random_uuid(),
+  embedded_update_id uuid not null unique,
+  created_at timestamptz not null,
+  channel text not null,
+  platform text not null check (platform in ('ios', 'android')),
+  is_embedded boolean not null default true,
+  inserted_at timestamptz not null default now(),
+  modified_at timestamptz not null default now()
+);
+
+create index if not exists idx_ota_embedded_updates_lookup
+  on public.ota_embedded_updates (channel, platform, created_at desc);
+
+drop trigger if exists trg_ota_embedded_updates_modified_at
+  on public.ota_embedded_updates;
+create trigger trg_ota_embedded_updates_modified_at
+before update on public.ota_embedded_updates
+for each row execute function public.set_modified_at();
+
+create table if not exists public.ota_served_manifest_log (
+  served_manifest_id uuid primary key,
+  update_id uuid not null
+    references public.ota_updates(update_id) on delete cascade,
+  runtime_version text not null,
+  channel text not null,
+  platform text not null check (platform in ('ios', 'android')),
+  reason text null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_ota_served_manifest_log_update_id
+  on public.ota_served_manifest_log (update_id);
+
+create index if not exists idx_ota_served_manifest_log_scope
+  on public.ota_served_manifest_log (
+    runtime_version,
+    channel,
+    platform,
+    created_at desc
+  );
+
+create table if not exists public.ota_device_state (
+  installation_id text not null,
+  platform text not null check (platform in ('ios', 'android')),
+  runtime_version text not null,
+  embedded_update_id uuid null,
+  current_update_id uuid null
+    references public.ota_updates(update_id) on delete set null,
+  served_manifest_id uuid null,
+  channel text not null,
+  first_seen_at timestamptz not null default now(),
+  last_seen_at timestamptz not null default now(),
+  primary key (installation_id, platform)
+);
+
+create index if not exists idx_ota_device_state_runtime
+  on public.ota_device_state (runtime_version, channel, platform);
+
+create index if not exists idx_ota_device_state_update_id
+  on public.ota_device_state (current_update_id);
+
+create table if not exists public.ota_device_transitions (
+  id bigserial primary key,
+  installation_id text not null,
+  platform text not null check (platform in ('ios', 'android')),
+  from_runtime text null,
+  from_update_id uuid null,
+  to_runtime text not null,
+  to_update_id uuid null,
+  transition_type text not null,
+  occurred_at timestamptz not null default now()
+);
+
+create index if not exists idx_ota_device_transitions_installation
+  on public.ota_device_transitions (
+    installation_id,
+    platform,
+    occurred_at desc
+  );
+
+create index if not exists idx_ota_device_transitions_from_update
+  on public.ota_device_transitions (from_update_id);
+
+create index if not exists idx_ota_device_transitions_to_update
+  on public.ota_device_transitions (to_update_id);
+
+create table if not exists public.ota_access_tokens (
+  id uuid primary key default gen_random_uuid(),
+  name text not null check (char_length(name) between 1 and 100),
+  token_prefix text not null,
+  token_hash text not null unique check (token_hash ~ '^[0-9a-f]{64}$'),
+  scopes text[] not null check (cardinality(scopes) > 0),
+  expires_at timestamptz null,
+  revoked_at timestamptz null,
+  last_used_at timestamptz null,
+  created_at timestamptz not null default now(),
+  constraint ota_access_tokens_scopes_chk check (
+    scopes <@ array[
+      'updates:read',
+      'updates:write',
+      'redirects:read',
+      'redirects:write'
+    ]::text[]
+  )
+);
+
+create index if not exists idx_ota_access_tokens_active_hash
+  on public.ota_access_tokens (token_hash)
+  where revoked_at is null;
+
+create table if not exists public.ota_emergency_redirects (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique check (char_length(name) between 1 and 120),
+  enabled boolean not null default true,
+  embedded_update_id uuid not null,
+  runtime_version text not null,
+  platform text not null check (platform in ('ios', 'android')),
+  from_channel text not null,
+  to_channel text not null,
+  target_mode text not null check (target_mode in ('pinned', 'follow')),
+  expected_update_id uuid null,
+  created_at timestamptz not null default now(),
+  modified_at timestamptz not null default now(),
+  constraint ota_emergency_redirect_channels_chk check (
+    from_channel <> to_channel
+  ),
+  constraint ota_emergency_redirect_pinned_target_chk check (
+    target_mode <> 'pinned' or expected_update_id is not null
+  ),
+  unique (embedded_update_id, runtime_version, platform, from_channel)
+);
+
+create index if not exists idx_ota_emergency_redirect_lookup
+  on public.ota_emergency_redirects (
+    embedded_update_id,
+    runtime_version,
+    platform,
+    from_channel
+  )
+  where enabled;
+
+drop trigger if exists trg_ota_emergency_redirects_modified_at
+  on public.ota_emergency_redirects;
+create trigger trg_ota_emergency_redirects_modified_at
+before update on public.ota_emergency_redirects
+for each row execute function public.set_modified_at();
+
+create table if not exists public.ota_admin_users (
+  id uuid primary key default gen_random_uuid(),
+  username text not null unique,
+  password_hash text not null,
+  role text not null check (role in ('admin', 'operator', 'viewer')),
+  is_active boolean not null default true,
+  last_login_at timestamptz null,
+  created_at timestamptz not null default now(),
+  modified_at timestamptz not null default now(),
+  constraint ota_admin_users_username_chk check (
+    username = lower(username)
+    and username ~ '^[a-z0-9._-]{3,64}$'
+  )
+);
+
+create table if not exists public.ota_admin_sessions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.ota_admin_users(id) on delete cascade,
+  token_hash text not null unique check (token_hash ~ '^[0-9a-f]{64}$'),
+  expires_at timestamptz not null,
+  revoked_at timestamptz null,
+  last_used_at timestamptz not null default now(),
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_ota_admin_sessions_active_hash
+  on public.ota_admin_sessions (token_hash)
+  where revoked_at is null;
+
+create index if not exists idx_ota_admin_sessions_user
+  on public.ota_admin_sessions (user_id, expires_at desc);
+
+drop trigger if exists trg_ota_admin_users_modified_at
+  on public.ota_admin_users;
+create trigger trg_ota_admin_users_modified_at
+before update on public.ota_admin_users
+for each row execute function public.set_modified_at();

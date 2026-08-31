@@ -1,0 +1,47 @@
+{
+  "name": "ota-update-admin-panel",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs",
+    "emergency:import": "node scripts/import-emergency-redirects.mjs",
+    "docker:sync-db-password": "sh scripts/sync-docker-database-password.sh",
+    "configure-app": "node scripts/configure-expo-app.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "create-admin": "node scripts/create-admin.mjs",
+    "create-access-token": "node scripts/create-access-token.mjs",
+    "restart-docker": "docker compose up -d --force-recreate app"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.888.0",
+    "@aws-sdk/s3-request-presigner": "^3.888.0",
+    "@supabase/supabase-js": "^2.57.4",
+    "@types/form-data": "^2.2.1",
+    "bcryptjs": "^3.0.3",
+    "form-data": "^4.0.5",
+    "next": "16.1.6",
+    "pg": "^8.16.3",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.6",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "vitepress": "^1.6.4",
+    "vitest": "^4.1.11"
+  }
+}
