@@ -23,7 +23,7 @@ Open **SQL Editor** in the Supabase dashboard:
 
 1. Select **New query**.
 2. Open
-   [`docs/migrations/schema.sql`](https://github.com/tonichiga/expo-update-custom-server/blob/main/docs/migrations/schema.sql)
+   [`docs/migrations/schema.sql`](https://github.com/tonichiga/expo-updates-server/blob/main/docs/migrations/schema.sql)
    from this repository.
 3. Copy the complete file into the editor.
 4. Select **Run**.
