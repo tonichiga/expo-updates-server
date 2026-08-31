@@ -336,12 +336,9 @@ test("does not overwrite a destination entry that appears during transfer", asyn
   assert.equal(result.code, 1);
   assert.match(
     result.stderr.join("\n"),
-    /appeared during installation and was not overwritten/,
+    /Current directory is no longer empty; installation was not started/,
   );
-  assert.match(
-    result.stderr.join("\n"),
-    /Nothing was removed because doing so could delete user data/,
-  );
+  assert.match(result.stderr.join("\n"), /Staging directory retained at:/);
   assert.equal(await readFile(concurrentEntry, "utf8"), "external");
 });
 
