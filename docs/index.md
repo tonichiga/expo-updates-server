@@ -14,7 +14,7 @@ hero:
       link: /getting-started.ru
     - theme: alt
       text: View on GitHub
-      link: https://github.com/tonichiga/expo-update-custom-server
+      link: https://github.com/tonichiga/expo-updates-server
 
 features:
   - icon: 🚀
@@ -50,6 +50,6 @@ rollbacks, and incident response.
 
 ## Project actions
 
-- [Open the GitHub repository](https://github.com/tonichiga/expo-update-custom-server)
-- [Report a bug](https://github.com/tonichiga/expo-update-custom-server/issues/new)
-- [Improve the documentation](https://github.com/tonichiga/expo-update-custom-server/edit/main/docs/index.md)
+- [Open the GitHub repository](https://github.com/tonichiga/expo-updates-server)
+- [Report a bug](https://github.com/tonichiga/expo-updates-server/issues/new)
+- [Improve the documentation](https://github.com/tonichiga/expo-updates-server/edit/main/docs/index.md)

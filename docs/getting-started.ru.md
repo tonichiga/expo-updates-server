@@ -45,7 +45,7 @@ Engine работает.
 Откройте Terminal и перейдите в папку OTA-сервера:
 
 ```bash
-cd /путь/к/expo-update-custom-server
+cd /путь/к/expo-updates-server
 ```
 
 ## Шаг 3. Создайте файл настроек
@@ -523,7 +523,7 @@ Private key в Expo-приложение копировать нельзя.
 ## Шаг 3. Настройте Expo config
 
 Откройте
-[инструкцию по настройке Expo-приложения](https://github.com/tonichiga/expo-update-custom-server/blob/main/docs/expo-app-setup.md)
+[инструкцию по настройке Expo-приложения](https://github.com/tonichiga/expo-updates-server/blob/main/docs/expo-app-setup.md)
 и скопируйте пример `app.config.ts`.
 
 Укажите:
@@ -566,9 +566,9 @@ Publish script экспортирует JavaScript, загружает файл�
 ## Шаг 7. Проверьте на устройстве
 
 Перед проверкой полностью пройдите
-[инструкцию по настройке Expo-приложения](https://github.com/tonichiga/expo-update-custom-server/blob/main/docs/expo-app-setup.md).
+[инструкцию по настройке Expo-приложения](https://github.com/tonichiga/expo-updates-server/blob/main/docs/expo-app-setup.md).
 Особенно важен раздел с реализацией
-[`checkForUpdateAsync`, `fetchUpdateAsync` и `reloadAsync`](https://github.com/tonichiga/expo-update-custom-server/blob/main/docs/expo-app-setup.md#5-check-and-install-updates-in-the-application):
+[`checkForUpdateAsync`, `fetchUpdateAsync` и `reloadAsync`](https://github.com/tonichiga/expo-updates-server/blob/main/docs/expo-app-setup.md#5-check-and-install-updates-in-the-application):
 добавьте этот сценарий на экран приложения или запускайте его при старте.
 
 Затем:
@@ -618,6 +618,6 @@ Expo Go и development mode для этой проверки не подходя
 
 Технические детали находятся в:
 
-- [Operations guide](https://github.com/tonichiga/expo-update-custom-server/blob/main/docs/operations-guide.md);
-- [Supabase setup](https://github.com/tonichiga/expo-update-custom-server/blob/main/docs/supabase-setup.md);
-- [Expo application setup](https://github.com/tonichiga/expo-update-custom-server/blob/main/docs/expo-app-setup.md).
+- [Operations guide](https://github.com/tonichiga/expo-updates-server/blob/main/docs/operations-guide.md);
+- [Supabase setup](https://github.com/tonichiga/expo-updates-server/blob/main/docs/supabase-setup.md);
+- [Expo application setup](https://github.com/tonichiga/expo-updates-server/blob/main/docs/expo-app-setup.md).

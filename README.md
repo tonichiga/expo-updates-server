@@ -42,7 +42,7 @@ Open it and wait until Docker Engine is running.
 In Terminal:
 
 ```bash
-cd /path/to/expo-update-custom-server
+cd /path/to/expo-updates-server
 ```
 
 ## Step 3. Create the settings file

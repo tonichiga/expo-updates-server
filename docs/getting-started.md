@@ -42,7 +42,7 @@ Open it and wait until Docker Engine is running.
 In Terminal:
 
 ```bash
-cd /path/to/expo-update-custom-server
+cd /path/to/expo-updates-server
 ```
 
 ## Step 3. Create the settings file
@@ -410,7 +410,7 @@ application. Never copy the private key into the mobile project.
 ## Step 3. Configure Expo
 
 Use the `app.config.ts` example in
-[`expo-app-setup.md`](https://github.com/tonichiga/expo-update-custom-server/blob/main/docs/expo-app-setup.md).
+[`expo-app-setup.md`](https://github.com/tonichiga/expo-updates-server/blob/main/docs/expo-app-setup.md).
 Set:
 
 - `EXPO_OTA_SERVER_URL`;
@@ -448,9 +448,9 @@ The new update remains inactive until you approve it.
 ## Step 7. Test on a device
 
 Before testing, complete the
-[Expo application setup tutorial](https://github.com/tonichiga/expo-update-custom-server/blob/main/docs/expo-app-setup.md).
+[Expo application setup tutorial](https://github.com/tonichiga/expo-updates-server/blob/main/docs/expo-app-setup.md).
 In particular, add the
-[`checkForUpdateAsync`, `fetchUpdateAsync`, and `reloadAsync` flow](https://github.com/tonichiga/expo-update-custom-server/blob/main/docs/expo-app-setup.md#5-check-and-install-updates-in-the-application)
+[`checkForUpdateAsync`, `fetchUpdateAsync`, and `reloadAsync` flow](https://github.com/tonichiga/expo-updates-server/blob/main/docs/expo-app-setup.md#5-check-and-install-updates-in-the-application)
 to a screen or startup flow in the application.
 
 Then:
@@ -497,6 +497,6 @@ binary.
 
 Technical reference:
 
-- [Operations guide](https://github.com/tonichiga/expo-update-custom-server/blob/main/docs/operations-guide.md);
-- [Supabase setup](https://github.com/tonichiga/expo-update-custom-server/blob/main/docs/supabase-setup.md);
-- [Expo application setup](https://github.com/tonichiga/expo-update-custom-server/blob/main/docs/expo-app-setup.md).
+- [Operations guide](https://github.com/tonichiga/expo-updates-server/blob/main/docs/operations-guide.md);
+- [Supabase setup](https://github.com/tonichiga/expo-updates-server/blob/main/docs/supabase-setup.md);
+- [Expo application setup](https://github.com/tonichiga/expo-updates-server/blob/main/docs/expo-app-setup.md).

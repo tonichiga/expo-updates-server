@@ -1,9 +1,9 @@
 import { defineConfig } from "vitepress";
 
-const repository = "https://github.com/tonichiga/expo-update-custom-server";
+const repository = "https://github.com/tonichiga/expo-updates-server";
 
 export default defineConfig({
-  base: "/expo-update-custom-server/",
+  base: "/expo-updates-server/",
   title: "Expo Update Custom Server",
   description:
     "Self-hosted Expo OTA updates with signed manifests, controlled releases, rollback, and emergency recovery.",
