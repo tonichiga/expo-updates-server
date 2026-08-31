@@ -3,6 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20.9"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -18,7 +24,12 @@
     "test:watch": "vitest",
     "create-admin": "node scripts/create-admin.mjs",
     "create-access-token": "node scripts/create-access-token.mjs",
-    "restart-docker": "docker compose up -d --force-recreate app"
+    "restart-docker": "docker compose up -d --force-recreate app",
+    "installer:build": "npm run build:template --workspace create-expo-updates-server",
+    "installer:test": "npm test --workspace create-expo-updates-server",
+    "installer:check": "npm run installer:build && npm run installer:test",
+    "installer:pack": "npm pack --workspace create-expo-updates-server",
+    "installer:pack-smoke": "node packages/create-expo-updates-server/scripts/pack-smoke.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.888.0",

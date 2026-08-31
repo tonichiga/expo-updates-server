@@ -29,6 +29,7 @@ export default defineConfig({
       {
         text: "Setup",
         items: [
+          { text: "npm Initializer", link: "/npm-installer" },
           { text: "Supabase", link: "/supabase-setup" },
           { text: "Expo Application", link: "/expo-app-setup" },
         ],
@@ -42,6 +43,7 @@ export default defineConfig({
           { text: "Overview", link: "/" },
           { text: "Quick Start", link: "/getting-started" },
           { text: "Быстрый старт", link: "/getting-started.ru" },
+          { text: "npm Initializer", link: "/npm-installer" },
         ],
       },
       {
@@ -58,6 +60,15 @@ export default defineConfig({
           {
             text: "OTA Emergency Recovery",
             link: "/ota-emergency-recovery",
+          },
+        ],
+      },
+      {
+        text: "Maintain",
+        items: [
+          {
+            text: "Publish the npm Initializer",
+            link: "/publishing-npm-installer",
           },
         ],
       },

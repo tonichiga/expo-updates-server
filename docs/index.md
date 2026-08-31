@@ -39,7 +39,9 @@ features:
 
 ## Choose your path
 
-Start locally with the [English Quick Start](/getting-started) or
+Create a standalone project with the
+[npm initializer](/npm-installer), or start locally with the
+[English Quick Start](/getting-started) or
 [Russian Quick Start](/getting-started.ru). For a hosted database and object
 storage, follow the [Supabase setup](/supabase-setup).
 
