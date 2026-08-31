@@ -211,6 +211,161 @@ test("creates an absent target with spaces and Unicode", async () => {
   assert.match(result.stdout.join("\n"), /Next steps \(npm\):/);
 });
 
+test("creates a project in an empty current directory with dot", async () => {
+  const target = path.join(suiteRoot, "current-directory");
+  await mkdir(target);
+  const before = await lstat(target);
+
+  const result = await run(["."], { cwd: target });
+
+  assert.equal(result.code, 0);
+  const after = await lstat(target);
+  assert.equal(after.dev, before.dev);
+  assert.equal(after.ino, before.ino);
+  const generated = JSON.parse(
+    await readFile(path.join(target, "package.json"), "utf8"),
+  );
+  assert.equal(generated.name, "expo-updates-server");
+  assert.equal(generated.workspaces, undefined);
+  assert.doesNotMatch(result.stdout.join("\n"), /cd --/);
+  await verifyStagedProject(
+    target,
+    (await verifyTemplate(packageRoot)).manifest,
+  );
+  assert.equal(
+    (await readdir(suiteRoot)).some((entry) =>
+      entry.startsWith(".create-expo-updates-server-"),
+    ),
+    false,
+  );
+});
+
+test("refuses visible and hidden entries in the current directory unchanged", async () => {
+  for (const entry of ["visible.txt", ".hidden"]) {
+    const target = path.join(
+      suiteRoot,
+      `non-empty-current-${entry.replace(".", "dot")}`,
+    );
+    await mkdir(target);
+    await writeFile(path.join(target, entry), "keep");
+    const before = await lstat(target);
+
+    const result = await run(["."], { cwd: target });
+
+    assert.equal(result.code, 1);
+    assert.match(result.stderr.join("\n"), /Current directory is not empty/);
+    const after = await lstat(target);
+    assert.equal(after.dev, before.dev);
+    assert.equal(after.ino, before.ino);
+    assert.deepEqual(await readdir(target), [entry]);
+    assert.equal(await readFile(path.join(target, entry), "utf8"), "keep");
+  }
+});
+
+test("refuses a replaced current directory before installation", async () => {
+  const target = path.join(suiteRoot, "replaced-current");
+  const original = path.join(suiteRoot, "replaced-current-original");
+  await mkdir(target);
+
+  const result = await run(["."], {
+    cwd: target,
+    beforeInstall: async () => {
+      await rename(target, original);
+      await mkdir(target);
+    },
+  });
+
+  assert.equal(result.code, 1);
+  assert.match(
+    result.stderr.join("\n"),
+    /Current directory was replaced before installation/,
+  );
+  assert.deepEqual(await readdir(target), []);
+  assert.deepEqual(await readdir(original), []);
+});
+
+test("refuses a current directory replaced immediately before transfer", async () => {
+  const target = path.join(suiteRoot, "replaced-current-at-transfer");
+  const original = path.join(
+    suiteRoot,
+    "replaced-current-at-transfer-original",
+  );
+  await mkdir(target);
+
+  const result = await run(["."], {
+    cwd: target,
+    beforeCurrentDirectoryTransfer: async () => {
+      await rename(target, original);
+      await mkdir(target);
+    },
+  });
+
+  assert.equal(result.code, 1);
+  assert.match(
+    result.stderr.join("\n"),
+    /Current directory was replaced before installation/,
+  );
+  assert.deepEqual(await readdir(target), []);
+  assert.deepEqual(await readdir(original), []);
+});
+
+test("only the literal dot argument enables current-directory installation", async () => {
+  const target = path.join(suiteRoot, "literal-dot-only");
+  await mkdir(target);
+
+  for (const argument of [target, "missing/..", ""]) {
+    const result = await run([argument], { cwd: target });
+    assert.equal(result.code, 1, JSON.stringify(argument));
+  }
+
+  assert.deepEqual(await readdir(target), []);
+});
+
+test("does not overwrite a destination entry that appears during transfer", async () => {
+  const target = path.join(suiteRoot, "concurrent-current-entry");
+  const concurrentEntry = path.join(target, ".env.docker.example");
+  await mkdir(target);
+
+  const result = await run(["."], {
+    cwd: target,
+    beforeCurrentDirectoryTransfer: async () => {
+      await writeFile(concurrentEntry, "external");
+    },
+  });
+
+  assert.equal(result.code, 1);
+  assert.match(
+    result.stderr.join("\n"),
+    /Current directory is no longer empty; installation was not started/,
+  );
+  assert.match(result.stderr.join("\n"), /Staging directory retained at:/);
+  assert.equal(await readFile(concurrentEntry, "utf8"), "external");
+});
+
+test("formats successful output with deterministic plain and colored modes", async () => {
+  const plain = await run(["plain-output"], { color: false });
+  assert.equal(plain.code, 0);
+  const plainText = plain.stdout.join("\n");
+  assert.doesNotMatch(plainText, /\u001B\[/);
+  assert.match(plainText, /^✓ Expo Updates Server is ready/);
+  assert.match(plainText, /Next steps \(Docker\):\n  1\. cd --/);
+  assert.match(plainText, /Next steps \(npm\):\n  1\. cd --/);
+
+  const colored = await run(["colored-output"], { color: true });
+  assert.equal(colored.code, 0);
+  const coloredText = colored.stdout.join("\n");
+  assert.match(
+    coloredText,
+    /\u001B\[1;32m✓ Expo Updates Server is ready\u001B\[0m/,
+  );
+  assert.match(
+    coloredText,
+    /\u001B\[36mNext steps \(Docker\):\u001B\[0m/,
+  );
+  assert.match(coloredText, /\u001B\[93m1\.\u001B\[0m/);
+  assert.match(coloredText, /\u001B\[93mnpm ci\u001B\[0m/);
+});
+
 test("refuses an existing empty target without changing its inode", async () => {
   const targetName = "existing-empty";
   const target = path.join(suiteRoot, targetName);
