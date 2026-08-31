@@ -2,7 +2,7 @@
 layout: home
 
 hero:
-  name: Expo Update Custom Server
+  name: Expo Updates Server
   text: Own your Expo OTA delivery
   tagline: Self-host signed updates, promote releases deliberately, roll back safely, and recover misconfigured native builds.
   actions:
