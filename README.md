@@ -1,5 +1,7 @@
 # Expo Updates Server
 
+## Install with NPX
+
 The easiest way to create a standalone server project is the npm initializer:
 
 ```bash
@@ -7,7 +9,11 @@ npx create-expo-updates-server@latest my-server
 cd my-server
 ```
 
-Or run `npx create-expo-updates-server@latest .` from an empty directory.
+To install into the current empty directory:
+
+```bash
+npx create-expo-updates-server@latest .
+```
 
 The downloaded initializer uses its bundled, checksum-verified template. It
 does not fetch source code, install project dependencies, initialize Git, or
@@ -28,8 +34,8 @@ cp .env.example .env.local
 npm run dev
 ```
 
-See the [npm initializer guide](docs/npm-installer.md) for safety behavior and
-complete next steps. Cloning the
+See the [npm initializer guide](docs/npm-installer.md) for supported commands,
+safety behavior, and complete next steps. Cloning the
 [GitHub repository](https://github.com/tonichiga/expo-updates-server) remains
 supported for contributors and manual installations.
 

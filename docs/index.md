@@ -7,11 +7,11 @@ hero:
   tagline: Self-host signed updates, promote releases deliberately, roll back safely, and recover misconfigured native builds.
   actions:
     - theme: brand
+      text: Install with NPX
+      link: /npm-installer
+    - theme: alt
       text: Quick Start
       link: /getting-started
-    - theme: alt
-      text: Быстрый старт
-      link: /getting-started.ru
     - theme: alt
       text: View on GitHub
       link: https://github.com/tonichiga/expo-updates-server
@@ -36,6 +36,25 @@ features:
     title: Operator-ready
     details: Manage role-based access, scoped automation tokens, embedded builds, and release history from the admin panel.
 ---
+
+## Install in seconds
+
+Create a new project directory:
+
+```bash
+npx create-expo-updates-server@latest my-server
+cd my-server
+```
+
+Or initialize the current empty directory:
+
+```bash
+npx create-expo-updates-server@latest .
+```
+
+The initializer bundles and verifies the complete server template. Continue
+with the [npm initializer guide](/npm-installer) for Docker and local npm
+startup commands.
 
 ## Choose your path
 
