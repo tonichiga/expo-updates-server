@@ -1,3 +1,35 @@
+# Expo Updates Server
+
+The easiest way to create a standalone server project is the npm initializer:
+
+```bash
+npx create-expo-updates-server@latest my-server
+cd my-server
+```
+
+The downloaded initializer uses its bundled, checksum-verified template. It
+does not fetch source code, install project dependencies, initialize Git, or
+create secrets while scaffolding. The target path must not already exist.
+Continue with either Docker:
+
+```bash
+cp .env.docker.example .env
+docker compose up -d --build
+```
+
+or a local npm setup:
+
+```bash
+npm ci
+cp .env.example .env.local
+npm run dev
+```
+
+See the [npm initializer guide](docs/npm-installer.md) for safety behavior and
+complete next steps. Cloning the
+[GitHub repository](https://github.com/tonichiga/expo-updates-server) remains
+supported for contributors and manual installations.
+
 # Beginner Quick Start
 
 This guide takes you from an empty machine to a working OTA server and a
@@ -17,6 +49,7 @@ At the end you can:
 
 ## Choose one installation path
 
+- **NPX** creates a clean standalone copy without cloning the repository.
 - **Docker** runs the server, PostgreSQL and MinIO together.
 - **Supabase** hosts the database and storage; the OTA server is deployed
   separately.

@@ -1,0 +1,53 @@
+name: create-expo-updates-server CI
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/create-expo-updates-server-ci.yml"
+      - ".github/workflows/publish-create-expo-updates-server.yml"
+      - ".gitignore"
+      - "app/**"
+      - "docs/**"
+      - "packages/create-expo-updates-server/**"
+      - "public/**"
+      - "scripts/**"
+      - "src/**"
+      - "templates/**"
+      - ".env.example"
+      - ".env.docker.example"
+      - "Dockerfile"
+      - "LICENSE"
+      - "README.md"
+      - "docker-compose.yml"
+      - "package.json"
+      - "package-lock.json"
+      - "*.config.*"
+      - "tsconfig.json"
+
+permissions:
+  contents: read
+
+jobs:
+  installer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build and test installer
+        run: npm run installer:check
+
+      - name: Test packed initializer and generated lockfile
+        run: npm run installer:pack-smoke
+
+      - name: Build documentation
+        run: npm run docs:build

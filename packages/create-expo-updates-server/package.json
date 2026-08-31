@@ -1,0 +1,41 @@
+{
+  "name": "create-expo-updates-server",
+  "version": "0.1.0",
+  "description": "Create a standalone Expo Updates Server project",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "create-expo-updates-server": "bin/create-expo-updates-server.mjs"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20.9"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tonichiga/expo-updates-server",
+    "directory": "packages/create-expo-updates-server"
+  },
+  "bugs": {
+    "url": "https://github.com/tonichiga/expo-updates-server/issues"
+  },
+  "homepage": "https://github.com/tonichiga/expo-updates-server#readme",
+  "keywords": [
+    "expo",
+    "expo-updates",
+    "initializer",
+    "nextjs",
+    "ota"
+  ],
+  "scripts": {
+    "build:template": "node scripts/build-template.mjs",
+    "test": "node --test --test-concurrency=1 test/*.test.mjs",
+    "prepack": "npm run build:template"
+  }
+}

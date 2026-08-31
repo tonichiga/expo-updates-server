@@ -38,6 +38,7 @@ yarn-error.log*
 .env*
 !.env.example
 !.env.docker.example
+!templates/expo-app/.env.ota.example
 secrets/
 local-certificates/
 
@@ -48,3 +49,10 @@ local-certificates/
 *.tsbuildinfo
 next-env.d.ts
 .env*.local
+
+# create-expo-updates-server generated artifacts
+/packages/create-expo-updates-server/dist/
+/packages/create-expo-updates-server/.dist-building-*/
+/packages/create-expo-updates-server/.test-work/
+/packages/create-expo-updates-server/.smoke-work/
+*.tgz

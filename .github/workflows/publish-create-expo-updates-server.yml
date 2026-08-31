@@ -1,0 +1,76 @@
+name: Publish create-expo-updates-server
+
+on:
+  push:
+    tags:
+      - "create-expo-updates-server-v*"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout tagged source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch the release branch
+        run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: "https://registry.npmjs.org"
+          cache: npm
+
+      - name: Validate tag and package version
+        run: node packages/create-expo-updates-server/scripts/validate-release-tag.mjs "$GITHUB_REF_NAME"
+
+      - name: Require the tagged commit to be merged
+        run: node packages/create-expo-updates-server/scripts/validate-release-ref.mjs "$GITHUB_REF_NAME" "$GITHUB_SHA" origin/main
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build and test installer
+        run: npm run installer:check
+
+      - name: Test packed initializer and generated lockfile
+        run: npm run installer:pack-smoke
+
+      - name: Build the release tarball
+        run: mkdir release-artifact && npm pack --workspace create-expo-updates-server --pack-destination release-artifact
+
+      - name: Preserve the validated release tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: create-expo-updates-server-${{ github.sha }}
+          path: release-artifact/*.tgz
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Download the validated release tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: create-expo-updates-server-${{ github.sha }}
+          path: release-artifact
+
+      - name: Publish with provenance
+        run: npm publish release-artifact/*.tgz --access public --provenance
