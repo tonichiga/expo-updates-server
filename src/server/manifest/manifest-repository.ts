@@ -1,5 +1,6 @@
 import { supabase } from "../lib/supabase.js";
 import { UpdateDeliveryMode } from "../lib/update-policy";
+import { getManifestAppVersion } from "./manifest-values";
 
 export type OtaUpdateRow = {
   update_id: string;
@@ -31,6 +32,7 @@ export type EmbeddedUpdateMeta = {
   created_at: string | Date;
   channel: string;
   platform: "ios" | "android";
+  app_version: string | null;
 };
 
 let hasServedManifestLogTable: boolean | null = null;
@@ -198,7 +200,7 @@ async function getEmbeddedUpdateMetaById(
 ): Promise<EmbeddedUpdateMeta | null> {
   const { data, error } = await supabase
     .from("ota_embedded_updates")
-    .select("embedded_update_id,created_at,channel,platform")
+    .select("embedded_update_id,created_at,channel,platform,app_version")
     .eq("embedded_update_id", embeddedUpdateId)
     .maybeSingle();
 
@@ -232,6 +234,7 @@ function toEmbeddedUpdateMeta(updateRow: OtaUpdateRow): EmbeddedUpdateMeta {
     created_at: updateRow.created_at,
     channel: updateRow.channel,
     platform: updateRow.platform,
+    app_version: getManifestAppVersion(updateRow.manifest),
   };
 }
 

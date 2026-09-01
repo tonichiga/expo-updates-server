@@ -16,7 +16,9 @@ import {
   normalizeFileExtension,
 } from "../manifest/manifest-response";
 import {
+  compareAppVersions,
   debugString,
+  getManifestAppVersion,
   isSameOrNewerDate,
   latestExpoManifestDate,
   normalizeExpoManifestDate,
@@ -54,14 +56,6 @@ type ManifestPayload = {
   extra?: { expoClient?: Record<string, unknown> };
   expoClient?: Record<string, unknown>;
 };
-
-function getManifestAppVersion(manifest: ManifestPayload): string | null {
-  const expoClient = manifest.extra?.expoClient || manifest.expoClient;
-  const version = expoClient?.version;
-  return typeof version === "string" && version.trim()
-    ? version.trim()
-    : null;
-}
 
 const manifestController = async (req: NextRequest) => {
   if (req.method !== "GET") {
@@ -231,6 +225,13 @@ const manifestController = async (req: NextRequest) => {
     const embeddedUpdateId = normalizeId(rawEmbeddedUpdateId);
     const selectedUpdateIdNormalized = normalizeId(updateRow.update_id);
     const selectedCreatedAt = normalizeExpoManifestDate(updateRow.created_at);
+    const updateInfo =
+      updateRow.manifest &&
+      typeof updateRow.manifest === "object" &&
+      !Array.isArray(updateRow.manifest)
+        ? (updateRow.manifest as ManifestPayload)
+        : ({} as ManifestPayload);
+    const selectedAppVersion = getManifestAppVersion(updateInfo);
     const currentInstalledUpdateMeta = currentUpdateId
       ? await resolveDeviceBaselineMeta(currentUpdateId)
       : null;
@@ -256,57 +257,88 @@ const manifestController = async (req: NextRequest) => {
       );
     }
 
-    const currentInstalledBlocksDowngrade =
-      !rollbackMode &&
-      Boolean(
-        currentInstalledUpdateMeta &&
-        currentInstalledUpdateMeta.platform === platform &&
-        currentInstalledUpdateMeta.channel === channel &&
-        isSameOrNewerDate(
-          normalizeExpoManifestDate(currentInstalledUpdateMeta.created_at),
-          selectedCreatedAt,
-        ),
-      );
+    // Cached Expo/prebuild output can reuse an embedded update ID and createdAt
+    // across APK version bumps. Registration updates app_version on that same
+    // row, so a valid newer app version must override the stale timestamp.
+    const embeddedAppVersionComparison =
+      embeddedUpdateMeta?.platform === platform
+        ? compareAppVersions(embeddedUpdateMeta.app_version, selectedAppVersion)
+        : null;
+    const currentInstalledAppVersionComparison =
+      currentInstalledUpdateMeta?.platform === platform
+        ? compareAppVersions(
+            currentInstalledUpdateMeta.app_version,
+            selectedAppVersion,
+          )
+        : null;
+    const embeddedVersionBlocks = embeddedAppVersionComparison === 1;
+    const currentInstalledVersionBlocks =
+      currentInstalledAppVersionComparison === 1;
 
-    const embeddedBlocksDowngrade =
-      !rollbackMode &&
-      Boolean(
-        embeddedUpdateMeta &&
-        embeddedUpdateMeta.platform === platform &&
-        embeddedUpdateMeta.channel === channel &&
-        isSameOrNewerDate(
-          normalizeExpoManifestDate(embeddedUpdateMeta.created_at),
-          selectedCreatedAt,
-        ),
-      );
+    const embeddedTimestampBlocks = Boolean(
+      embeddedUpdateMeta &&
+      embeddedUpdateMeta.platform === platform &&
+      embeddedUpdateMeta.channel === channel &&
+      (embeddedAppVersionComparison === 0 ||
+        embeddedAppVersionComparison === null) &&
+      isSameOrNewerDate(
+        normalizeExpoManifestDate(embeddedUpdateMeta.created_at),
+        selectedCreatedAt,
+      ),
+    );
+    const currentInstalledTimestampBlocks = Boolean(
+      currentInstalledUpdateMeta &&
+      currentInstalledUpdateMeta.platform === platform &&
+      currentInstalledUpdateMeta.channel === channel &&
+      (currentInstalledAppVersionComparison === 0 ||
+        currentInstalledAppVersionComparison === null) &&
+      isSameOrNewerDate(
+        normalizeExpoManifestDate(currentInstalledUpdateMeta.created_at),
+        selectedCreatedAt,
+      ),
+    );
 
-    if (embeddedBlocksDowngrade || currentInstalledBlocksDowngrade) {
-      const downgradeBlockReason = embeddedBlocksDowngrade
-        ? "embedded-update-is-same-or-newer"
-        : "current-installed-update-is-same-or-newer";
+    const versionBlocksDowngrade =
+      embeddedVersionBlocks || currentInstalledVersionBlocks;
+    const timestampBlocksDowngrade =
+      embeddedTimestampBlocks || currentInstalledTimestampBlocks;
+
+    if (
+      !rollbackMode &&
+      (versionBlocksDowngrade || timestampBlocksDowngrade)
+    ) {
+      const blockingBaseline = embeddedVersionBlocks
+        ? "embedded"
+        : currentInstalledVersionBlocks
+          ? "current-installed"
+          : embeddedTimestampBlocks
+            ? "embedded"
+            : "current-installed";
+      const downgradeBlockReason = versionBlocksDowngrade
+        ? "app-version"
+        : "timestamp";
 
       console.log(
-        `[${new Date().toLocaleTimeString()}] ⏭️ Returning noUpdateAvailable ${requestContext} reason=${downgradeBlockReason} embeddedUpdateId=${debugString(
+        `[${new Date().toLocaleTimeString()}] ⏭️ Returning noUpdateAvailable ${requestContext} reason=downgrade-protection blockingReason=${downgradeBlockReason} baseline=${blockingBaseline} embeddedUpdateId=${debugString(
           embeddedUpdateId,
+        )} embeddedAppVersion=${debugString(
+          embeddedUpdateMeta?.app_version,
         )} embeddedCreatedAt=${debugString(
           normalizeExpoManifestDate(embeddedUpdateMeta?.created_at),
         )} currentInstalledUpdateId=${debugString(
           currentInstalledUpdateMeta?.embedded_update_id,
+        )} currentInstalledAppVersion=${debugString(
+          currentInstalledUpdateMeta?.app_version,
         )} currentInstalledCreatedAt=${debugString(
           normalizeExpoManifestDate(currentInstalledUpdateMeta?.created_at),
         )} selectedUpdateId=${debugString(
           selectedUpdateIdNormalized,
+        )} selectedAppVersion=${debugString(
+          selectedAppVersion,
         )} selectedCreatedAt=${selectedCreatedAt ?? "none"} rollbackMode=${rollbackMode}`,
       );
       return createNoUpdateResponse(req, protocolVersion || 1);
     }
-
-    const updateInfo =
-      updateRow.manifest &&
-      typeof updateRow.manifest === "object" &&
-      !Array.isArray(updateRow.manifest)
-        ? (updateRow.manifest as ManifestPayload)
-        : ({} as ManifestPayload);
 
     const updateRef = {
       runtimeVersion: updateRow.runtime_version,

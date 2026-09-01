@@ -6,6 +6,7 @@ import {
   UpdatePolicyValidationError,
   validateUpdatePolicy,
 } from "./update-policy";
+import { getManifestAppVersion } from "../manifest/manifest-values";
 
 let hasServedManifestLogTable: boolean | null = null;
 
@@ -242,30 +243,6 @@ function mapUpdateMeta(row: OtaUpdateRow): UpdateMetaState {
     updatedAt: row.updated_at,
     disabledAt: row.disabled_at,
   };
-}
-
-function getManifestAppVersion(
-  manifest: Record<string, unknown>,
-): string | null {
-  const extra =
-    manifest.extra &&
-    typeof manifest.extra === "object" &&
-    !Array.isArray(manifest.extra)
-      ? (manifest.extra as Record<string, unknown>)
-      : null;
-  const expoClient = extra?.expoClient || manifest.expoClient;
-  if (
-    !expoClient ||
-    typeof expoClient !== "object" ||
-    Array.isArray(expoClient)
-  ) {
-    return null;
-  }
-
-  const version = (expoClient as Record<string, unknown>).version;
-  return typeof version === "string" && version.trim()
-    ? version.trim()
-    : null;
 }
 
 function channelLatestToJson(
