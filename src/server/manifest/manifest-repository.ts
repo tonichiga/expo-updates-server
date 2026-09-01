@@ -13,7 +13,8 @@ export type OtaUpdateRow = {
   storage_base_path: string;
   is_active: boolean;
   delivery_mode: UpdateDeliveryMode;
-  guard_rules: unknown;
+  guard_action: string | null;
+  guard_payload: unknown | null;
   policy_version: number;
   policy_published_at: string | Date | null;
   manifest: Record<string, unknown>;

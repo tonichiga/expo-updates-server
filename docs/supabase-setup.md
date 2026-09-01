@@ -42,6 +42,7 @@ creates:
 | `ota_admin_users` | Admin users and roles |
 | `ota_admin_sessions` | Revocable browser sessions |
 | `ota_access_tokens` | Hashed automation tokens |
+| `ota_guard_actions` | Reusable Guard action catalog |
 | `ota_emergency_redirects` | Emergency channel rules |
 
 Do not run a pgAdmin schema dump as the installation script. Dumps contain
@@ -123,7 +124,7 @@ Then sign in at:
 https://updates.example.com/login
 ```
 
-The **Table Editor** should show all ten OTA tables listed above.
+The **Table Editor** should show all eleven OTA tables listed above.
 
 ## 7. Upgrades
 

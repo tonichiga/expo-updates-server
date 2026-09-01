@@ -17,6 +17,7 @@
     "docs/npm-installer.md",
     "docs/operations-guide.md",
     "docs/ota-emergency-recovery.md",
+    "docs/ota-update-policy.md",
     "docs/supabase-setup.md",
     "eslint.config.mjs",
     "next.config.ts",

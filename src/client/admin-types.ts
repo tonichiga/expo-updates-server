@@ -17,45 +17,20 @@ export type UpdateItem = {
   isIgnoredByRollback: boolean;
   assetsCount: number;
   deliveryMode: UpdateDeliveryMode;
-  guardCount: number;
+  hasGuard: boolean;
   policyVersion: number;
   policyPublishedAt: string | null;
   policyEditable: boolean;
 };
 
 export type UpdateDeliveryMode = "manual" | "background";
-export type UpdatePolicyField =
-  | "runtimeVersion"
-  | "platform"
-  | "channel"
-  | "buildId"
-  | "updateId"
-  | "appVersion"
-  | "currentUpdateId"
-  | "embeddedUpdateId";
-export type UpdatePolicyOperator =
-  | "equals"
-  | "notEquals"
-  | "in"
-  | "notIn"
-  | "exists"
-  | "notExists";
-export type UpdatePolicyCondition = {
-  field: UpdatePolicyField;
-  operator: UpdatePolicyOperator;
-  value?: string | string[];
-};
-export type UpdatePolicyRule = {
-  id: string;
-  enabled: boolean;
-  priority: number;
+export type UpdatePolicyGuard = {
   action: string;
   payload?: unknown;
-  groups: Array<{ conditions: UpdatePolicyCondition[] }>;
 };
 export type UpdatePolicy = {
   delivery: UpdateDeliveryMode;
-  rules: UpdatePolicyRule[];
+  guard: UpdatePolicyGuard | null;
   policyVersion: number;
   publishedAt: string | null;
   editable: boolean;
@@ -135,4 +110,15 @@ export type EmergencyRedirectInput = Omit<
 
 export type EmergencyRedirectsListResponse = {
   items: EmergencyRedirectItem[];
+};
+
+export type GuardActionItem = {
+  id: string;
+  actionKey: string;
+  createdAt: string;
+};
+
+export type GuardActionsListResponse = {
+  items: GuardActionItem[];
+  canWrite: boolean;
 };

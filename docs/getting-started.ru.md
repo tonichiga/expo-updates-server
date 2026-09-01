@@ -282,7 +282,7 @@ OTA-сервер — приложение сервера всё равно ну�
 
 ## Шаг 3. Проверьте таблицы
 
-Откройте слева **Table Editor**. Должны появиться 10 таблиц:
+Откройте слева **Table Editor**. Должны появиться 11 таблиц:
 
 ```text
 ota_access_tokens
@@ -292,6 +292,7 @@ ota_device_state
 ota_device_transitions
 ota_embedded_updates
 ota_emergency_redirects
+ota_guard_actions
 ota_served_manifest_log
 ota_update_channels
 ota_updates

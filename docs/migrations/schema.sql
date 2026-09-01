@@ -19,7 +19,8 @@ create table if not exists public.ota_updates (
   comment text null,
   rolled_back_from_update_id uuid null,
   delivery_mode text not null default 'manual',
-  guard_rules jsonb not null default '[]'::jsonb,
+  guard_action text null,
+  guard_payload jsonb null,
   policy_version integer not null default 1,
   policy_published_at timestamptz null,
   manifest jsonb not null,
@@ -31,11 +32,45 @@ create table if not exists public.ota_updates (
   constraint ota_updates_delivery_mode_chk check (
     delivery_mode in ('manual', 'background')
   ),
-  constraint ota_updates_guard_rules_array_chk check (
-    jsonb_typeof(guard_rules) = 'array'
+  constraint ota_updates_guard_action_chk check (
+    guard_action is null
+    or (
+      guard_action = btrim(guard_action)
+      and char_length(guard_action) between 1 and 100
+      and guard_action !~ '[[:cntrl:]]'
+    )
+  ),
+  constraint ota_updates_guard_payload_requires_action_chk check (
+    guard_payload is null or guard_action is not null
   ),
   constraint ota_updates_policy_version_chk check (policy_version > 0)
 );
+
+-- Keep schema.sql safe as an upgrade path from the removed rule-builder
+-- model. Old rules are intentionally discarded rather than converted.
+drop trigger if exists trg_ota_updates_lock_published_policy
+  on public.ota_updates;
+
+alter table public.ota_updates
+  add column if not exists guard_action text null,
+  add column if not exists guard_payload jsonb null;
+
+alter table public.ota_updates
+  drop constraint if exists ota_updates_guard_rules_array_chk,
+  drop constraint if exists ota_updates_guard_action_chk,
+  drop constraint if exists ota_updates_guard_payload_requires_action_chk,
+  drop column if exists guard_rules,
+  add constraint ota_updates_guard_action_chk check (
+    guard_action is null
+    or (
+      guard_action = btrim(guard_action)
+      and char_length(guard_action) between 1 and 100
+      and guard_action !~ '[[:cntrl:]]'
+    )
+  ),
+  add constraint ota_updates_guard_payload_requires_action_chk check (
+    guard_payload is null or guard_action is not null
+  );
 
 create index if not exists idx_ota_updates_lookup
   on public.ota_updates (runtime_version, channel, platform, created_at desc);
@@ -109,7 +144,8 @@ begin
 
   if old.policy_published_at is not null and (
     new.delivery_mode is distinct from old.delivery_mode
-    or new.guard_rules is distinct from old.guard_rules
+    or new.guard_action is distinct from old.guard_action
+    or new.guard_payload is distinct from old.guard_payload
     or new.policy_version is distinct from old.policy_version
     or new.policy_published_at is distinct from old.policy_published_at
   ) then
@@ -322,7 +358,8 @@ where u.policy_published_at is not null
   and u.disabled_at is not null
   and u.disabled_at = u.created_at
   and u.delivery_mode = 'manual'
-  and u.guard_rules = '[]'::jsonb
+  and u.guard_action is null
+  and u.guard_payload is null
   and u.policy_version = 1
   and u.rolled_back_from_update_id is null
   and not exists (
@@ -412,6 +449,24 @@ create table if not exists public.ota_access_tokens (
 create index if not exists idx_ota_access_tokens_active_hash
   on public.ota_access_tokens (token_hash)
   where revoked_at is null;
+
+create table if not exists public.ota_guard_actions (
+  id uuid primary key default gen_random_uuid(),
+  action_key text not null,
+  created_at timestamptz not null default now(),
+  constraint ota_guard_actions_action_key_chk check (
+    action_key = btrim(action_key)
+    and char_length(action_key) between 1 and 100
+    and action_key !~ '[[:cntrl:]]'
+  )
+);
+
+create unique index if not exists idx_ota_guard_actions_action_key
+  on public.ota_guard_actions (action_key);
+
+insert into public.ota_guard_actions (action_key)
+values ('ota-force-store-update')
+on conflict (action_key) do nothing;
 
 create table if not exists public.ota_emergency_redirects (
   id uuid primary key default gen_random_uuid(),

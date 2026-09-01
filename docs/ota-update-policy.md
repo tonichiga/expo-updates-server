@@ -14,9 +14,10 @@ Every served update manifest includes `extra.updatePolicy`:
 }
 ```
 
-`guard` is omitted when no enabled rule matches the request. Rules are
-evaluated server-side after update selection; clients only consume the winning
-action.
+The `guard` property is omitted when no Guard is configured. A configured
+Guard is unconditional: it is included for every client to which the existing
+runtime, channel, platform, and update selection logic serves that OTA.
+Catalog membership is advisory and is not required to save or serve an action.
 
 - `Updates.checkForUpdateAsync()` returns the policy on the **candidate**
   manifest in the check result.
@@ -28,7 +29,7 @@ action.
 - Legacy clients safely ignore the additional `extra` value.
 
 An inactive upload is a draft, even though its initial `disabled_at` value is
-equal to `created_at`. Its delivery mode and guard rules remain editable until
+equal to `created_at`. Its delivery mode and simple Guard remain editable until
 activation. `disabled_at` by itself is not evidence that an update was
 published.
 
@@ -42,10 +43,47 @@ Activation is the publication event. Once activated, promoted, used as a
 rollback target, or demonstrably served, a policy remains immutable even if the
 update is later disabled. Publish a new update ID when policy needs to change.
 
-Databases that already ran the original policy migration should also run
-`docs/migrations/2026-09-01-correct-draft-policy-publication.sql`.
-Operators that use `docs/migrations/schema.sql` as their upgrade path receive
-the same correction after the served-manifest log table is available.
-The corrective migration is idempotent and only unlocks conservative,
-never-published draft signatures without served-manifest evidence or an active
-rollback pointer. A `latest_update_id` reference does not prevent correction.
+## Production upgrade order
+
+Back up the database. Existing installations should apply these idempotent
+migrations in order:
+
+```bash
+psql "$DATABASE_URL" -f docs/migrations/2026-09-01-p1-guard-actions.sql
+psql "$DATABASE_URL" -f docs/migrations/2026-09-01-p2-simplify-ota-guard-policy.sql
+psql "$DATABASE_URL" -f docs/migrations/2026-09-01-policy-publication-correction.sql
+```
+
+The simplification migration deliberately drops `guard_rules` without
+converting old rules. It adds nullable `guard_action` and `guard_payload`
+columns and recreates the policy immutability trigger for the simple model.
+The final corrective migration only clears incorrectly inferred publication
+markers for conservative, inactive, never-served default policies. It does not
+unlock active, rollback, or served updates.
+
+Environments that already successfully ran
+`2026-09-01-policy-publication-correction.sql` and verified that no drafts
+remain falsely marked as published may skip the third step. Otherwise, the
+correction must run third because it references the `guard_action` and
+`guard_payload` columns created by the simplification migration.
+
+Supabase users can run the same files in SQL Editor in the listed order. Fresh
+installations should apply only the canonical
+`docs/migrations/schema.sql`, which contains the simple model.
+
+## Guard action catalog
+
+The policy editor loads reusable action names from `ota_guard_actions`. New
+installations receive the `ota-force-store-update` action. Operators can create
+an action by typing it in the action combobox or through the catalog-only form,
+which remains available while viewing an immutable policy and never changes
+that policy.
+
+Persisted catalog entries can be removed with the trash control. Catalog
+deletion does not modify an existing policy. Its action remains visible as a
+synthetic option until deliberately changed, and synthetic options have no
+delete control.
+
+Catalog action keys are trimmed when created, contain 1–100 characters, and
+cannot contain control characters. Viewers can list catalog entries but cannot
+create or delete them.

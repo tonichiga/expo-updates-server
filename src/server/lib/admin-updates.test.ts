@@ -27,7 +27,8 @@ function makeRow(manifest: Record<string, unknown> = {}): OtaUpdateRow {
     launch_asset_path: "bundle.js",
     rolled_back_from_update_id: null,
     delivery_mode: "manual",
-    guard_rules: [],
+    guard_action: null,
+    guard_payload: null,
     policy_version: 1,
     policy_published_at: "2026-01-01T00:00:00.000Z",
     manifest,
@@ -60,6 +61,14 @@ describe("OTA admin update mapping", () => {
     expect(item.status).toBe("disabled");
     expect(item.policyPublishedAt).toBeNull();
     expect(item.policyEditable).toBe(true);
+  });
+
+  it("maps the simple Guard badge without rule counting", () => {
+    const row = makeRow();
+    row.guard_action = "require-confirmation";
+    expect(mapRowToRecord(row, null).hasGuard).toBe(true);
+    row.guard_action = null;
+    expect(mapRowToRecord(row, null).hasGuard).toBe(false);
   });
 
   it.each([

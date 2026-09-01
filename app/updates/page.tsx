@@ -232,9 +232,9 @@ export default function UpdatesPage() {
                                 ? "Background"
                                 : "Manual"}
                             </span>
-                            {item.guardCount > 0 ? (
+                            {item.hasGuard ? (
                               <span className="rounded border border-violet-300 px-2 py-0.5 text-xs text-violet-700 dark:border-violet-700 dark:text-violet-300">
-                                Guard:{item.guardCount}
+                                Guard
                               </span>
                             ) : null}
                           {item.isRollbackActive ? (

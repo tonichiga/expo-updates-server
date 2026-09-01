@@ -7,7 +7,7 @@ const auth = vi.hoisted(() => ({
 const getPolicy = vi.hoisted(() =>
   vi.fn(async () => ({
     delivery: "manual",
-    rules: [],
+    guard: null,
     policyVersion: 1,
     publishedAt: null,
     editable: true,
@@ -71,7 +71,7 @@ describe("update policy API", () => {
     auth.scopes = ["updates:read"];
     const { PUT } = await import("./route");
     const response = await PUT(
-      request("PUT", { delivery: "manual", rules: [] }),
+      request("PUT", { delivery: "manual", guard: null }),
       context,
     );
     expect(response.status).toBe(403);
@@ -80,9 +80,13 @@ describe("update policy API", () => {
 
   it("performs complete replacement with optimistic policy version", async () => {
     auth.scopes = ["updates:write"];
+    const guard = {
+      action: "require-confirmation",
+      payload: { message: "Ready" },
+    };
     replacePolicy.mockResolvedValueOnce({
       delivery: "background",
-      rules: [],
+      guard,
       policyVersion: 4,
       publishedAt: null,
       editable: true,
@@ -91,7 +95,7 @@ describe("update policy API", () => {
     const response = await PUT(
       request("PUT", {
         delivery: "background",
-        rules: [],
+        guard,
         expectedPolicyVersion: 3,
       }),
       context,
@@ -99,7 +103,7 @@ describe("update policy API", () => {
     expect(response.status).toBe(200);
     expect(replacePolicy).toHaveBeenCalledWith(
       "encoded-update",
-      { delivery: "background", rules: [] },
+      { delivery: "background", guard },
       3,
     );
   });
@@ -114,7 +118,7 @@ describe("update policy API", () => {
     const response = await PUT(
       request("PUT", {
         delivery: "manual",
-        rules: [],
+        guard: null,
         ...(version === undefined
           ? {}
           : { expectedPolicyVersion: version }),
@@ -140,7 +144,7 @@ describe("update policy API", () => {
         await PUT(
           request("PUT", {
             delivery: "manual",
-            rules: [],
+            guard: null,
             expectedPolicyVersion: 1,
           }),
           context,
@@ -156,7 +160,7 @@ describe("update policy API", () => {
         await PUT(
           request("PUT", {
             delivery: "manual",
-            rules: [],
+            guard: null,
             expectedPolicyVersion: 1,
           }),
           context,

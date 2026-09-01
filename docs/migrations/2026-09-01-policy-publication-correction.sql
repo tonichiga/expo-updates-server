@@ -20,7 +20,8 @@ where u.policy_published_at is not null
   and u.disabled_at is not null
   and u.disabled_at = u.created_at
   and u.delivery_mode = 'manual'
-  and u.guard_rules = '[]'::jsonb
+  and u.guard_action is null
+  and u.guard_payload is null
   and u.policy_version = 1
   and u.rolled_back_from_update_id is null
   and not exists (
