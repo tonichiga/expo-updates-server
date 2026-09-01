@@ -262,10 +262,6 @@ function createFixture() {
 
   const templateRoot = path.join(root, "expo-app-template");
   fs.cpSync(appTemplateRoot, templateRoot, { recursive: true });
-  fs.writeFileSync(
-    path.join(templateRoot, ".env.ota.example"),
-    "EXPO_UPDATE_CHANNEL=production\n",
-  );
 
   const appRoot = path.join(root, "app");
   fs.mkdirSync(appRoot, { recursive: true });
