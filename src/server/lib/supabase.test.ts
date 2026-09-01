@@ -105,74 +105,50 @@ describe("common database abstraction", () => {
     );
   });
 
-  it.each([
-    ["empty", []],
-    [
-      "non-empty",
+  it("serializes wrapped JSONB payloads but preserves PostgreSQL arrays", async () => {
+    const payload = { message: "Ready" };
+    const { jsonb, supabase } = await import("./supabase.js");
+
+    await supabase
+      .from("ota_updates")
+      .update({
+        guard_payload: jsonb(payload),
+        scopes: ["updates:read", "updates:write"],
+      })
+      .eq("update_id", "update-id")
+      .execute();
+
+    expect(poolQuery).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "SET guard_payload = $1, scopes = $2 WHERE update_id = $3",
+      ),
       [
-        {
-          id: "rule-1",
-          enabled: true,
-          priority: 1,
-          action: "confirm",
-          groups: [],
-        },
+        JSON.stringify(payload),
+        ["updates:read", "updates:write"],
+        "update-id",
       ],
-    ],
-  ])(
-    "serializes wrapped %s JSONB arrays but preserves PostgreSQL arrays",
-    async (_case, rules) => {
-      const { jsonb, supabase } = await import("./supabase.js");
+    );
+  });
 
-      await supabase
-        .from("ota_updates")
-        .update({
-          guard_rules: jsonb(rules),
-          scopes: ["updates:read", "updates:write"],
-        })
-        .eq("update_id", "update-id")
-        .execute();
+  it("unwraps JSONB payloads for Supabase without changing plain arrays", async () => {
+    const payload = { message: "Ready" };
+    vi.resetModules();
+    process.env.DATABASE_PROVIDER = "supabase";
+    process.env.SUPABASE_URL = "https://example.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "test-key";
+    const { jsonb, supabase } = await import("./supabase.js");
 
-      expect(poolQuery).toHaveBeenCalledWith(
-        expect.stringContaining(
-          "SET guard_rules = $1, scopes = $2 WHERE update_id = $3",
-        ),
-        [
-          JSON.stringify(rules),
-          ["updates:read", "updates:write"],
-          "update-id",
-        ],
-      );
-    },
-  );
-
-  it.each([
-    ["empty", []],
-    [
-      "non-empty",
-      [{ id: "rule-1", enabled: true, priority: 1 }],
-    ],
-  ])(
-    "unwraps wrapped %s JSONB arrays for Supabase without changing plain arrays",
-    async (_case, rules) => {
-      vi.resetModules();
-      process.env.DATABASE_PROVIDER = "supabase";
-      process.env.SUPABASE_URL = "https://example.supabase.co";
-      process.env.SUPABASE_SERVICE_ROLE_KEY = "test-key";
-      const { jsonb, supabase } = await import("./supabase.js");
-
-      await supabase
-        .from("ota_updates")
-        .update({
-          guard_rules: jsonb(rules),
-          scopes: ["updates:read"],
-        })
-        .execute();
-
-      expect(supabaseUpdate).toHaveBeenCalledWith({
-        guard_rules: rules,
+    await supabase
+      .from("ota_updates")
+      .update({
+        guard_payload: jsonb(payload),
         scopes: ["updates:read"],
-      });
-    },
-  );
+      })
+      .execute();
+
+    expect(supabaseUpdate).toHaveBeenCalledWith({
+      guard_payload: payload,
+      scopes: ["updates:read"],
+    });
+  });
 });

@@ -556,18 +556,15 @@ const manifestController = async (req: NextRequest) => {
         ),
         updatePolicy: createManifestUpdatePolicy({
           delivery: updateRow.delivery_mode,
-          rules: updateRow.guard_rules,
+          guard: updateRow.guard_action
+            ? {
+                action: updateRow.guard_action,
+                ...(updateRow.guard_payload !== null
+                  ? { payload: updateRow.guard_payload }
+                  : {}),
+              }
+            : null,
           policyVersion: updateRow.policy_version,
-          context: {
-            runtimeVersion: updateRow.runtime_version,
-            platform: updateRow.platform,
-            channel,
-            buildId: updateRow.build_id,
-            updateId: updateRow.update_id,
-            appVersion: getManifestAppVersion(updateInfo),
-            currentUpdateId,
-            embeddedUpdateId,
-          },
           onCorrupt: (policyError) =>
             console.error(
               `[${new Date().toLocaleTimeString()}] ⚠️ Corrupt OTA update policy; serving manual policy updateId=${updateRow.update_id}: ${policyError.message}`,

@@ -1,19 +1,17 @@
-alter table public.ota_updates
-  add column if not exists delivery_mode text not null default 'manual',
-  add column if not exists guard_action text null,
-  add column if not exists guard_payload jsonb null,
-  add column if not exists policy_version integer not null default 1,
-  add column if not exists policy_published_at timestamptz null;
+begin;
 
 drop trigger if exists trg_ota_updates_lock_published_policy
   on public.ota_updates;
 
 alter table public.ota_updates
-  drop constraint if exists ota_updates_delivery_mode_chk,
-  add constraint ota_updates_delivery_mode_chk
-    check (delivery_mode in ('manual', 'background')),
+  add column if not exists guard_action text null,
+  add column if not exists guard_payload jsonb null;
+
+alter table public.ota_updates
   drop constraint if exists ota_updates_guard_rules_array_chk,
   drop constraint if exists ota_updates_guard_action_chk,
+  drop constraint if exists ota_updates_guard_payload_requires_action_chk,
+  drop column if exists guard_rules,
   add constraint ota_updates_guard_action_chk check (
     guard_action is null
     or (
@@ -22,45 +20,8 @@ alter table public.ota_updates
       and guard_action !~ '[[:cntrl:]]'
     )
   ),
-  drop constraint if exists ota_updates_guard_payload_requires_action_chk,
   add constraint ota_updates_guard_payload_requires_action_chk check (
     guard_payload is null or guard_action is not null
-  ),
-  drop constraint if exists ota_updates_policy_version_chk,
-  add constraint ota_updates_policy_version_chk
-    check (policy_version > 0),
-  drop column if exists guard_rules;
-
--- Active rows, rows disabled after their initial draft marker, rollback
--- targets, explicitly pinned rows, and demonstrably served rows have
--- participated in delivery. Uploads start inactive with disabled_at equal to
--- created_at; that initial marker is not a publication event.
-update public.ota_updates u
-set policy_published_at = coalesce(
-  u.updated_at,
-  u.disabled_at,
-  u.created_at,
-  now()
-)
-where u.policy_published_at is null
-  and (
-    u.is_active
-    or (
-      u.disabled_at is not null
-      and u.disabled_at is distinct from u.created_at
-      and u.updated_at is not null
-    )
-    or u.rolled_back_from_update_id is not null
-    or exists (
-      select 1
-      from public.ota_update_channels c
-      where c.active_update_id = u.update_id
-    )
-    or exists (
-      select 1
-      from public.ota_served_manifest_log sml
-      where sml.update_id = u.update_id
-    )
   );
 
 create or replace function public.ota_updates_lock_published_policy()
@@ -101,8 +62,8 @@ begin
 end;
 $$;
 
-drop trigger if exists trg_ota_updates_lock_published_policy
-  on public.ota_updates;
 create trigger trg_ota_updates_lock_published_policy
 before insert or update on public.ota_updates
 for each row execute function public.ota_updates_lock_published_policy();
+
+commit;

@@ -89,7 +89,8 @@ function makeUpdate(overrides: Row = {}): Row {
     storage_base_path: "1.0.0/android/production/update",
     is_active: true,
     delivery_mode: "manual",
-    guard_rules: [],
+    guard_action: null,
+    guard_payload: null,
     policy_version: 1,
     policy_published_at: "2026-08-28T08:00:00.000Z",
     manifest: {
@@ -213,7 +214,7 @@ describe("GET /api/manifest", () => {
     expect(body).toContain('"key":"bundle-key"');
   });
 
-  it("serves background policy with the first matching enabled guard without mutating source", async () => {
+  it("serves the configured unconditional Guard without mutating source", async () => {
     database.channels.push({
       latest_update_id: selectedUpdateId,
       active_update_id: null,
@@ -227,72 +228,8 @@ describe("GET /api/manifest", () => {
     const update = makeUpdate({
       delivery_mode: "background",
       policy_version: 7,
-      guard_rules: [
-        {
-          id: "disabled",
-          enabled: false,
-          priority: 0,
-          action: "disabled-action",
-          groups: [
-            {
-              conditions: [
-                { field: "platform", operator: "equals", value: "android" },
-              ],
-            },
-          ],
-        },
-        {
-          id: "no-match",
-          enabled: true,
-          priority: 1,
-          action: "wrong-action",
-          groups: [
-            {
-              conditions: [
-                { field: "platform", operator: "equals", value: "android" },
-                { field: "channel", operator: "equals", value: "staging" },
-              ],
-            },
-          ],
-        },
-        {
-          id: "winner",
-          enabled: true,
-          priority: 2,
-          action: "require-confirmation",
-          payload: { message: "Ready" },
-          groups: [
-            {
-              conditions: [
-                { field: "appVersion", operator: "equals", value: "wrong" },
-              ],
-            },
-            {
-              conditions: [
-                { field: "platform", operator: "equals", value: "android" },
-                {
-                  field: "channel",
-                  operator: "in",
-                  value: ["production"],
-                },
-              ],
-            },
-          ],
-        },
-        {
-          id: "later",
-          enabled: true,
-          priority: 3,
-          action: "later-action",
-          groups: [
-            {
-              conditions: [
-                { field: "platform", operator: "equals", value: "android" },
-              ],
-            },
-          ],
-        },
-      ],
+      guard_action: "require-confirmation",
+      guard_payload: { message: "Ready" },
     });
     const sourceManifest = structuredClone(update.manifest);
     database.updates.push(update);
@@ -303,15 +240,13 @@ describe("GET /api/manifest", () => {
     expect(body).toContain(
       '"updatePolicy":{"schemaVersion":1,"policyVersion":7,"delivery":"background","guard":{"action":"require-confirmation","payload":{"message":"Ready"}}}',
     );
-    expect(body).not.toContain("later-action");
-    expect(body).not.toContain("disabled-action");
     expect(update.manifest).toEqual(sourceManifest);
     expect(
       (update.manifest as Record<string, unknown>).extra,
     ).not.toHaveProperty("updatePolicy");
   });
 
-  it("matches currentUpdateId rules against the raw served manifest ID", async () => {
+  it("does not vary the configured Guard by request context", async () => {
     database.channels.push({
       latest_update_id: selectedUpdateId,
       active_update_id: null,
@@ -324,25 +259,7 @@ describe("GET /api/manifest", () => {
     });
     database.updates.push(
       makeUpdate({
-        guard_rules: [
-          {
-            id: "raw-current-id",
-            enabled: true,
-            priority: 1,
-            action: "matched-raw-served-id",
-            groups: [
-              {
-                conditions: [
-                  {
-                    field: "currentUpdateId",
-                    operator: "equals",
-                    value: previousServedManifestId,
-                  },
-                ],
-              },
-            ],
-          },
-        ],
+        guard_action: "unconditional-action",
       }),
       makeUpdate({
         update_id: previousUpdateId,
@@ -361,10 +278,10 @@ describe("GET /api/manifest", () => {
       )
     ).text();
 
-    expect(body).toContain('"guard":{"action":"matched-raw-served-id"}');
+    expect(body).toContain('"guard":{"action":"unconditional-action"}');
   });
 
-  it("omits guard when no persisted rule matches", async () => {
+  it("omits Guard when none is configured", async () => {
     database.channels.push({
       latest_update_id: selectedUpdateId,
       active_update_id: null,
@@ -379,21 +296,8 @@ describe("GET /api/manifest", () => {
       makeUpdate({
         delivery_mode: "background",
         policy_version: 2,
-        guard_rules: [
-          {
-            id: "ios-only",
-            enabled: true,
-            priority: 1,
-            action: "ios-action",
-            groups: [
-              {
-                conditions: [
-                  { field: "platform", operator: "equals", value: "ios" },
-                ],
-              },
-            ],
-          },
-        ],
+        guard_action: null,
+        guard_payload: null,
       }),
     );
 
@@ -419,7 +323,8 @@ describe("GET /api/manifest", () => {
       makeUpdate({
         delivery_mode: "background",
         policy_version: 9,
-        guard_rules: { invalid: true },
+        guard_action: " invalid ",
+        guard_payload: null,
       }),
     );
     const consoleError = vi

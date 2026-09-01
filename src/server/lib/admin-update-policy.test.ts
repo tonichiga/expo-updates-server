@@ -78,7 +78,8 @@ function makePolicyRow(overrides: Record<string, unknown> = {}) {
     launch_asset_path: "bundle.js",
     rolled_back_from_update_id: null,
     delivery_mode: "manual",
-    guard_rules: [],
+    guard_action: null,
+    guard_payload: null,
     policy_version: 1,
     policy_published_at: null,
     manifest: {},
@@ -88,48 +89,60 @@ function makePolicyRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
-describe("OTA update policy service publication lock", () => {
+describe("simple OTA update policy service publication lock", () => {
   beforeEach(() => {
     policyDatabase.row = makePolicyRow();
     policyDatabase.updateCalls = 0;
   });
 
-  it("edits delivery mode and guards on an inactive initial-disabled draft", async () => {
-    const rule = {
-      id: "confirm-android",
-      enabled: true,
-      priority: 10,
-      action: "require-confirmation",
-      groups: [
-        {
-          conditions: [
-            { field: "platform", operator: "equals", value: "android" },
-          ],
-        },
-      ],
-    };
-
+  it("edits delivery and an unconditional Guard on a draft", async () => {
     expect(await getUpdatePolicyByKey(updateId)).toMatchObject({
       delivery: "manual",
-      rules: [],
+      guard: null,
       publishedAt: null,
       editable: true,
     });
 
+    const guard = {
+      action: "require-confirmation",
+      payload: { message: "Ready" },
+    };
     const updated = await replaceUpdatePolicyByKey(
       updateId,
-      { delivery: "background", rules: [rule] },
+      { delivery: "background", guard },
       1,
     );
 
     expect(updated).toMatchObject({
       delivery: "background",
-      rules: [rule],
+      guard,
       policyVersion: 2,
       publishedAt: null,
       editable: true,
     });
+    expect(policyDatabase.row).toMatchObject({
+      guard_action: guard.action,
+      guard_payload: guard.payload,
+    });
     expect(policyDatabase.updateCalls).toBe(1);
+  });
+
+  it("clears both Guard columns when Guard is disabled", async () => {
+    policyDatabase.row = makePolicyRow({
+      guard_action: "existing",
+      guard_payload: { message: "old" },
+    });
+    const updated = await replaceUpdatePolicyByKey(
+      updateId,
+      { delivery: "manual", guard: null },
+      1,
+    );
+
+    expect(updated.guard).toBeNull();
+    expect(policyDatabase.row).toMatchObject({
+      guard_action: null,
+      guard_payload: null,
+    });
   });
 
   it.each([
@@ -146,9 +159,7 @@ describe("OTA update policy service publication lock", () => {
       },
     ],
   ])("locks an %s row", async (_case, overrides) => {
-    policyDatabase.row = makePolicyRow({
-      ...overrides,
-    });
+    policyDatabase.row = makePolicyRow(overrides);
 
     expect(await getUpdatePolicyByKey(updateId)).toMatchObject({
       editable: false,
@@ -156,7 +167,7 @@ describe("OTA update policy service publication lock", () => {
     await expect(
       replaceUpdatePolicyByKey(
         updateId,
-        { delivery: "background", rules: [] },
+        { delivery: "background", guard: null },
         1,
       ),
     ).rejects.toBeInstanceOf(UpdatePolicyPublishedError);

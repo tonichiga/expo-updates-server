@@ -4,6 +4,8 @@ import {
   EmergencyRedirectInput,
   EmergencyRedirectItem,
   EmergencyRedirectsListResponse,
+  GuardActionItem,
+  GuardActionsListResponse,
   UpdateDetail,
   UpdatePolicy,
   UpdatesListResponse,
@@ -75,7 +77,7 @@ export async function getUpdatePolicy(encodedKey: string) {
 
 export async function putUpdatePolicy(
   encodedKey: string,
-  policy: Pick<UpdatePolicy, "delivery" | "rules">,
+  policy: Pick<UpdatePolicy, "delivery" | "guard">,
   expectedPolicyVersion: number,
 ) {
   const response = await fetch(`/api/admin/updates/${encodedKey}/policy`, {
@@ -189,6 +191,29 @@ export async function updateEmergencyRedirect(
 
 export async function deleteEmergencyRedirect(id: string) {
   const response = await fetch(`/api/admin/emergency-redirects/${id}`, {
+    method: "DELETE",
+  });
+  return parseJson<{ ok: boolean }>(response);
+}
+
+export async function getGuardActions() {
+  const response = await fetch("/api/admin/guard-actions", {
+    cache: "no-store",
+  });
+  return parseJson<GuardActionsListResponse>(response);
+}
+
+export async function createGuardAction(actionKey: string) {
+  const response = await fetch("/api/admin/guard-actions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ actionKey }),
+  });
+  return parseJson<GuardActionItem>(response);
+}
+
+export async function deleteGuardAction(id: string) {
+  const response = await fetch(`/api/admin/guard-actions/${id}`, {
     method: "DELETE",
   });
   return parseJson<{ ok: boolean }>(response);

@@ -356,7 +356,7 @@ export default function UpdateDetailsPage() {
                       : "Manual"
                 }
               />
-              <Info label="Guards" value={String(detail.guardCount)} />
+              <Info label="Guard" value={detail.hasGuard ? "Yes" : "None"} />
               <Info
                 label="Policy"
                 value={`v${detail.policyVersion} · ${detail.policyEditable ? "draft" : "published"}`}

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 const correctiveMigration = readFileSync(
   new URL(
-    "../../../docs/migrations/2026-09-01-correct-draft-policy-publication.sql",
+    "../../../docs/migrations/2026-09-01-policy-publication-correction.sql",
     import.meta.url,
   ),
   "utf8",
@@ -39,6 +39,12 @@ describe("OTA policy corrective migration", () => {
     expect(correctiveMigration).toMatch(
       /where\s+c\.active_update_id\s*=\s*u\.update_id/i,
     );
+  });
+
+  it("requires simple Guard defaults before correcting a draft", () => {
+    expect(correctiveMigration).toMatch(/u\.guard_action is null/i);
+    expect(correctiveMigration).toMatch(/u\.guard_payload is null/i);
+    expect(correctiveMigration).not.toMatch(/guard_rules/i);
   });
 
   it("applies the same correction in schema.sql after the served log exists", () => {

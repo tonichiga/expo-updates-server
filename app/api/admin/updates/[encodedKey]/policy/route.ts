@@ -50,7 +50,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     }
     const policy = await replaceUpdatePolicyByKey(
       decodeUpdateKey(encodedKey),
-      { delivery: body?.delivery, rules: body?.rules },
+      { delivery: body?.delivery, guard: body?.guard },
       body?.expectedPolicyVersion,
     );
     return NextResponse.json(policy);

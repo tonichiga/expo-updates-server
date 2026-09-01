@@ -1,143 +1,96 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createManifestUpdatePolicy,
-  evaluateUpdatePolicy,
-  UpdatePolicyRule,
   validateUpdatePolicy,
 } from "./update-policy";
 
-const rule = (
-  overrides: Partial<UpdatePolicyRule> = {},
-): UpdatePolicyRule => ({
-  id: "rule-1",
-  enabled: true,
-  priority: 10,
-  action: "require-confirmation",
-  groups: [
-    {
-      conditions: [
-        { field: "platform", operator: "equals", value: "ANDROID" },
-        { field: "channel", operator: "in", value: [" Production "] },
-      ],
-    },
-  ],
-  ...overrides,
-});
-
-describe("update policy", () => {
-  it("normalizes values and evaluates AND conditions inside OR groups", () => {
-    const policy = validateUpdatePolicy({
-      delivery: "background",
-      rules: [
-        rule({
-          groups: [
-            {
-              conditions: [
-                { field: "platform", operator: "equals", value: "ANDROID" },
-                { field: "channel", operator: "equals", value: "other" },
-              ],
-            },
-            {
-              conditions: [
-                { field: "platform", operator: "equals", value: "android" },
-                { field: "channel", operator: "equals", value: "PRODUCTION" },
-              ],
-            },
-          ],
-        }),
-      ],
-    });
-
-    expect(
-      evaluateUpdatePolicy(policy.rules, {
-        platform: "Android",
-        channel: "production",
-      })?.id,
-    ).toBe("rule-1");
-  });
-
-  it("uses ascending priority and ignores disabled rules", () => {
-    const { rules } = validateUpdatePolicy({
-      delivery: "manual",
-      rules: [
-        rule({ id: "later", priority: 20 }),
-        rule({ id: "disabled", priority: 1, enabled: false }),
-        rule({ id: "first", priority: 2, action: "first" }),
-      ],
-    });
-    expect(
-      evaluateUpdatePolicy(rules, {
-        platform: "android",
-        channel: "production",
-      })?.action,
-    ).toBe("first");
-  });
-
-  it("does not let negative comparisons match missing fields", () => {
-    expect(
-      evaluateUpdatePolicy(
-        [
-          rule({
-            groups: [
-              {
-                conditions: [
-                  {
-                    field: "appVersion",
-                    operator: "notEquals",
-                    value: "1.0",
-                  },
-                ],
-              },
-            ],
-          }),
-        ],
-        {},
-      ),
-    ).toBeNull();
-  });
-
-  it("rejects duplicate priorities and invalid operator values", () => {
-    expect(() =>
-      validateUpdatePolicy({
-        delivery: "manual",
-        rules: [rule(), rule({ id: "rule-2" })],
-      }),
-    ).toThrow("priority");
-    expect(() =>
-      validateUpdatePolicy({
-        delivery: "manual",
-        rules: [
-          rule({
-            groups: [
-              {
-                conditions: [
-                  {
-                    field: "platform",
-                    operator: "exists",
-                    value: "android",
-                  },
-                ],
-              },
-            ],
-          }),
-        ],
-      }),
-    ).toThrow("must be omitted");
-  });
-
-  it("fails corrupt persisted data safe to manual without a guard", () => {
-    const onCorrupt = vi.fn();
+describe("simple update policy", () => {
+  it("validates and directly projects an unconditional Guard", () => {
+    const guard = {
+      action: "require-confirmation",
+      payload: { message: "Ready" },
+    };
     expect(
       createManifestUpdatePolicy({
         delivery: "background",
-        rules: "corrupt",
-        policyVersion: 4,
-        context: {},
+        guard,
+        policyVersion: 7,
+      }),
+    ).toEqual({
+      schemaVersion: 1,
+      policyVersion: 7,
+      delivery: "background",
+      guard,
+    });
+  });
+
+  it.each([null, { action: "" }, { action: "   ", payload: null }])(
+    "omits Guard for %j",
+    (guard) => {
+      expect(
+        createManifestUpdatePolicy({
+          delivery: "manual",
+          guard,
+          policyVersion: 1,
+        }),
+      ).toEqual({
+        schemaVersion: 1,
+        policyVersion: 1,
+        delivery: "manual",
+      });
+    },
+  );
+
+  it("rejects payload without an action", () => {
+    expect(() =>
+      validateUpdatePolicy({
+        delivery: "manual",
+        guard: { action: "", payload: { invalid: true } },
+      }),
+    ).toThrow(/payload.*absent/);
+  });
+
+  it.each([" action", "action ", "bad\naction", "x".repeat(101)])(
+    "rejects invalid action %j",
+    (action) => {
+      expect(() =>
+        validateUpdatePolicy({
+          delivery: "manual",
+          guard: { action },
+        }),
+      ).toThrow(/trimmed.*1-100.*control/);
+    },
+  );
+
+  it("enforces payload depth and byte limits", () => {
+    let deep: unknown = "value";
+    for (let index = 0; index < 12; index += 1) deep = { deep };
+    expect(() =>
+      validateUpdatePolicy({
+        delivery: "manual",
+        guard: { action: "action", payload: deep },
+      }),
+    ).toThrow(/depth/);
+    expect(() =>
+      validateUpdatePolicy({
+        delivery: "manual",
+        guard: { action: "action", payload: "x".repeat(17 * 1024) },
+      }),
+    ).toThrow(/16384/);
+  });
+
+  it("falls back safely for corrupt persisted policy", () => {
+    const onCorrupt = vi.fn();
+    expect(
+      createManifestUpdatePolicy({
+        delivery: "invalid",
+        guard: null,
+        policyVersion: 3,
         onCorrupt,
       }),
     ).toEqual({
       schemaVersion: 1,
-      policyVersion: 4,
+      policyVersion: 3,
       delivery: "manual",
     });
     expect(onCorrupt).toHaveBeenCalledOnce();

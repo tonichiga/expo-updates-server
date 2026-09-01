@@ -115,7 +115,8 @@ export type OtaUpdateRow = {
   launch_asset_path: string | null;
   rolled_back_from_update_id: string | null;
   delivery_mode: UpdateDeliveryMode;
-  guard_rules: unknown;
+  guard_action: string | null;
+  guard_payload: unknown | null;
   policy_version: number;
   policy_published_at: string | null;
   manifest: Record<string, unknown>;
@@ -164,7 +165,7 @@ export type UpdateRecord = {
   launchAssetPath: string | null;
   assetsCount: number;
   deliveryMode: UpdateDeliveryMode;
-  guardCount: number;
+  hasGuard: boolean;
   policyVersion: number;
   policyPublishedAt: string | null;
   policyEditable: boolean;
@@ -332,14 +333,8 @@ export function mapRowToRecord(
     assetsCount: row.assets_count,
     deliveryMode:
       row.delivery_mode === "background" ? "background" : "manual",
-    guardCount: Array.isArray(row.guard_rules)
-      ? row.guard_rules.filter(
-          (rule) =>
-            rule &&
-            typeof rule === "object" &&
-            (rule as { enabled?: unknown }).enabled === true,
-        ).length
-      : 0,
+    hasGuard:
+      typeof row.guard_action === "string" && row.guard_action.length > 0,
     policyVersion:
       Number.isInteger(row.policy_version) && row.policy_version > 0
         ? row.policy_version
@@ -383,7 +378,14 @@ export function assertExpectedPolicyVersion(
 function rowToPolicy(row: OtaUpdateRow): UpdatePolicyRecord {
   const validated = validateUpdatePolicy({
     delivery: row.delivery_mode,
-    rules: row.guard_rules,
+    guard: row.guard_action
+      ? {
+          action: row.guard_action,
+          ...(row.guard_payload !== null
+            ? { payload: row.guard_payload }
+            : {}),
+        }
+      : null,
   });
   return {
     ...validated,
@@ -419,7 +421,11 @@ export async function replaceUpdatePolicyByKey(
     .from("ota_updates")
     .update({
       delivery_mode: policy.delivery,
-      guard_rules: jsonb(policy.rules),
+      guard_action: policy.guard?.action || null,
+      guard_payload:
+        policy.guard?.payload !== undefined
+          ? jsonb(policy.guard.payload)
+          : null,
       policy_version: row.policy_version + 1,
     })
     .eq("update_id", updateId)

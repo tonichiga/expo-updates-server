@@ -233,6 +233,7 @@ ota_device_state
 ota_device_transitions
 ota_embedded_updates
 ota_emergency_redirects
+ota_guard_actions
 ota_served_manifest_log
 ota_update_channels
 ota_updates
