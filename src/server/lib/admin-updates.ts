@@ -89,10 +89,11 @@ type UpdateMetaState = {
   disabledAt: string | null;
 };
 
-type OtaUpdateRow = {
+export type OtaUpdateRow = {
   id: string;
   update_id: string;
   build_id: string;
+  app_version?: string | null;
   comment: string | null;
   runtime_version: string;
   channel: string;
@@ -112,7 +113,7 @@ type OtaUpdateRow = {
   modified_at: string;
 };
 
-type OtaChannelRow = {
+export type OtaChannelRow = {
   id: number;
   runtime_version: string;
   channel: string;
@@ -131,6 +132,7 @@ type OtaChannelRow = {
 export type UpdateRecord = {
   key: string;
   encodedKey: string;
+  appVersion: string | null;
   comment: string | null;
   runtimeVersion: string;
   platform: "ios" | "android";
@@ -273,7 +275,7 @@ async function getNewestUpdateByScope(
   return (data as OtaUpdateRow | null) || null;
 }
 
-function mapRowToRecord(
+export function mapRowToRecord(
   row: OtaUpdateRow,
   channel: OtaChannelRow | null,
 ): UpdateRecord {
@@ -292,6 +294,7 @@ function mapRowToRecord(
   return {
     key,
     encodedKey: encodeUpdateKey(row.update_id),
+    appVersion: row.app_version || null,
     comment: row.comment,
     runtimeVersion: row.runtime_version,
     platform: row.platform,

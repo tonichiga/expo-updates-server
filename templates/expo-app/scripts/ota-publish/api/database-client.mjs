@@ -19,17 +19,18 @@ export async function writeDatabaseRecords(pool, update, latest) {
       await client.query("BEGIN");
       await client.query(
         `INSERT INTO ota_updates (
-          id, update_id, build_id, runtime_version, channel, platform,
+          id, update_id, build_id, app_version, runtime_version, channel, platform,
           created_at, created_at_path, storage_bucket, storage_base_path,
           is_active, disabled_at, assets_count, launch_asset_path, comment,
           manifest
         ) VALUES (
-          $1, $1, $1, $2, $3, $4,
-          $5, $6, $7, $8,
-          false, $5, $9, $10, $11,
-          $12::jsonb
+          $1, $1, $1, $2, $3, $4, $5,
+          $6, $7, $8, $9,
+          false, $6, $10, $11, $12,
+          $13::jsonb
         )
         ON CONFLICT (id) DO UPDATE SET
+          app_version = EXCLUDED.app_version,
           runtime_version = EXCLUDED.runtime_version,
           channel = EXCLUDED.channel,
           platform = EXCLUDED.platform,
@@ -45,6 +46,7 @@ export async function writeDatabaseRecords(pool, update, latest) {
           manifest = EXCLUDED.manifest`,
         [
           update.id,
+          update.appVersion,
           update.runtimeVersion,
           update.channel,
           update.platform,

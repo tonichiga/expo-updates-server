@@ -108,6 +108,17 @@ export function parseEmbeddedManifest(content, fallbackDate = new Date()) {
     ["metadata", "createdAt"],
     ["extra", "expoClient", "createdAt"],
   ]);
+  const appVersion =
+    readPath(manifest, [
+      ["extra", "expoClient", "version"],
+      ["expoClient", "version"],
+      ["version"],
+    ]) ||
+    readPath(root, [
+      ["extra", "expoClient", "version"],
+      ["expoClient", "version"],
+      ["version"],
+    ]);
   const fallbackId = crypto
     .createHash("sha256")
     .update(content)
@@ -118,6 +129,7 @@ export function parseEmbeddedManifest(content, fallbackDate = new Date()) {
     embeddedUpdateId:
       embeddedUpdateId ||
       `${fallbackId.slice(0, 8)}-${fallbackId.slice(8, 12)}-4${fallbackId.slice(13, 16)}-a${fallbackId.slice(17, 20)}-${fallbackId.slice(20)}`,
+    appVersion: typeof appVersion === "string" ? appVersion : null,
     createdAt: normalizeDate(createdAt, fallbackDate),
   };
 }
@@ -210,9 +222,13 @@ async function registerWithDatabase(input) {
   try {
     await client.query(
       `INSERT INTO ota_embedded_updates (
-        embedded_update_id, created_at, channel, platform, is_embedded
-      ) VALUES ($1, $2, $3, $4, true)
+        embedded_update_id, app_version, created_at, channel, platform, is_embedded
+      ) VALUES ($1, $2, $3, $4, $5, true)
       ON CONFLICT (embedded_update_id) DO UPDATE SET
+        app_version = COALESCE(
+          NULLIF(BTRIM(EXCLUDED.app_version), ''),
+          ota_embedded_updates.app_version
+        ),
         created_at = EXCLUDED.created_at,
         channel = EXCLUDED.channel,
         platform = EXCLUDED.platform,
@@ -220,6 +236,7 @@ async function registerWithDatabase(input) {
         modified_at = now()`,
       [
         input.embeddedUpdateId,
+        input.appVersion || null,
         input.createdAt,
         input.channel,
         input.platform,

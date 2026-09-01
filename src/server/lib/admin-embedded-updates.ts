@@ -1,7 +1,8 @@
 import { supabase } from "./supabase.js";
 
-type EmbeddedUpdateRow = {
+export type EmbeddedUpdateRow = {
   embedded_update_id: string;
+  app_version?: string | null;
   created_at: string;
   channel: string;
   platform: "ios" | "android";
@@ -12,6 +13,7 @@ type EmbeddedUpdateRow = {
 
 export type EmbeddedUpdateRecord = {
   embeddedUpdateId: string;
+  appVersion: string | null;
   createdAt: string;
   channel: string;
   platform: "ios" | "android";
@@ -22,6 +24,7 @@ export type EmbeddedUpdateRecord = {
 
 export type RegisterEmbeddedUpdateInput = {
   embeddedUpdateId: string;
+  appVersion: string | null;
   createdAt: string;
   channel: string;
   platform: "ios" | "android";
@@ -47,6 +50,10 @@ export function parseRegisterEmbeddedUpdateInput(
   const createdAt = String(input.createdAt || "").trim();
   const channel = String(input.channel || "").trim().toLowerCase();
   const platform = String(input.platform || "").trim().toLowerCase();
+  const appVersion =
+    typeof input.appVersion === "string" && input.appVersion.trim()
+      ? input.appVersion.trim()
+      : null;
 
   if (!UUID_PATTERN.test(embeddedUpdateId)) {
     throw new EmbeddedUpdateValidationError(
@@ -71,27 +78,53 @@ export function parseRegisterEmbeddedUpdateInput(
 
   return {
     embeddedUpdateId,
+    appVersion,
     createdAt: new Date(createdAt).toISOString(),
     channel,
     platform,
   };
 }
 
-export async function registerEmbeddedUpdate(
+export function mapEmbeddedUpdateRow(
+  row: EmbeddedUpdateRow,
+): EmbeddedUpdateRecord {
+  return {
+    embeddedUpdateId: row.embedded_update_id,
+    appVersion: row.app_version || null,
+    createdAt: row.created_at,
+    channel: row.channel,
+    platform: row.platform,
+    isEmbedded: row.is_embedded,
+    insertedAt: row.inserted_at,
+    modifiedAt: row.modified_at,
+  };
+}
+
+export function buildEmbeddedUpdateUpsertRow(
   input: RegisterEmbeddedUpdateInput,
-): Promise<EmbeddedUpdateRecord> {
-  const row = {
+) {
+  return {
     embedded_update_id: input.embeddedUpdateId,
     created_at: input.createdAt,
     channel: input.channel,
     platform: input.platform,
     is_embedded: true,
+    ...(input.appVersion ? { app_version: input.appVersion } : {}),
   };
+}
+
+export async function registerEmbeddedUpdate(
+  input: RegisterEmbeddedUpdateInput,
+): Promise<EmbeddedUpdateRecord> {
+  const row = buildEmbeddedUpdateUpsertRow(input);
   const { data, error } = await supabase
     .from("ota_embedded_updates")
-    .upsert(row, { onConflict: "embedded_update_id" })
+    .upsert(row, {
+      onConflict: "embedded_update_id",
+      defaultToNull: false,
+    })
     .select(
-      "embedded_update_id,created_at,channel,platform,is_embedded,inserted_at,modified_at",
+      "embedded_update_id,app_version,created_at,channel,platform,is_embedded,inserted_at,modified_at",
     )
     .single();
 
@@ -100,22 +133,14 @@ export async function registerEmbeddedUpdate(
   }
 
   const saved = data as EmbeddedUpdateRow;
-  return {
-    embeddedUpdateId: saved.embedded_update_id,
-    createdAt: saved.created_at,
-    channel: saved.channel,
-    platform: saved.platform,
-    isEmbedded: saved.is_embedded,
-    insertedAt: saved.inserted_at,
-    modifiedAt: saved.modified_at,
-  };
+  return mapEmbeddedUpdateRow(saved);
 }
 
 export async function listEmbeddedUpdates(): Promise<EmbeddedUpdateRecord[]> {
   const { data, error } = await supabase
     .from("ota_embedded_updates")
     .select(
-      "embedded_update_id,created_at,channel,platform,is_embedded,inserted_at,modified_at",
+      "embedded_update_id,app_version,created_at,channel,platform,is_embedded,inserted_at,modified_at",
     )
     .order("created_at", { ascending: false })
     .execute();
@@ -124,15 +149,7 @@ export async function listEmbeddedUpdates(): Promise<EmbeddedUpdateRecord[]> {
     throw new Error(`Failed to fetch embedded updates: ${error.message}`);
   }
 
-  return ((data || []) as EmbeddedUpdateRow[]).map((row) => ({
-    embeddedUpdateId: row.embedded_update_id,
-    createdAt: row.created_at,
-    channel: row.channel,
-    platform: row.platform,
-    isEmbedded: row.is_embedded,
-    insertedAt: row.inserted_at,
-    modifiedAt: row.modified_at,
-  }));
+  return ((data || []) as EmbeddedUpdateRow[]).map(mapEmbeddedUpdateRow);
 }
 
 export async function deleteEmbeddedUpdateById(embeddedUpdateId: string) {

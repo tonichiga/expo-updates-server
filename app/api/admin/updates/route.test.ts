@@ -22,7 +22,14 @@ const sessionAuth = vi.hoisted(() => ({
 }));
 
 const getUpdatesPage = vi.hoisted(() =>
-  vi.fn(async () => ({
+  vi.fn(async (): Promise<{
+    items: Array<Record<string, unknown>>;
+    total: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+    rollbackLockByScope: Array<Record<string, unknown>>;
+  }> => ({
     items: [],
     total: 0,
     page: 1,
@@ -87,6 +94,27 @@ describe("GET /api/admin/updates authorization", () => {
 
     expect(response.status).toBe(200);
     expect(getUpdatesPage).toHaveBeenCalledOnce();
+  });
+
+  it("returns the app version associated with each update", async () => {
+    tokenAuth.result = {
+      id: "token-id",
+      name: "CI",
+      scopes: ["updates:read"],
+    };
+    getUpdatesPage.mockResolvedValueOnce({
+      items: [{ updateId: "update-id", appVersion: "2.4.1" }],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+      totalPages: 1,
+      rollbackLockByScope: [],
+    });
+    const { GET } = await import("./route");
+    const response = await GET(makeRequest("ota_test_token"));
+
+    expect(response.status).toBe(200);
+    expect((await response.json()).items[0].appVersion).toBe("2.4.1");
   });
 
   it("rejects a bearer token without updates:read scope", async () => {

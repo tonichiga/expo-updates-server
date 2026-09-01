@@ -17,12 +17,18 @@ describe("embedded update registrar", () => {
         manifest: JSON.stringify({
           id: "55555555-5555-4555-8555-555555555555",
           createdAt: "2026-01-01T00:00:00Z",
+          extra: {
+            expoClient: {
+              version: "2.4.1",
+            },
+          },
         }),
       }),
     );
 
     expect(result).toEqual({
       embeddedUpdateId: "55555555-5555-4555-8555-555555555555",
+      appVersion: "2.4.1",
       createdAt: "2026-01-01T00:00:00.000Z",
     });
   });
@@ -43,6 +49,7 @@ describe("embedded update registrar", () => {
     expect(first.embeddedUpdateId).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-a[0-9a-f]{3}-[0-9a-f]{12}$/,
     );
+    expect(first.appVersion).toBeNull();
     expect(first.createdAt).toBe("2026-02-03T04:05:06.000Z");
   });
 

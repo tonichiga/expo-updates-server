@@ -4,6 +4,7 @@ create table if not exists public.ota_updates (
   id uuid primary key default gen_random_uuid(),
   update_id uuid not null unique,
   build_id uuid not null,
+  app_version text null,
   runtime_version text not null,
   channel text not null,
   platform text not null check (platform in ('ios', 'android')),
@@ -179,6 +180,7 @@ execute function public.ota_channels_validate_scope_pointers();
 create table if not exists public.ota_embedded_updates (
   id uuid primary key default gen_random_uuid(),
   embedded_update_id uuid not null unique,
+  app_version text null,
   created_at timestamptz not null,
   channel text not null,
   platform text not null check (platform in ('ios', 'android')),
@@ -195,6 +197,27 @@ drop trigger if exists trg_ota_embedded_updates_modified_at
 create trigger trg_ota_embedded_updates_modified_at
 before update on public.ota_embedded_updates
 for each row execute function public.set_modified_at();
+
+create or replace function public.preserve_embedded_update_app_version()
+returns trigger
+language plpgsql
+as $$
+begin
+  if tg_op = 'UPDATE' and nullif(btrim(new.app_version), '') is null then
+    new.app_version := old.app_version;
+  else
+    new.app_version := nullif(btrim(new.app_version), '');
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_ota_embedded_updates_preserve_app_version
+  on public.ota_embedded_updates;
+create trigger trg_ota_embedded_updates_preserve_app_version
+before insert or update on public.ota_embedded_updates
+for each row execute function public.preserve_embedded_update_app_version();
 
 create table if not exists public.ota_served_manifest_log (
   served_manifest_id uuid primary key,
