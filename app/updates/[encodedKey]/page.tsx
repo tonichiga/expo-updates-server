@@ -14,6 +14,10 @@ import UpdatePolicyEditor from "@/src/client/update-policy-editor";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import {
+  DistributionControlBanner,
+  useDistributionControlState,
+} from "@/src/client/distribution-control";
 
 type EditableFile =
   | "update-info.json"
@@ -38,6 +42,13 @@ export default function UpdateDetailsPage() {
   const [selectedFile, setSelectedFile] =
     useState<EditableFile>("update-info.json");
   const [editorValue, setEditorValue] = useState("{}");
+  const distributionControl = useDistributionControlState();
+  const distributionUnavailable =
+    distributionControl.loading ||
+    Boolean(distributionControl.error) ||
+    !distributionControl.state;
+  const distributionBlocked =
+    distributionControl.state?.blocked === true || distributionUnavailable;
 
   const channelState = useMemo(() => {
     const latestUpdateId =
@@ -76,10 +87,13 @@ export default function UpdateDetailsPage() {
   }, [detail]);
 
   const canPromote = Boolean(
-    channelState.isNewestInScope && channelState.rollbackActive,
+    !distributionBlocked &&
+      channelState.isNewestInScope &&
+      channelState.rollbackActive,
   );
   const canRollback = Boolean(
     detail &&
+    !distributionBlocked &&
     !channelState.isNewestInScope &&
     channelState.currentServedUpdateId &&
     detail.updateId !== channelState.currentServedUpdateId,
@@ -89,6 +103,7 @@ export default function UpdateDetailsPage() {
   );
   const canDirectActivate = Boolean(
     detail &&
+    !distributionBlocked &&
     detail.status === "disabled" &&
     channelState.isNewestInScope &&
     !channelState.rollbackActive,
@@ -99,7 +114,26 @@ export default function UpdateDetailsPage() {
   const showToggleDisabledButton = canDirectActivate || canDirectDeactivate;
   const canDelete = Boolean(detail && detail.status !== "active");
   const channelLatestLocked =
-    selectedFile === "channel-latest.json" && channelState.rollbackActive;
+    selectedFile === "channel-latest.json" &&
+    (channelState.rollbackActive || distributionBlocked);
+
+  const updateMetaDistributionLocked = useMemo(() => {
+    if (selectedFile !== "update-meta.json" || !distributionBlocked) {
+      return false;
+    }
+    try {
+      const value: unknown = JSON.parse(editorValue);
+      return (
+        !value ||
+        typeof value !== "object" ||
+        Array.isArray(value) ||
+        !("isActive" in value) ||
+        value.isActive !== false
+      );
+    } catch {
+      return true;
+    }
+  }, [distributionBlocked, editorValue, selectedFile]);
 
   const fileContent = useMemo(() => {
     if (!detail) {
@@ -302,6 +336,12 @@ export default function UpdateDetailsPage() {
           </div>
         ) : null}
 
+        <DistributionControlBanner
+          state={distributionControl.state}
+          loading={distributionControl.loading}
+          error={distributionControl.error}
+        />
+
         {!loading && detail ? (
           <>
             {channelState.rollbackActive ? (
@@ -453,7 +493,11 @@ export default function UpdateDetailsPage() {
                 <button
                   type="button"
                   onClick={handleSaveJson}
-                  disabled={saving || channelLatestLocked}
+                  disabled={
+                    saving ||
+                    channelLatestLocked ||
+                    updateMetaDistributionLocked
+                  }
                   className="rounded-md border border-zinc-300 px-4 py-4 text-sm hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:hover:bg-zinc-800"
                 >
                   Сохранить JSON
@@ -461,8 +505,14 @@ export default function UpdateDetailsPage() {
               </div>
               {channelLatestLocked ? (
                 <p className="mt-2 text-xs text-orange-700 dark:text-orange-300">
-                  Редактирование channel latest.json заблокировано: rollback
-                  активен. Используйте Promote.
+                  Редактирование channel latest.json заблокировано: активен
+                  rollback или глобальный аварийный выключатель.
+                </p>
+              ) : null}
+              {updateMetaDistributionLocked ? (
+                <p className="mt-2 text-xs text-red-700 dark:text-red-300">
+                  Активация через update-meta.json недоступна при глобальной
+                  блокировке. Деактивация с isActive=false остаётся доступна.
                 </p>
               ) : null}
               <textarea

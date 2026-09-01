@@ -7,6 +7,7 @@ import {
   validateUpdatePolicy,
 } from "./update-policy";
 import { getManifestAppVersion } from "../manifest/manifest-values";
+import { assertOtaDistributionAllowed } from "./distribution-control";
 
 let hasServedManifestLogTable: boolean | null = null;
 
@@ -952,15 +953,22 @@ export async function updateJsonFileByKey(
     | "channel-latest.json",
   nextJson: unknown,
 ) {
-  const updateId = extractUpdateIdFromKey(key);
-  const row = await getUpdateRowById(updateId);
-  const scope = makeScopeFromRow(row);
-
   if (!nextJson || typeof nextJson !== "object" || Array.isArray(nextJson)) {
     throw new Error("content must be a JSON object");
   }
 
   const content = nextJson as Record<string, unknown>;
+
+  if (
+    fileName === "channel-latest.json" ||
+    (fileName === "update-meta.json" && content.isActive !== false)
+  ) {
+    await assertOtaDistributionAllowed();
+  }
+
+  const updateId = extractUpdateIdFromKey(key);
+  const row = await getUpdateRowById(updateId);
+  const scope = makeScopeFromRow(row);
 
   if (fileName === "update-info.json") {
     const assets = Array.isArray(content.assets) ? content.assets : [];
@@ -1078,6 +1086,7 @@ export async function rollbackToUpdateByKey(
   key: string,
   options?: RollbackOptions,
 ) {
+  await assertOtaDistributionAllowed();
   const updateId = extractUpdateIdFromKey(key);
   const row = await getUpdateRowById(updateId);
   const scope = makeScopeFromRow(row);
@@ -1217,6 +1226,7 @@ export async function rollbackToUpdateByKey(
 }
 
 export async function promoteLatestByKey(key: string) {
+  await assertOtaDistributionAllowed();
   const updateId = extractUpdateIdFromKey(key);
   const row = await getUpdateRowById(updateId);
   const scope = makeScopeFromRow(row);
@@ -1309,6 +1319,9 @@ export async function promoteLatestByKey(key: string) {
 }
 
 export async function setUpdateDisabledByKey(key: string, disabled: boolean) {
+  if (!disabled) {
+    await assertOtaDistributionAllowed();
+  }
   const updateId = extractUpdateIdFromKey(key);
   const row = await getUpdateRowById(updateId);
   const scope = makeScopeFromRow(row);

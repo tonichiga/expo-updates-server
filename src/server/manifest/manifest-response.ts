@@ -1,5 +1,4 @@
 import NodeFormData from "form-data";
-import path from "node:path";
 import { NextRequest } from "next/server";
 import { toPosixPath } from "../lib/manifest-helpers.js";
 import { createSignatureHeaderIfRequested } from "../lib/signing.js";
@@ -61,11 +60,6 @@ function getServerBaseUrl(request: NextRequest): string {
   return `${protocol}://${host}`;
 }
 
-function getCdnBaseUrl(): string | null {
-  const value = process.env.OTA_CDN_BASE_URL?.trim();
-  return value ? removeTrailingSlash(value) : null;
-}
-
 export function buildAssetUrl({
   request,
   runtimeVersion,
@@ -74,7 +68,6 @@ export function buildAssetUrl({
   channel,
   updateId,
   assetPath,
-  storageBasePath,
 }: {
   request: NextRequest;
   runtimeVersion: string;
@@ -83,16 +76,7 @@ export function buildAssetUrl({
   channel: string;
   updateId: string;
   assetPath: string;
-  storageBasePath: string;
 }): string {
-  const cdnBaseUrl = getCdnBaseUrl();
-  if (cdnBaseUrl && storageBasePath) {
-    const objectPath = toPosixPath(
-      path.posix.join(storageBasePath, toPosixPath(assetPath)),
-    );
-    return `${cdnBaseUrl}/${objectPath}`;
-  }
-
   const params = new URLSearchParams({
     runtimeVersion,
     platform,

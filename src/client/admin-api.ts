@@ -1,5 +1,7 @@
 import {
   AdminSessionResponse,
+  DistributionControlResponse,
+  DistributionControlState,
   EmbeddedUpdatesListResponse,
   EmergencyRedirectInput,
   EmergencyRedirectItem,
@@ -11,13 +13,44 @@ import {
   UpdatesListResponse,
 } from "./admin-types";
 
+export class AdminApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "AdminApiError";
+  }
+}
+
 async function parseJson<T>(response: Response): Promise<T> {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     const message = (data as { error?: string })?.error || "Request failed";
-    throw new Error(message);
+    throw new AdminApiError(message, response.status);
   }
+
   return data as T;
+}
+
+export async function getDistributionControl() {
+  const response = await fetch("/api/admin/distribution-control", {
+    cache: "no-store",
+  });
+  return parseJson<DistributionControlResponse>(response);
+}
+
+export async function setDistributionControl(input: {
+  blocked: boolean;
+  reason?: string;
+  expectedVersion: number;
+}) {
+  const response = await fetch("/api/admin/distribution-control", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return parseJson<DistributionControlState>(response);
 }
 
 export async function adminLogin(username: string, password: string) {

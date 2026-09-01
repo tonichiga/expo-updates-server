@@ -574,7 +574,9 @@ npm run create-admin
 Опционально:
 
 - `OTA_PUBLIC_BASE_URL` - публичный URL OTA сервера (для `/api/manifest` и `/api/assets`)
-- `OTA_CDN_BASE_URL` - публичный CDN URL для прямой раздачи ассетов (например `https://cdn.cogitize.tech`)
+- `OTA_CDN_BASE_URL` - устаревшая совместимая настройка; новые manifest
+  намеренно игнорируют её и выдают gated `/api/assets` URL, чтобы глобальный
+  аварийный выключатель нельзя было обойти прямой загрузкой из CDN
 - `OTA_SIGNED_URL_TTL` - TTL signed URL в секундах (по умолчанию `3600`)
 - `R2_REGION` - регион для S3 клиента (по умолчанию `auto`)
 

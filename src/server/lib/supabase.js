@@ -80,6 +80,13 @@ if (DATABASE_PROVIDER !== "pg" && DATABASE_PROVIDER !== "supabase") {
 const shouldUseSsl =
   DATABASE_SSL === "true" || DATABASE_SSL === "1" || DATABASE_SSL === "require";
 
+function assertSqlIdentifier(value) {
+  if (!/^[a-z_][a-z0-9_]*$/i.test(value)) {
+    throw new Error(`Invalid SQL identifier: ${value}`);
+  }
+  return value;
+}
+
 let pool = null;
 let s3 = null;
 let supabaseClient = null;
@@ -808,6 +815,12 @@ const supabase =
             );
           },
         },
+        rpc(functionName, params = {}) {
+          return getSupabaseClient().rpc(
+            functionName,
+            unwrapJsonbPayload(params),
+          );
+        },
       }
     : {
         from(tableName) {
@@ -817,6 +830,30 @@ const supabase =
           from(bucket) {
             return new BucketStorageQuery(bucket || SUPABASE_BUCKET);
           },
+        },
+        async rpc(functionName, params = {}) {
+          try {
+            const safeFunctionName = assertSqlIdentifier(functionName);
+            const entries = Object.entries(params);
+            const placeholders = entries.map(
+              ([name], index) =>
+                `${assertSqlIdentifier(name)} => $${index + 1}`,
+            );
+            const sql = `SELECT * FROM public.${safeFunctionName}(${placeholders.join(", ")})`;
+            const values = entries.map(([, value]) =>
+              toPostgresWriteValue(value),
+            );
+            const result = await getPool().query(sql, values);
+            return { data: result.rows, error: null };
+          } catch (error) {
+            return {
+              data: null,
+              error: {
+                message:
+                  error instanceof Error ? error.message : String(error),
+              },
+            };
+          }
         },
       };
 
