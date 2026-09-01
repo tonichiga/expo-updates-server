@@ -3,6 +3,7 @@
 import { getUpdates } from "@/src/client/admin-api";
 import { UpdateItem } from "@/src/client/admin-types";
 import LogoutButton from "@/src/client/logout-button";
+import DistributionControl from "@/src/client/distribution-control";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
@@ -123,6 +124,8 @@ export default function UpdatesPage() {
             <LogoutButton />
           </div>
         </header>
+
+        <DistributionControl />
 
         {error ? (
           <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">

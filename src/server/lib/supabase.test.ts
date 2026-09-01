@@ -37,6 +37,13 @@ const supabaseBuilder = vi.hoisted(() => {
   };
   return builder;
 });
+const supabaseRpcCalls = vi.hoisted(
+  () =>
+    [] as Array<{
+      functionName: string;
+      params: Record<string, unknown>;
+    }>,
+);
 
 vi.mock("pg", () => ({
   Pool: class Pool {
@@ -48,6 +55,10 @@ vi.mock("pg", () => ({
 vi.mock("@supabase/supabase-js", () => ({
   createClient: () => ({
     from: () => supabaseBuilder,
+    rpc(functionName: string, params: Record<string, unknown>) {
+      supabaseRpcCalls.push({ functionName, params });
+      return Promise.resolve({ data: [], error: null });
+    },
   }),
 }));
 
@@ -62,6 +73,7 @@ describe("common database abstraction", () => {
     poolQuery.mockClear();
     supabaseUpdate.mockClear();
     supabaseUpsert.mockClear();
+    supabaseRpcCalls.length = 0;
     process.env.DATABASE_PROVIDER = "pg";
     process.env.DATABASE_URL = "postgres://local/test";
   });
@@ -122,11 +134,7 @@ describe("common database abstraction", () => {
       expect.stringContaining(
         "SET guard_payload = $1, scopes = $2 WHERE update_id = $3",
       ),
-      [
-        JSON.stringify(payload),
-        ["updates:read", "updates:write"],
-        "update-id",
-      ],
+      [JSON.stringify(payload), ["updates:read", "updates:write"], "update-id"],
     );
   });
 
@@ -149,6 +157,38 @@ describe("common database abstraction", () => {
     expect(supabaseUpdate).toHaveBeenCalledWith({
       guard_payload: payload,
       scopes: ["updates:read"],
+    });
+  });
+
+  it("calls PostgreSQL functions with validated named parameters", async () => {
+    vi.stubEnv("DATABASE_PROVIDER", "pg");
+    vi.stubEnv("DATABASE_URL", "postgres://example");
+    const { jsonb, supabase } = await import("./supabase.js");
+
+    await supabase.rpc("set_ota_distribution_control", {
+      p_blocked: true,
+      p_changed_by: jsonb({ id: "operator" }),
+    });
+
+    expect(poolQuery).toHaveBeenCalledWith(
+      "SELECT * FROM public.set_ota_distribution_control(p_blocked => $1, p_changed_by => $2)",
+      [true, '{"id":"operator"}'],
+    );
+  });
+
+  it("unwraps JSON parameters for Supabase RPC", async () => {
+    vi.stubEnv("DATABASE_PROVIDER", "supabase");
+    vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "test-key");
+    const { jsonb, supabase } = await import("./supabase.js");
+
+    await supabase.rpc("set_ota_distribution_control", {
+      p_changed_by: jsonb({ id: "operator" }),
+    });
+
+    expect(supabaseRpcCalls[0]).toEqual({
+      functionName: "set_ota_distribution_control",
+      params: { p_changed_by: { id: "operator" } },
     });
   });
 });

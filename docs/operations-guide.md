@@ -9,7 +9,8 @@ recovery, backups and upgrades for the OTA update server.
 - PostgreSQL 15 or newer;
 - S3-compatible object storage such as Cloudflare R2 or MinIO;
 - HTTPS public URL for production;
-- optional CDN for immutable OTA assets.
+- optional CDN in front of the whole OTA server (it must respect
+  `Cache-Control: no-store` on blocked asset responses).
 
 ## 2. Environment
 
@@ -223,6 +224,56 @@ npm run emergency:import
 ```
 
 The manifest runtime reads only `ota_emergency_redirects` after migration.
+
+## 9.1 Global OTA emergency switch
+
+The prominent control at `/updates` is the highest-priority incident switch.
+When it is **BLOCKED**:
+
+- every manifest request receives Expo's signed `noUpdateAvailable`
+  directive;
+- every `/api/assets` request fails closed with `503` and
+  `Cache-Control: no-store`;
+- activation, rollback, promote, and distributing `channel-latest.json` /
+  `update-meta.json` mutations return `409`;
+- update activation and channel distribution changes are also rejected in
+  PostgreSQL with SQLSTATE `P0OTA` and an `OTA_DISTRIBUTION_BLOCKED` message,
+  including ordinary direct SQL writes;
+- deactivation, inactive draft inserts, safe metadata edits, and channel
+  pointer cleanup that leaves no served update remain available. Deleting an
+  update remains available only when foreign-key pointer cleanup would not
+  promote or redirect another update.
+
+Enabling the switch requires a reason and confirmation. Disabling it also
+requires confirmation. Viewers can inspect the status but cannot change it.
+State changes use an optimistic version and are audited with actor and time.
+The switch RPC and distribution triggers share a transaction-scoped database
+lock, so a concurrent mutation either completes before BLOCKED takes effect or
+waits and is rejected; there is no check/mutation window. Do not disable these
+triggers during an incident.
+
+Incident procedure:
+
+1. Open `/updates`, enter the incident/ticket and impact as the reason, then
+   choose **Stop all OTA**.
+2. Confirm both a manifest check (`noUpdateAvailable`) and a previously issued
+   `/api/assets` URL (`503`, no-store).
+3. Investigate or deactivate the bad updates while distribution stays blocked.
+4. Before resuming, verify channel pointers and both platforms.
+5. Choose **Resume OTA**, confirm, then repeat manifest checks.
+
+The switch requires migration
+`docs/migrations/2026-09-02-ota-distribution-control.sql`. A missing table or
+database read failure is deliberately not interpreted as ACTIVE: manifests
+and assets fail closed.
+
+`OTA_CDN_BASE_URL` is retained only as a deprecated configuration value. New
+manifests always use the server's gated `/api/assets` URLs. If an external CDN
+is used, place it in front of the OTA server rather than exposing the storage
+bucket URL, and make sure it honors the asset endpoint's `private, no-store`
+response. The switch cannot revoke immutable legacy storage/CDN URLs that were
+already issued by an older server version; purge or disable that legacy CDN
+before relying on the switch for those manifests.
 
 ## 10. Backups
 

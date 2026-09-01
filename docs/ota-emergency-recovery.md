@@ -1,5 +1,27 @@
 # Аварийное восстановление OTA
 
+## Глобальная аварийная остановка
+
+Если необходимо немедленно прекратить **любую** OTA-раздачу, используйте
+глобальный переключатель `ACTIVE/BLOCKED` на `/updates`. Он имеет приоритет над
+всеми emergency redirects: manifest вернёт `noUpdateAvailable`, а уже выданные
+ссылки `/api/assets` перестанут отдавать bytes и ответят `503 no-store`.
+
+Укажите причину/номер инцидента, подтвердите включение и проверьте manifest и
+asset URL. После исправления проверьте pointers каналов, подтвердите выключение
+блокировки и повторите проверки для iOS и Android.
+
+RPC переключателя и DB-триггеры mutations используют одну transaction advisory
+lock. Поэтому конкурентная activation/channel mutation либо завершится до
+включения `BLOCKED`, либо дождётся его и будет отклонена PostgreSQL с SQLSTATE
+`P0OTA` и сообщением `OTA_DISTRIBUTION_BLOCKED`. Deactivation, inactive draft
+insert и безопасные metadata edits остаются доступны. Не отключайте guard
+triggers во время инцидента.
+
+Новые manifest используют gated server-proxy URL `/api/assets`. Уже выданные
+старыми версиями сервера immutable storage/CDN URL отозвать этим switch
+невозможно; это ограничение legacy URL должно учитываться в incident response.
+
 Emergency redirect используется, когда опубликованный binary build запрашивает
 неправильный нативный Expo channel. JavaScript OTA не может изменить channel,
 записанный в Android Manifest или iOS Expo.plist, поэтому сервер точечно

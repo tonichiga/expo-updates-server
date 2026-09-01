@@ -52,9 +52,7 @@ function jsonb(value) {
 
 function isJsonbValue(value) {
   return Boolean(
-    value &&
-      typeof value === "object" &&
-      value[JSONB_VALUE] === true,
+    value && typeof value === "object" && value[JSONB_VALUE] === true,
   );
 }
 
@@ -79,6 +77,13 @@ if (DATABASE_PROVIDER !== "pg" && DATABASE_PROVIDER !== "supabase") {
 
 const shouldUseSsl =
   DATABASE_SSL === "true" || DATABASE_SSL === "1" || DATABASE_SSL === "require";
+
+function assertSqlIdentifier(value) {
+  if (!/^[a-z_][a-z0-9_]*$/i.test(value)) {
+    throw new Error(`Invalid SQL identifier: ${value}`);
+  }
+  return value;
+}
 
 let pool = null;
 let s3 = null;
@@ -484,9 +489,7 @@ class TableQuery {
     }
 
     const columns = entries.map(([key]) => key);
-    const values = entries.map(([, value]) =>
-      toPostgresWriteValue(value),
-    );
+    const values = entries.map(([, value]) => toPostgresWriteValue(value));
     const placeholders = values.map((_, idx) => `$${idx + 1}`);
 
     const conflictColumns = (this.upsertConflict || "")
@@ -743,10 +746,7 @@ class SupabaseTableQuery {
   }
 
   upsert(payload, options = {}) {
-    this.builder = this.builder.upsert(
-      unwrapJsonbPayload(payload),
-      options,
-    );
+    this.builder = this.builder.upsert(unwrapJsonbPayload(payload), options);
     return this;
   }
 
@@ -796,9 +796,7 @@ const supabase =
   DATABASE_PROVIDER === "supabase"
     ? {
         from(tableName) {
-          return new SupabaseTableQuery(
-            getSupabaseClient().from(tableName),
-          );
+          return new SupabaseTableQuery(getSupabaseClient().from(tableName));
         },
         storage: {
           from(bucket) {
@@ -807,6 +805,12 @@ const supabase =
               bucket || SUPABASE_BUCKET,
             );
           },
+        },
+        rpc(functionName, params = {}) {
+          return getSupabaseClient().rpc(
+            functionName,
+            unwrapJsonbPayload(params),
+          );
         },
       }
     : {
@@ -818,12 +822,29 @@ const supabase =
             return new BucketStorageQuery(bucket || SUPABASE_BUCKET);
           },
         },
+        async rpc(functionName, params = {}) {
+          try {
+            const safeFunctionName = assertSqlIdentifier(functionName);
+            const entries = Object.entries(params);
+            const placeholders = entries.map(
+              ([name], index) =>
+                `${assertSqlIdentifier(name)} => $${index + 1}`,
+            );
+            const sql = `SELECT * FROM public.${safeFunctionName}(${placeholders.join(", ")})`;
+            const values = entries.map(([, value]) =>
+              toPostgresWriteValue(value),
+            );
+            const result = await getPool().query(sql, values);
+            return { data: result.rows, error: null };
+          } catch (error) {
+            return {
+              data: null,
+              error: {
+                message: error instanceof Error ? error.message : String(error),
+              },
+            };
+          }
+        },
       };
 
-export {
-  supabase,
-  jsonb,
-  SUPABASE_BUCKET,
-  SIGNED_URL_TTL,
-  DATABASE_PROVIDER,
-};
+export { supabase, jsonb, SUPABASE_BUCKET, SIGNED_URL_TTL, DATABASE_PROVIDER };

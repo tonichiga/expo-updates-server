@@ -10,6 +10,19 @@ const database = vi.hoisted(() => ({
   servedManifests: [] as Row[],
   emergencyRedirects: [] as Row[],
 }));
+const distributionControl = vi.hoisted(() => ({
+  blocked: false,
+  error: null as Error | null,
+}));
+
+vi.mock("../lib/distribution-control", () => ({
+  isOtaDistributionBlocked: vi.fn(async () => {
+    if (distributionControl.error) {
+      throw distributionControl.error;
+    }
+    return distributionControl.blocked;
+  }),
+}));
 
 vi.mock("../lib/supabase.js", () => {
   class Query {
@@ -148,6 +161,56 @@ describe("GET /api/manifest", () => {
     database.embeddedUpdates = [];
     database.servedManifests = [];
     database.emergencyRedirects = [];
+    distributionControl.blocked = false;
+    distributionControl.error = null;
+  });
+
+  it("returns signed noUpdateAvailable before redirect or update selection when globally blocked", async () => {
+    distributionControl.blocked = true;
+    vi.stubEnv(
+      "CODE_SIGNING_PRIVATE_KEY_PATH",
+      `${process.cwd()}/src/server/cert/codeSigningPrivateKey.pem`,
+    );
+    database.emergencyRedirects.push({
+      id: "redirect-id",
+      enabled: true,
+      embedded_update_id: previousUpdateId,
+      runtime_version: "1.0.0",
+      platform: "android",
+      from_channel: "production",
+      to_channel: "recovery",
+      target_mode: "follow",
+    });
+    database.channels.push({
+      runtime_version: "1.0.0",
+      channel: "recovery",
+      platform: "android",
+      latest_update_id: selectedUpdateId,
+    });
+
+    const response = await requestManifest(
+      makeRequest({
+        "expo-embedded-update-id": previousUpdateId,
+        "expo-expect-signature": "sig, keyid=main",
+      }),
+    );
+    const body = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(body).toContain('{"type":"noUpdateAvailable"}');
+    expect(body).toContain('expo-signature: sig="');
+    expect(body).not.toContain(selectedUpdateId);
+  });
+
+  it("fails closed with noUpdateAvailable when global state cannot be read", async () => {
+    distributionControl.error = new Error("database unavailable");
+
+    const response = await requestManifest(makeRequest());
+
+    expect(response.status).toBe(200);
+    await expect(response.text()).resolves.toContain(
+      '{"type":"noUpdateAvailable"}',
+    );
   });
 
   it("rejects unsupported platforms", async () => {
@@ -172,6 +235,7 @@ describe("GET /api/manifest", () => {
   });
 
   it("returns the selected update as an Expo multipart manifest", async () => {
+    vi.stubEnv("OTA_CDN_BASE_URL", "https://storage-cdn.example.com");
     database.channels.push({
       latest_update_id: selectedUpdateId,
       active_update_id: null,
@@ -211,6 +275,7 @@ describe("GET /api/manifest", () => {
     expect(body).toContain(
       "https://updates.example.com/api/assets?runtimeVersion=1.0.0",
     );
+    expect(body).not.toContain("storage-cdn.example.com");
     expect(body).toContain('"key":"bundle-key"');
   });
 

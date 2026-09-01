@@ -34,6 +34,7 @@ import {
   resolveManifestId,
   resolveUpdateIdFromServedManifestId,
 } from "../manifest/manifest-repository";
+import { isOtaDistributionBlocked } from "../lib/distribution-control";
 
 type ManifestAsset = {
   hash?: string;
@@ -76,6 +77,19 @@ const manifestController = async (req: NextRequest) => {
   const rawEmbeddedUpdateId = req.headers.get("expo-embedded-update-id");
   const embeddedUpdateId = normalizeId(rawEmbeddedUpdateId);
   const requestedChannel = getRequestedChannel(req);
+
+  try {
+    if (await isOtaDistributionBlocked()) {
+      return createNoUpdateResponse(req, protocolVersion || 1);
+    }
+  } catch (error: unknown) {
+    console.error(
+      "Failed to read OTA distribution control; failing manifest closed:",
+      error,
+    );
+    return createNoUpdateResponse(req, protocolVersion || 1);
+  }
+
   const emergencyRedirect = await resolveEmergencyChannelRedirect({
     requestedChannel,
     runtimeVersion,
@@ -303,10 +317,7 @@ const manifestController = async (req: NextRequest) => {
     const timestampBlocksDowngrade =
       embeddedTimestampBlocks || currentInstalledTimestampBlocks;
 
-    if (
-      !rollbackMode &&
-      (versionBlocksDowngrade || timestampBlocksDowngrade)
-    ) {
+    if (!rollbackMode && (versionBlocksDowngrade || timestampBlocksDowngrade)) {
       const blockingBaseline = embeddedVersionBlocks
         ? "embedded"
         : currentInstalledVersionBlocks
@@ -479,7 +490,6 @@ const manifestController = async (req: NextRequest) => {
           channel: updateRef.channel,
           updateId: updateRef.updateId,
           assetPath: normalizedAssetPath,
-          storageBasePath: updateRow.storage_base_path,
         }),
       });
     }
@@ -526,7 +536,6 @@ const manifestController = async (req: NextRequest) => {
         channel: updateRef.channel,
         updateId: updateRef.updateId,
         assetPath: launchManifestAsset.path,
-        storageBasePath: updateRow.storage_base_path,
       }),
     };
 

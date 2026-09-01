@@ -88,6 +88,25 @@ export type AdminSessionResponse = {
   role: AdminRole;
 };
 
+export type DistributionControlPrincipal = {
+  type: "session" | "access-token" | "system";
+  id: string;
+  label: string;
+  role?: string;
+};
+
+export type DistributionControlState = {
+  blocked: boolean;
+  version: number;
+  reason: string | null;
+  changedAt: string;
+  changedBy: DistributionControlPrincipal;
+};
+
+export type DistributionControlResponse = DistributionControlState & {
+  canWrite: boolean;
+};
+
 export type EmergencyRedirectItem = {
   id: string;
   name: string;

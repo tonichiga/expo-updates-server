@@ -3,6 +3,7 @@ import { supabase, SUPABASE_BUCKET } from "../lib/supabase.js";
 import { toPosixPath } from "../lib/manifest-helpers.js";
 import { Buffer } from "buffer";
 import { NextRequest } from "next/server.js";
+import { isOtaDistributionBlocked } from "../lib/distribution-control";
 
 type OtaUpdateRow = {
   update_id: string;
@@ -55,6 +56,30 @@ async function getUpdateById(updateId: string): Promise<OtaUpdateRow | null> {
 const assetsController = async (req: NextRequest) => {
   if (req.method !== "GET") {
     return Response.json({ error: "Method not allowed." }, { status: 405 });
+  }
+
+  try {
+    if (await isOtaDistributionBlocked()) {
+      return Response.json(
+        { error: "OTA distribution is temporarily unavailable." },
+        {
+          status: 503,
+          headers: { "Cache-Control": "no-store" },
+        },
+      );
+    }
+  } catch (error: unknown) {
+    console.error(
+      "Failed to read OTA distribution control; failing asset request closed:",
+      error,
+    );
+    return Response.json(
+      { error: "OTA distribution is temporarily unavailable." },
+      {
+        status: 503,
+        headers: { "Cache-Control": "no-store" },
+      },
+    );
   }
 
   const searchParams = req.nextUrl.searchParams;
@@ -202,6 +227,7 @@ const assetsController = async (req: NextRequest) => {
       headers: {
         "Content-Type": contentType,
         "Content-Length": buffer.length.toString(),
+        "Cache-Control": "private, no-store",
       },
     });
   } catch (error: unknown) {
