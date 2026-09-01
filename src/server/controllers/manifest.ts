@@ -317,10 +317,7 @@ const manifestController = async (req: NextRequest) => {
     const timestampBlocksDowngrade =
       embeddedTimestampBlocks || currentInstalledTimestampBlocks;
 
-    if (
-      !rollbackMode &&
-      (versionBlocksDowngrade || timestampBlocksDowngrade)
-    ) {
+    if (!rollbackMode && (versionBlocksDowngrade || timestampBlocksDowngrade)) {
       const blockingBaseline = embeddedVersionBlocks
         ? "embedded"
         : currentInstalledVersionBlocks

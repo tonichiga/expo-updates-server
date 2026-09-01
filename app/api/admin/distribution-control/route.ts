@@ -1,5 +1,4 @@
 import {
-  principalHasScope,
   requireAdminAccess,
   type AdminPrincipal,
 } from "@/src/server/lib/admin-api";
@@ -35,6 +34,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+function canWrite(principal: AdminPrincipal): boolean {
+  return principal.type === "session"
+    ? principal.role !== "viewer"
+    : principal.scopes.includes("updates:write");
+}
+
 export async function GET(request: NextRequest) {
   const principal = await requireAdminAccess(request, "updates:read");
   if (principal instanceof NextResponse) {
@@ -44,7 +49,7 @@ export async function GET(request: NextRequest) {
   try {
     return NextResponse.json({
       ...(await getDistributionControlState()),
-      canWrite: principalHasScope(principal, "updates:write"),
+      canWrite: canWrite(principal),
     });
   } catch (error: unknown) {
     console.error("Failed to read OTA distribution control:", error);

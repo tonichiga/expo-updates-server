@@ -88,8 +88,8 @@ export default function UpdateDetailsPage() {
 
   const canPromote = Boolean(
     !distributionBlocked &&
-      channelState.isNewestInScope &&
-      channelState.rollbackActive,
+    channelState.isNewestInScope &&
+    channelState.rollbackActive,
   );
   const canRollback = Boolean(
     detail &&

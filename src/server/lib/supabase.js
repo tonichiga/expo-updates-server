@@ -52,9 +52,7 @@ function jsonb(value) {
 
 function isJsonbValue(value) {
   return Boolean(
-    value &&
-      typeof value === "object" &&
-      value[JSONB_VALUE] === true,
+    value && typeof value === "object" && value[JSONB_VALUE] === true,
   );
 }
 
@@ -491,9 +489,7 @@ class TableQuery {
     }
 
     const columns = entries.map(([key]) => key);
-    const values = entries.map(([, value]) =>
-      toPostgresWriteValue(value),
-    );
+    const values = entries.map(([, value]) => toPostgresWriteValue(value));
     const placeholders = values.map((_, idx) => `$${idx + 1}`);
 
     const conflictColumns = (this.upsertConflict || "")
@@ -750,10 +746,7 @@ class SupabaseTableQuery {
   }
 
   upsert(payload, options = {}) {
-    this.builder = this.builder.upsert(
-      unwrapJsonbPayload(payload),
-      options,
-    );
+    this.builder = this.builder.upsert(unwrapJsonbPayload(payload), options);
     return this;
   }
 
@@ -803,9 +796,7 @@ const supabase =
   DATABASE_PROVIDER === "supabase"
     ? {
         from(tableName) {
-          return new SupabaseTableQuery(
-            getSupabaseClient().from(tableName),
-          );
+          return new SupabaseTableQuery(getSupabaseClient().from(tableName));
         },
         storage: {
           from(bucket) {
@@ -849,18 +840,11 @@ const supabase =
             return {
               data: null,
               error: {
-                message:
-                  error instanceof Error ? error.message : String(error),
+                message: error instanceof Error ? error.message : String(error),
               },
             };
           }
         },
       };
 
-export {
-  supabase,
-  jsonb,
-  SUPABASE_BUCKET,
-  SIGNED_URL_TTL,
-  DATABASE_PROVIDER,
-};
+export { supabase, jsonb, SUPABASE_BUCKET, SIGNED_URL_TTL, DATABASE_PROVIDER };

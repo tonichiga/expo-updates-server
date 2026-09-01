@@ -40,8 +40,8 @@ const supabaseBuilder = vi.hoisted(() => {
 const supabaseRpcCalls = vi.hoisted(
   () =>
     [] as Array<{
-    functionName: string;
-    params: Record<string, unknown>;
+      functionName: string;
+      params: Record<string, unknown>;
     }>,
 );
 
@@ -134,11 +134,7 @@ describe("common database abstraction", () => {
       expect.stringContaining(
         "SET guard_payload = $1, scopes = $2 WHERE update_id = $3",
       ),
-      [
-        JSON.stringify(payload),
-        ["updates:read", "updates:write"],
-        "update-id",
-      ],
+      [JSON.stringify(payload), ["updates:read", "updates:write"], "update-id"],
     );
   });
 

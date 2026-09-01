@@ -2,13 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
 
 const requireAdminAccess = vi.hoisted(() => vi.fn());
-const principalHasScope = vi.hoisted(() => vi.fn());
 const getState = vi.hoisted(() => vi.fn());
 const setState = vi.hoisted(() => vi.fn());
 
 vi.mock("@/src/server/lib/admin-api", () => ({
   requireAdminAccess,
-  principalHasScope,
 }));
 
 vi.mock("@/src/server/lib/distribution-control", () => {
@@ -44,7 +42,6 @@ describe("/api/admin/distribution-control", () => {
       role: "operator",
     };
     requireAdminAccess.mockResolvedValue(principal);
-    principalHasScope.mockReturnValue(true);
     getState.mockResolvedValue(currentState);
     setState.mockResolvedValue({
       ...currentState,
@@ -55,7 +52,12 @@ describe("/api/admin/distribution-control", () => {
   });
 
   it("requires updates:read and reports viewer write capability", async () => {
-    principalHasScope.mockReturnValue(false);
+    requireAdminAccess.mockResolvedValueOnce({
+      type: "session",
+      id: "viewer-id",
+      username: "viewer",
+      role: "viewer",
+    });
     const { GET } = await import("./route");
     const request = new NextRequest(
       "https://updates.example.com/api/admin/distribution-control",
@@ -112,12 +114,9 @@ describe("/api/admin/distribution-control", () => {
     );
     expect(forbidden.status).toBe(403);
 
-    const { DistributionControlConflictError } = await import(
-      "@/src/server/lib/distribution-control"
-    );
-    setState.mockRejectedValueOnce(
-      new DistributionControlConflictError(),
-    );
+    const { DistributionControlConflictError } =
+      await import("@/src/server/lib/distribution-control");
+    setState.mockRejectedValueOnce(new DistributionControlConflictError());
     const conflict = await PUT(
       new NextRequest(
         "https://updates.example.com/api/admin/distribution-control",
