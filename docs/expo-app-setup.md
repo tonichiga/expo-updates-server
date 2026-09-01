@@ -372,6 +372,7 @@ native binary registers its embedded update:
 
 ```text
 embedded_update_id
+app_version
 created_at
 channel
 platform
@@ -382,6 +383,12 @@ Register the value after each iOS and Android release build in
 `ota_embedded_updates`. The embedded ID and creation time must come from the
 generated Expo embedded manifest, not from a random value created before the
 build.
+
+For `app_version`, the registrar keeps a version found in the embedded
+manifest as the highest-priority value. Expo SDKs that omit it there fall back
+to the trimmed string `expo.version` from the project's static `app.json`.
+Missing, blank, malformed or unreadable fallback configuration leaves
+`app_version` null without blocking an otherwise valid registration.
 
 The MIEX application contains a reference implementation:
 
@@ -457,9 +464,13 @@ Create a dedicated access token with `npm run create-access-token` (or
 
 The app configurator installs:
 
-- Android APK/AAB build commands that register `app.manifest` after Gradle;
-- an iOS Xcode Build Phase for local Release/Archive builds;
-- `ci_scripts/ci_post_xcodebuild.sh` for Xcode Cloud.
+- Android APK/AAB build commands that invoke
+  `scripts/ota-register-embedded/register-android.sh` after Gradle;
+- an iOS Xcode Build Phase that invokes
+  `scripts/ota-register-embedded/register-ios.sh` for local Release/Archive
+  builds;
+- `ci_scripts/ci_post_xcodebuild.sh`, a thin Xcode Cloud adapter that invokes
+  the same `register-ios.sh`.
 
 Registered binaries are visible at `/updates/embedded`.
 

@@ -1,6 +1,7 @@
 export type UpdateItem = {
   key: string;
   encodedKey: string;
+  appVersion: string | null;
   comment: string | null;
   runtimeVersion: string;
   platform: "ios" | "android";
@@ -48,6 +49,7 @@ export type UpdateDetail = UpdateItem & {
 
 export type EmbeddedUpdateItem = {
   embeddedUpdateId: string;
+  appVersion: string | null;
   createdAt: string;
   channel: string;
   platform: "ios" | "android";

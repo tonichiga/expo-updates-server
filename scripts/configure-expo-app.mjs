@@ -124,6 +124,12 @@ try {
         : "fill .env.ota.example manually"
     }`,
   );
+  if (result.migrationWarnings.length > 0) {
+    console.warn("\nMigration warnings:");
+    for (const warning of result.migrationWarnings) {
+      console.warn(`- ${warning}`);
+    }
+  }
   console.log("\nNext:");
   if (!result.publisherEnvConfigured) {
     console.log(

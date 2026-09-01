@@ -474,9 +474,15 @@ npm run ota:build:android:apk
 npm run ota:build:android:aab
 ```
 
-После успешной Gradle-сборки script найдёт `app.manifest` и зарегистрирует
-embedded update. Для iOS CLI добавляет Xcode Build Phase, поэтому достаточно
-собрать Release/Archive в Xcode.
+После успешной Gradle-сборки
+`scripts/ota-register-embedded/register-android.sh` найдёт `app.manifest` и
+зарегистрирует embedded update. Для iOS CLI добавляет Xcode Build Phase,
+который вызывает `scripts/ota-register-embedded/register-ios.sh`, поэтому
+достаточно собрать Release/Archive в Xcode.
+Версия приложения сначала берётся из embedded manifest, а при её отсутствии —
+из нормализованного `expo.version` в статическом `app.json` проекта. Если
+fallback отсутствует или некорректен, `app_version` остаётся `null`, но
+корректная в остальном регистрация не прерывается.
 
 Для удалённого CI или Xcode Cloud не передавайте пароль PostgreSQL. Создайте
 отдельный access token:
@@ -493,9 +499,10 @@ OTA_SERVER_URL=https://updates.example.com
 OTA_ACCESS_TOKEN=ota_...
 ```
 
-CLI также создаёт `ci_scripts/ci_post_xcodebuild.sh`. Xcode Cloud автоматически
-запустит его после сборки. Token показывается только один раз и не должен
-попадать в Git или в mobile binary.
+CLI также создаёт `ci_scripts/ci_post_xcodebuild.sh` — тонкий lifecycle-адаптер
+Xcode Cloud, который вызывает тот же `register-ios.sh`. Xcode Cloud
+автоматически запустит его после сборки. Token показывается только один раз и
+не должен попадать в Git или в mobile binary.
 
 Зарегистрированные binary можно проверить в админ-панели на странице
 `/updates/embedded`.
