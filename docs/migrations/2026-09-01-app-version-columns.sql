@@ -1,6 +1,3 @@
-alter table public.ota_updates
-  add column if not exists app_version text null;
-
 alter table public.ota_embedded_updates
   add column if not exists app_version text null;
 

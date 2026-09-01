@@ -8,13 +8,6 @@ export function requiredEnv(name) {
   return value;
 }
 
-export function getExpoAppVersion(appJson) {
-  const version = appJson?.expo?.version;
-  return typeof version === "string" && version.trim()
-    ? version.trim()
-    : null;
-}
-
 export function loadPublishConfig() {
   const appJson = JSON.parse(fs.readFileSync("app.json", "utf8"));
   const configuredChannel =
@@ -48,7 +41,6 @@ export function loadPublishConfig() {
 
   return {
     appJson,
-    appVersion: getExpoAppVersion(appJson),
     channel,
     runtimeVersion: runtimeVersion.trim(),
     bucket: requiredEnv("R2_BUCKET"),

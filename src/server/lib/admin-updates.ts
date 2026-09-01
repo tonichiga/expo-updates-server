@@ -93,7 +93,6 @@ export type OtaUpdateRow = {
   id: string;
   update_id: string;
   build_id: string;
-  app_version?: string | null;
   comment: string | null;
   runtime_version: string;
   channel: string;
@@ -230,6 +229,24 @@ function mapUpdateMeta(row: OtaUpdateRow): UpdateMetaState {
   };
 }
 
+function getManifestAppVersion(
+  manifest: Record<string, unknown>,
+): string | null {
+  const expoClient = manifest.expoClient;
+  if (
+    !expoClient ||
+    typeof expoClient !== "object" ||
+    Array.isArray(expoClient)
+  ) {
+    return null;
+  }
+
+  const version = (expoClient as Record<string, unknown>).version;
+  return typeof version === "string" && version.trim()
+    ? version.trim()
+    : null;
+}
+
 function channelLatestToJson(
   channel: OtaChannelRow | null,
   newestUpdateId?: string | null,
@@ -294,7 +311,7 @@ export function mapRowToRecord(
   return {
     key,
     encodedKey: encodeUpdateKey(row.update_id),
-    appVersion: row.app_version || null,
+    appVersion: getManifestAppVersion(row.manifest),
     comment: row.comment,
     runtimeVersion: row.runtime_version,
     platform: row.platform,

@@ -47,7 +47,6 @@ function parseArgs(argv) {
 
 async function publishPlatform({
   appJson,
-  appVersion,
   bucket,
   channel,
   message,
@@ -95,7 +94,6 @@ async function publishPlatform({
   const basePath = `${runtimeVersion}/${platform}/${createdAtPath}/${channel}/${updateId}`;
   const update = {
     id: updateId,
-    appVersion,
     runtimeVersion,
     channel,
     comment: message,

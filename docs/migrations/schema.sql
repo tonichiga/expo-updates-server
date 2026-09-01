@@ -4,7 +4,6 @@ create table if not exists public.ota_updates (
   id uuid primary key default gen_random_uuid(),
   update_id uuid not null unique,
   build_id uuid not null,
-  app_version text null,
   runtime_version text not null,
   channel text not null,
   platform text not null check (platform in ('ios', 'android')),
