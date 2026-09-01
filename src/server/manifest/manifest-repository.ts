@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabase.js";
+import { UpdateDeliveryMode } from "../lib/update-policy";
 
 export type OtaUpdateRow = {
   update_id: string;
@@ -10,6 +11,10 @@ export type OtaUpdateRow = {
   created_at_path: string;
   storage_base_path: string;
   is_active: boolean;
+  delivery_mode: UpdateDeliveryMode;
+  guard_rules: unknown;
+  policy_version: number;
+  policy_published_at: string | Date | null;
   manifest: Record<string, unknown>;
 };
 

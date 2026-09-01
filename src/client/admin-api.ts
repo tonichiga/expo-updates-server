@@ -5,6 +5,7 @@ import {
   EmergencyRedirectItem,
   EmergencyRedirectsListResponse,
   UpdateDetail,
+  UpdatePolicy,
   UpdatesListResponse,
 } from "./admin-types";
 
@@ -63,6 +64,26 @@ export async function getUpdate(encodedKey: string) {
   });
 
   return parseJson<UpdateDetail>(response);
+}
+
+export async function getUpdatePolicy(encodedKey: string) {
+  const response = await fetch(`/api/admin/updates/${encodedKey}/policy`, {
+    cache: "no-store",
+  });
+  return parseJson<UpdatePolicy>(response);
+}
+
+export async function putUpdatePolicy(
+  encodedKey: string,
+  policy: Pick<UpdatePolicy, "delivery" | "rules">,
+  expectedPolicyVersion: number,
+) {
+  const response = await fetch(`/api/admin/updates/${encodedKey}/policy`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...policy, expectedPolicyVersion }),
+  });
+  return parseJson<UpdatePolicy>(response);
 }
 
 export async function deleteUpdate(encodedKey: string) {

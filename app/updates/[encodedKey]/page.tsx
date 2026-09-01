@@ -10,6 +10,7 @@ import {
 } from "@/src/client/admin-api";
 import { UpdateDetail } from "@/src/client/admin-types";
 import LogoutButton from "@/src/client/logout-button";
+import UpdatePolicyEditor from "@/src/client/update-policy-editor";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -347,7 +348,18 @@ export default function UpdateDetailsPage() {
               />
               <Info
                 label="Доставка"
-                value={detail.isIgnoredByRollback ? "Ignored" : "Auto"}
+                value={
+                  detail.isIgnoredByRollback
+                    ? "Ignored by rollback"
+                    : detail.deliveryMode === "background"
+                      ? "Background"
+                      : "Manual"
+                }
+              />
+              <Info label="Guards" value={String(detail.guardCount)} />
+              <Info
+                label="Policy"
+                value={`v${detail.policyVersion} · ${detail.policyEditable ? "draft" : "published"}`}
               />
               <Info label="Assets" value={String(detail.assetsCount)} />
               <Info
@@ -366,6 +378,12 @@ export default function UpdateDetailsPage() {
                 className="md:col-span-2 lg:col-span-2"
               />
             </section>
+
+            <UpdatePolicyEditor
+              key={`${encodedKey}-${detail.policyVersion}-${detail.policyPublishedAt || "draft"}`}
+              encodedKey={encodedKey}
+              onSaved={reload}
+            />
 
             <section className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
               <div className="flex flex-wrap gap-2">

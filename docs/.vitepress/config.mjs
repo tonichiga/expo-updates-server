@@ -51,6 +51,7 @@ export default defineConfig({
         items: [
           { text: "Supabase Setup", link: "/supabase-setup" },
           { text: "Expo Application Setup", link: "/expo-app-setup" },
+          { text: "OTA Update Policy", link: "/ota-update-policy" },
         ],
       },
       {
