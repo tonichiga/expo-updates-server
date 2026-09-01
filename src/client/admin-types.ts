@@ -16,6 +16,49 @@ export type UpdateItem = {
   autoDeliveryEnabled: boolean;
   isIgnoredByRollback: boolean;
   assetsCount: number;
+  deliveryMode: UpdateDeliveryMode;
+  guardCount: number;
+  policyVersion: number;
+  policyPublishedAt: string | null;
+  policyEditable: boolean;
+};
+
+export type UpdateDeliveryMode = "manual" | "background";
+export type UpdatePolicyField =
+  | "runtimeVersion"
+  | "platform"
+  | "channel"
+  | "buildId"
+  | "updateId"
+  | "appVersion"
+  | "currentUpdateId"
+  | "embeddedUpdateId";
+export type UpdatePolicyOperator =
+  | "equals"
+  | "notEquals"
+  | "in"
+  | "notIn"
+  | "exists"
+  | "notExists";
+export type UpdatePolicyCondition = {
+  field: UpdatePolicyField;
+  operator: UpdatePolicyOperator;
+  value?: string | string[];
+};
+export type UpdatePolicyRule = {
+  id: string;
+  enabled: boolean;
+  priority: number;
+  action: string;
+  payload?: unknown;
+  groups: Array<{ conditions: UpdatePolicyCondition[] }>;
+};
+export type UpdatePolicy = {
+  delivery: UpdateDeliveryMode;
+  rules: UpdatePolicyRule[];
+  policyVersion: number;
+  publishedAt: string | null;
+  editable: boolean;
 };
 
 export type UpdatesListResponse = {
@@ -36,7 +79,7 @@ export type UpdatesListResponse = {
   }>;
 };
 
-export type UpdateDetail = UpdateItem & {
+export interface UpdateDetail extends UpdateItem {
   updateInfo: Record<string, unknown>;
   updateMeta: {
     isActive: boolean;
@@ -45,7 +88,7 @@ export type UpdateDetail = UpdateItem & {
   };
   metadata: Record<string, unknown> | null;
   channelLatest: Record<string, unknown> | null;
-};
+}
 
 export type EmbeddedUpdateItem = {
   embeddedUpdateId: string;

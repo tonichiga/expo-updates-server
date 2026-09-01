@@ -18,12 +18,23 @@ create table if not exists public.ota_updates (
   launch_asset_path text null,
   comment text null,
   rolled_back_from_update_id uuid null,
+  delivery_mode text not null default 'manual',
+  guard_rules jsonb not null default '[]'::jsonb,
+  policy_version integer not null default 1,
+  policy_published_at timestamptz null,
   manifest jsonb not null,
   inserted_at timestamptz not null default now(),
   modified_at timestamptz not null default now(),
   constraint ota_updates_active_dates_chk check (
     not is_active or disabled_at is null
-  )
+  ),
+  constraint ota_updates_delivery_mode_chk check (
+    delivery_mode in ('manual', 'background')
+  ),
+  constraint ota_updates_guard_rules_array_chk check (
+    jsonb_typeof(guard_rules) = 'array'
+  ),
+  constraint ota_updates_policy_version_chk check (policy_version > 0)
 );
 
 create index if not exists idx_ota_updates_lookup
@@ -62,6 +73,49 @@ drop trigger if exists trg_ota_updates_modified_at on public.ota_updates;
 create trigger trg_ota_updates_modified_at
 before update on public.ota_updates
 for each row execute function public.set_modified_at();
+
+create or replace function public.ota_updates_lock_published_policy()
+returns trigger
+language plpgsql
+as $$
+begin
+  if tg_op = 'INSERT' then
+    if new.is_active and new.policy_published_at is null then
+      new.policy_published_at := coalesce(
+        new.updated_at,
+        new.created_at,
+        now()
+      );
+    end if;
+    return new;
+  end if;
+
+  if new.is_active and not old.is_active
+     and new.policy_published_at is null then
+    new.policy_published_at := coalesce(
+      new.updated_at,
+      new.created_at,
+      now()
+    );
+  end if;
+
+  if old.policy_published_at is not null and (
+    new.delivery_mode is distinct from old.delivery_mode
+    or new.guard_rules is distinct from old.guard_rules
+    or new.policy_version is distinct from old.policy_version
+    or new.policy_published_at is distinct from old.policy_published_at
+  ) then
+    raise exception 'OTA update policy is immutable after publication';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_ota_updates_lock_published_policy
+  on public.ota_updates;
+create trigger trg_ota_updates_lock_published_policy
+before insert or update on public.ota_updates
+for each row execute function public.ota_updates_lock_published_policy();
 
 drop trigger if exists trg_ota_update_channels_modified_at on public.ota_update_channels;
 create trigger trg_ota_update_channels_modified_at

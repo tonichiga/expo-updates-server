@@ -2,6 +2,7 @@ import NodeFormData from "form-data";
 import { toPosixPath } from "../lib/manifest-helpers.js";
 import { createSignatureHeaderIfRequested } from "../lib/signing.js";
 import { buildRequestContext } from "../lib/common.js";
+import { createManifestUpdatePolicy } from "../lib/update-policy";
 import { NextRequest } from "next/server.js";
 import { resolveEmergencyChannelRedirect } from "../lib/emergency-channel-redirects";
 import { getRequestedChannel } from "../manifest/manifest-request";
@@ -54,6 +55,13 @@ type ManifestPayload = {
   expoClient?: Record<string, unknown>;
 };
 
+function getManifestAppVersion(manifest: ManifestPayload): string | null {
+  const expoClient = manifest.extra?.expoClient || manifest.expoClient;
+  const version = expoClient?.version;
+  return typeof version === "string" && version.trim()
+    ? version.trim()
+    : null;
+}
 
 const manifestController = async (req: NextRequest) => {
   if (req.method !== "GET") {
@@ -514,6 +522,25 @@ const manifestController = async (req: NextRequest) => {
         expoClient: createExpoClientConfig(
           updateInfo.extra?.expoClient || updateInfo.expoClient,
         ),
+        updatePolicy: createManifestUpdatePolicy({
+          delivery: updateRow.delivery_mode,
+          rules: updateRow.guard_rules,
+          policyVersion: updateRow.policy_version,
+          context: {
+            runtimeVersion: updateRow.runtime_version,
+            platform: updateRow.platform,
+            channel,
+            buildId: updateRow.build_id,
+            updateId: updateRow.update_id,
+            appVersion: getManifestAppVersion(updateInfo),
+            currentUpdateId,
+            embeddedUpdateId,
+          },
+          onCorrupt: (policyError) =>
+            console.error(
+              `[${new Date().toLocaleTimeString()}] ⚠️ Corrupt OTA update policy; serving manual policy updateId=${updateRow.update_id}: ${policyError.message}`,
+            ),
+        }),
       },
     };
 

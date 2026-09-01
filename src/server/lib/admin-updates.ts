@@ -1,5 +1,11 @@
-import { supabase, SUPABASE_BUCKET } from "./supabase.js";
+import { jsonb, supabase, SUPABASE_BUCKET } from "./supabase.js";
 import { toPosixPath } from "./manifest-helpers.js";
+import {
+  UpdateDeliveryMode,
+  UpdatePolicyInput,
+  UpdatePolicyValidationError,
+  validateUpdatePolicy,
+} from "./update-policy";
 
 let hasServedManifestLogTable: boolean | null = null;
 
@@ -107,6 +113,10 @@ export type OtaUpdateRow = {
   assets_count: number;
   launch_asset_path: string | null;
   rolled_back_from_update_id: string | null;
+  delivery_mode: UpdateDeliveryMode;
+  guard_rules: unknown;
+  policy_version: number;
+  policy_published_at: string | null;
   manifest: Record<string, unknown>;
   inserted_at: string;
   modified_at: string;
@@ -152,6 +162,11 @@ export type UpdateRecord = {
   isIgnoredByRollback: boolean;
   launchAssetPath: string | null;
   assetsCount: number;
+  deliveryMode: UpdateDeliveryMode;
+  guardCount: number;
+  policyVersion: number;
+  policyPublishedAt: string | null;
+  policyEditable: boolean;
 };
 
 export type UpdateDetail = UpdateRecord & {
@@ -232,7 +247,13 @@ function mapUpdateMeta(row: OtaUpdateRow): UpdateMetaState {
 function getManifestAppVersion(
   manifest: Record<string, unknown>,
 ): string | null {
-  const expoClient = manifest.expoClient;
+  const extra =
+    manifest.extra &&
+    typeof manifest.extra === "object" &&
+    !Array.isArray(manifest.extra)
+      ? (manifest.extra as Record<string, unknown>)
+      : null;
+  const expoClient = extra?.expoClient || manifest.expoClient;
   if (
     !expoClient ||
     typeof expoClient !== "object" ||
@@ -332,7 +353,124 @@ export function mapRowToRecord(
     isIgnoredByRollback,
     launchAssetPath: row.launch_asset_path,
     assetsCount: row.assets_count,
+    deliveryMode:
+      row.delivery_mode === "background" ? "background" : "manual",
+    guardCount: Array.isArray(row.guard_rules)
+      ? row.guard_rules.filter(
+          (rule) =>
+            rule &&
+            typeof rule === "object" &&
+            (rule as { enabled?: unknown }).enabled === true,
+        ).length
+      : 0,
+    policyVersion:
+      Number.isInteger(row.policy_version) && row.policy_version > 0
+        ? row.policy_version
+        : 1,
+    policyPublishedAt: row.policy_published_at || null,
+    policyEditable: !row.policy_published_at,
   };
+}
+
+export type UpdatePolicyRecord = UpdatePolicyInput & {
+  policyVersion: number;
+  publishedAt: string | null;
+  editable: boolean;
+};
+
+export class UpdatePolicyConflictError extends Error {}
+export class UpdatePolicyPublishedError extends Error {}
+
+export function assertExpectedPolicyVersion(
+  expectedPolicyVersion: unknown,
+  currentPolicyVersion?: number,
+): asserts expectedPolicyVersion is number {
+  if (
+    !Number.isInteger(expectedPolicyVersion) ||
+    (expectedPolicyVersion as number) < 1
+  ) {
+    throw new UpdatePolicyValidationError(
+      "expectedPolicyVersion must be a positive integer.",
+    );
+  }
+  if (
+    currentPolicyVersion !== undefined &&
+    expectedPolicyVersion !== currentPolicyVersion
+  ) {
+    throw new UpdatePolicyConflictError(
+      `Policy version conflict. Current version is ${currentPolicyVersion}.`,
+    );
+  }
+}
+
+function rowToPolicy(row: OtaUpdateRow): UpdatePolicyRecord {
+  const validated = validateUpdatePolicy({
+    delivery: row.delivery_mode,
+    rules: row.guard_rules,
+  });
+  return {
+    ...validated,
+    policyVersion: row.policy_version,
+    publishedAt: row.policy_published_at,
+    editable: !row.policy_published_at,
+  };
+}
+
+export async function getUpdatePolicyByKey(
+  key: string,
+): Promise<UpdatePolicyRecord> {
+  return rowToPolicy(await getUpdateRowById(extractUpdateIdFromKey(key)));
+}
+
+export async function replaceUpdatePolicyByKey(
+  key: string,
+  input: unknown,
+  expectedPolicyVersion: unknown,
+): Promise<UpdatePolicyRecord> {
+  assertExpectedPolicyVersion(expectedPolicyVersion);
+  const updateId = extractUpdateIdFromKey(key);
+  const row = await getUpdateRowById(updateId);
+  if (row.policy_published_at) {
+    throw new UpdatePolicyPublishedError(
+      "Update policy is immutable after publication.",
+    );
+  }
+  assertExpectedPolicyVersion(expectedPolicyVersion, row.policy_version);
+
+  const policy = validateUpdatePolicy(input);
+  const { data, error } = await supabase
+    .from("ota_updates")
+    .update({
+      delivery_mode: policy.delivery,
+      guard_rules: jsonb(policy.rules),
+      policy_version: row.policy_version + 1,
+    })
+    .eq("update_id", updateId)
+    .eq("policy_version", row.policy_version)
+    .is("policy_published_at", null)
+    .select("*")
+    .maybeSingle();
+
+  if (error) {
+    if (error.message?.toLowerCase().includes("immutable")) {
+      throw new UpdatePolicyPublishedError(
+        "Update policy is immutable after publication.",
+      );
+    }
+    throw new Error(`Failed to update policy: ${error.message}`);
+  }
+  if (!data) {
+    const current = await getUpdateRowById(updateId);
+    if (current.policy_published_at) {
+      throw new UpdatePolicyPublishedError(
+        "Update policy is immutable after publication.",
+      );
+    }
+    throw new UpdatePolicyConflictError(
+      `Policy version conflict. Current version is ${current.policy_version}.`,
+    );
+  }
+  return rowToPolicy(data as OtaUpdateRow);
 }
 
 function compareValues(a: string | number, b: string | number): number {
@@ -897,7 +1035,12 @@ export async function updateJsonFileByKey(
 
     const { error } = await supabase
       .from("ota_updates")
-      .update(parsedMeta)
+      .update({
+        ...parsedMeta,
+        ...(parsedMeta.is_active && !row.policy_published_at
+          ? { policy_published_at: parsedMeta.updated_at }
+          : {}),
+      })
       .eq("update_id", updateId)
       .execute();
 
@@ -1028,6 +1171,7 @@ export async function rollbackToUpdateByKey(
       is_active: true,
       updated_at: now,
       disabled_at: null,
+      policy_published_at: row.policy_published_at || now,
     })
     .eq("update_id", updateId)
     .execute();
@@ -1139,6 +1283,7 @@ export async function promoteLatestByKey(key: string) {
       is_active: true,
       updated_at: promoteNow,
       disabled_at: null,
+      policy_published_at: row.policy_published_at || promoteNow,
     })
     .eq("update_id", latestUpdateId)
     .execute();
@@ -1232,6 +1377,9 @@ export async function setUpdateDisabledByKey(key: string, disabled: boolean) {
       is_active: !disabled,
       updated_at: now,
       disabled_at: disabled ? now : null,
+      ...(!disabled && !row.policy_published_at
+        ? { policy_published_at: now }
+        : {}),
     })
     .eq("update_id", updateId)
     .execute();

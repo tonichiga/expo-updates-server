@@ -41,6 +41,36 @@ const SIGNED_URL_TTL = parseInt(
   10,
 );
 
+const JSONB_VALUE = Symbol("jsonb-value");
+
+function jsonb(value) {
+  return {
+    [JSONB_VALUE]: true,
+    value,
+  };
+}
+
+function isJsonbValue(value) {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      value[JSONB_VALUE] === true,
+  );
+}
+
+function toPostgresWriteValue(value) {
+  return isJsonbValue(value) ? JSON.stringify(value.value) : value;
+}
+
+function unwrapJsonbPayload(payload) {
+  return Object.fromEntries(
+    Object.entries(payload || {}).map(([key, value]) => [
+      key,
+      isJsonbValue(value) ? value.value : value,
+    ]),
+  );
+}
+
 if (DATABASE_PROVIDER !== "pg" && DATABASE_PROVIDER !== "supabase") {
   throw new Error(
     `Unsupported DATABASE_PROVIDER value: ${DATABASE_PROVIDER}. Expected \"pg\" or \"supabase\".`,
@@ -182,6 +212,11 @@ class TableQuery {
     return this;
   }
 
+  is(column, value) {
+    this.filters.push({ type: "is", column, value });
+    return this;
+  }
+
   neq(column, value) {
     this.filters.push({ type: "neq", column, value });
     return this;
@@ -262,6 +297,21 @@ class TableQuery {
           conditions.push(`${filter.column} <> $${index}`);
           params.push(filter.value);
           index += 1;
+        }
+        continue;
+      }
+
+      if (filter.type === "is") {
+        if (isNullLike(filter.value)) {
+          conditions.push(`${filter.column} IS NULL`);
+        } else if (filter.value === true) {
+          conditions.push(`${filter.column} IS TRUE`);
+        } else if (filter.value === false) {
+          conditions.push(`${filter.column} IS FALSE`);
+        } else {
+          throw new Error(
+            `Unsupported filter value: is ${String(filter.value)}`,
+          );
         }
         continue;
       }
@@ -391,7 +441,7 @@ class TableQuery {
 
     for (const [key, value] of entries) {
       setParts.push(`${key} = $${index}`);
-      params.push(value);
+      params.push(toPostgresWriteValue(value));
       index += 1;
     }
 
@@ -434,7 +484,9 @@ class TableQuery {
     }
 
     const columns = entries.map(([key]) => key);
-    const values = entries.map(([, value]) => value);
+    const values = entries.map(([, value]) =>
+      toPostgresWriteValue(value),
+    );
     const placeholders = values.map((_, idx) => `$${idx + 1}`);
 
     const conflictColumns = (this.upsertConflict || "")
@@ -655,6 +707,11 @@ class SupabaseTableQuery {
     return this;
   }
 
+  is(column, value) {
+    this.builder = this.builder.is(column, value);
+    return this;
+  }
+
   neq(column, value) {
     this.builder = this.builder.neq(column, value);
     return this;
@@ -676,7 +733,7 @@ class SupabaseTableQuery {
   }
 
   update(payload) {
-    this.builder = this.builder.update(payload || {});
+    this.builder = this.builder.update(unwrapJsonbPayload(payload));
     return this;
   }
 
@@ -686,7 +743,10 @@ class SupabaseTableQuery {
   }
 
   upsert(payload, options = {}) {
-    this.builder = this.builder.upsert(payload || {}, options);
+    this.builder = this.builder.upsert(
+      unwrapJsonbPayload(payload),
+      options,
+    );
     return this;
   }
 
@@ -760,4 +820,10 @@ const supabase =
         },
       };
 
-export { supabase, SUPABASE_BUCKET, SIGNED_URL_TTL, DATABASE_PROVIDER };
+export {
+  supabase,
+  jsonb,
+  SUPABASE_BUCKET,
+  SIGNED_URL_TTL,
+  DATABASE_PROVIDER,
+};

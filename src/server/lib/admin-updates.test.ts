@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  assertExpectedPolicyVersion,
   mapRowToRecord,
   OtaUpdateRow,
+  UpdatePolicyConflictError,
 } from "./admin-updates";
+import { UpdatePolicyValidationError } from "./update-policy";
 
 function makeRow(manifest: Record<string, unknown> = {}): OtaUpdateRow {
   return {
@@ -23,6 +26,10 @@ function makeRow(manifest: Record<string, unknown> = {}): OtaUpdateRow {
     assets_count: 2,
     launch_asset_path: "bundle.js",
     rolled_back_from_update_id: null,
+    delivery_mode: "manual",
+    guard_rules: [],
+    policy_version: 1,
+    policy_published_at: "2026-01-01T00:00:00.000Z",
     manifest,
     inserted_at: "2026-01-01T00:00:00.000Z",
     modified_at: "2026-01-01T00:00:00.000Z",
@@ -30,6 +37,18 @@ function makeRow(manifest: Record<string, unknown> = {}): OtaUpdateRow {
 }
 
 describe("OTA admin update mapping", () => {
+  it("requires expectedPolicyVersion at the service boundary", () => {
+    expect(() => assertExpectedPolicyVersion(undefined)).toThrow(
+      UpdatePolicyValidationError,
+    );
+  });
+
+  it("rejects a stale expectedPolicyVersion at the service boundary", () => {
+    expect(() => assertExpectedPolicyVersion(2, 3)).toThrow(
+      UpdatePolicyConflictError,
+    );
+  });
+
   it("maps expoClient.version from the stored manifest", () => {
     const item = mapRowToRecord(
       makeRow({ expoClient: { version: "2.4.1" } }),
@@ -43,6 +62,18 @@ describe("OTA admin update mapping", () => {
   it("normalizes a non-empty manifest app version", () => {
     const item = mapRowToRecord(
       makeRow({ expoClient: { version: " 2.4.1 " } }),
+      null,
+    );
+
+    expect(item.appVersion).toBe("2.4.1");
+  });
+
+  it("prefers extra.expoClient.version from uploaded manifests", () => {
+    const item = mapRowToRecord(
+      makeRow({
+        expoClient: { version: "1.0.0" },
+        extra: { expoClient: { version: "2.4.1" } },
+      }),
       null,
     );
 

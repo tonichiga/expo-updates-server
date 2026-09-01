@@ -220,6 +220,23 @@ export default function UpdatesPage() {
                         <td className="px-4 py-4">{item.stage}</td>
                         <td className="px-4 py-4">{item.status}</td>
                         <td className="px-4 py-4">
+                          <div className="flex flex-wrap gap-1">
+                            <span
+                              className={`rounded border px-2 py-0.5 text-xs ${
+                                item.deliveryMode === "background"
+                                  ? "border-blue-300 text-blue-700 dark:border-blue-700 dark:text-blue-300"
+                                  : "border-zinc-300 text-zinc-700 dark:border-zinc-600 dark:text-zinc-300"
+                              }`}
+                            >
+                              {item.deliveryMode === "background"
+                                ? "Background"
+                                : "Manual"}
+                            </span>
+                            {item.guardCount > 0 ? (
+                              <span className="rounded border border-violet-300 px-2 py-0.5 text-xs text-violet-700 dark:border-violet-700 dark:text-violet-300">
+                                Guard:{item.guardCount}
+                              </span>
+                            ) : null}
                           {item.isRollbackActive ? (
                             <span className="rounded border border-amber-300 px-2 py-0.5 text-xs text-amber-800 dark:border-amber-700 dark:text-amber-300">
                               rollback
@@ -230,9 +247,10 @@ export default function UpdatesPage() {
                             </span>
                           ) : (
                             <span className="rounded border border-emerald-300 px-2 py-0.5 text-xs text-emerald-700 dark:border-emerald-700 dark:text-emerald-300">
-                              auto
+                              scope open
                             </span>
                           )}
+                          </div>
                         </td>
                         <td className="px-4 py-4">
                           {item.isLatest ? "Да" : "Нет"}
