@@ -27,5 +27,25 @@ action.
   and apply it on the next cold start.
 - Legacy clients safely ignore the additional `extra` value.
 
-Policy becomes immutable when an update is activated, promoted, or used as a
-rollback target. Publish a new update ID when policy needs to change.
+An inactive upload is a draft, even though its initial `disabled_at` value is
+equal to `created_at`. Its delivery mode and guard rules remain editable until
+activation. `disabled_at` by itself is not evidence that an update was
+published.
+
+`ota_update_channels.latest_update_id` identifies the newest upload and may
+therefore point to an inactive draft. That pointer is not publication evidence;
+manifest selection falls back to the latest active update. An
+`active_update_id` rollback pointer or an `ota_served_manifest_log` row is
+publication evidence.
+
+Activation is the publication event. Once activated, promoted, used as a
+rollback target, or demonstrably served, a policy remains immutable even if the
+update is later disabled. Publish a new update ID when policy needs to change.
+
+Databases that already ran the original policy migration should also run
+`docs/migrations/2026-09-01-correct-draft-policy-publication.sql`.
+Operators that use `docs/migrations/schema.sql` as their upgrade path receive
+the same correction after the served-manifest log table is available.
+The corrective migration is idempotent and only unlocks conservative,
+never-published draft signatures without served-manifest evidence or an active
+rollback pointer. A `latest_update_id` reference does not prevent correction.

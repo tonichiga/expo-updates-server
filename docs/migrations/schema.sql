@@ -44,6 +44,11 @@ create unique index if not exists idx_ota_updates_one_active_per_scope
   on public.ota_updates (runtime_version, channel, platform)
   where is_active;
 
+comment on column public.ota_updates.disabled_at is
+  'Inactive-state timestamp; disabled_at = created_at is the initial draft marker, not publication.';
+comment on column public.ota_updates.policy_published_at is
+  'First activation/publication timestamp. A null value identifies an editable draft policy.';
+
 create table if not exists public.ota_update_channels (
   id bigserial primary key,
   runtime_version text not null,
@@ -58,6 +63,9 @@ create table if not exists public.ota_update_channels (
   modified_at timestamptz not null default now(),
   unique (runtime_version, channel, platform)
 );
+
+comment on column public.ota_update_channels.latest_update_id is
+  'Newest uploaded update; may reference an inactive draft and is not publication evidence.';
 
 create or replace function public.set_modified_at()
 returns trigger
@@ -293,6 +301,48 @@ create index if not exists idx_ota_served_manifest_log_scope
     platform,
     created_at desc
   );
+
+-- Repair policy markers incorrectly backfilled onto untouched, never-served
+-- drafts. This block intentionally follows ota_served_manifest_log creation so
+-- schema.sql is also a safe upgrade path for already-running installations.
+begin;
+
+drop trigger if exists trg_ota_updates_lock_published_policy
+  on public.ota_updates;
+
+update public.ota_updates u
+set policy_published_at = null
+where u.policy_published_at is not null
+  and u.policy_published_at = coalesce(
+    u.updated_at,
+    u.disabled_at,
+    u.created_at
+  )
+  and not u.is_active
+  and u.disabled_at is not null
+  and u.disabled_at = u.created_at
+  and u.delivery_mode = 'manual'
+  and u.guard_rules = '[]'::jsonb
+  and u.policy_version = 1
+  and u.rolled_back_from_update_id is null
+  and not exists (
+    select 1
+    from public.ota_served_manifest_log sml
+    where sml.update_id = u.update_id
+  )
+  -- latest_update_id tracks the newest upload and may reference this inactive
+  -- draft. It is intentionally not treated as publication evidence.
+  and not exists (
+    select 1
+    from public.ota_update_channels c
+    where c.active_update_id = u.update_id
+  );
+
+create trigger trg_ota_updates_lock_published_policy
+before insert or update on public.ota_updates
+for each row execute function public.ota_updates_lock_published_policy();
+
+commit;
 
 create table if not exists public.ota_device_state (
   installation_id text not null,
