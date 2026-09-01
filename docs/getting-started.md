@@ -372,9 +372,14 @@ npm run ota:build:android:apk
 ```
 
 Use `npm run ota:build:android:aab` for an App Bundle. After Gradle succeeds,
-the generated script finds `app.manifest` and registers the embedded update.
-For iOS, the configurator adds an Xcode Build Phase, so a Release/Archive build
-in Xcode performs registration automatically.
+`scripts/ota-register-embedded/register-android.sh` finds `app.manifest` and
+registers the embedded update. For iOS, the configurator adds an Xcode Build
+Phase that invokes `scripts/ota-register-embedded/register-ios.sh`, so a
+Release/Archive build in Xcode performs registration automatically.
+The registrar uses an app version from the embedded manifest when available;
+otherwise it falls back to the normalized `expo.version` in the project's
+static `app.json`. A missing or invalid fallback remains `null` and does not
+fail an otherwise valid registration.
 
 For remote CI or Xcode Cloud, do not provide PostgreSQL credentials. Create a
 dedicated token:
@@ -391,10 +396,10 @@ OTA_SERVER_URL=https://updates.example.com
 OTA_ACCESS_TOKEN=ota_...
 ```
 
-The configurator also creates `ci_scripts/ci_post_xcodebuild.sh`, which Xcode
-Cloud runs after a build. The token is shown only once and must never be
-committed or included in the mobile binary. Verify registered binaries at
-`/updates/embedded`.
+The configurator also creates `ci_scripts/ci_post_xcodebuild.sh`, a thin Xcode
+Cloud lifecycle adapter that invokes the same `register-ios.sh`. The token is
+shown only once and must never be committed or included in the mobile binary.
+Verify registered binaries at `/updates/embedded`.
 
 ## Step 1. Install Expo Updates
 

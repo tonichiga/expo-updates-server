@@ -160,6 +160,7 @@ export default function UpdatesPage() {
                 <tr>
                   <th className="px-4 py-4 text-left">Дата</th>
                   <th className="px-4 py-4 text-left">Runtime</th>
+                  <th className="px-4 py-4 text-left">App version</th>
                   <th className="px-4 py-4 text-left">Платформа</th>
                   <th className="px-4 py-4 text-left">Канал</th>
                   <th className="px-4 py-4 text-left">Комментарий</th>
@@ -174,7 +175,7 @@ export default function UpdatesPage() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td className="px-3 py-4 text-zinc-500" colSpan={11}>
+                    <td className="px-3 py-4 text-zinc-500" colSpan={12}>
                       Загрузка...
                     </td>
                   </tr>
@@ -182,7 +183,7 @@ export default function UpdatesPage() {
 
                 {!loading && items.length === 0 ? (
                   <tr>
-                    <td className="px-3 py-4 text-zinc-500" colSpan={11}>
+                    <td className="px-3 py-4 text-zinc-500" colSpan={12}>
                       Апдейты не найдены
                     </td>
                   </tr>
@@ -203,6 +204,9 @@ export default function UpdatesPage() {
                             item.createdAtPath}
                         </td>
                         <td className="px-4 py-4">{item.runtimeVersion}</td>
+                        <td className="px-4 py-4">
+                          {item.appVersion || "—"}
+                        </td>
                         <td className="px-4 py-4">{item.platform}</td>
                         <td className="px-4 py-4">{item.channel}</td>
                         <td className="px-4 py-4">

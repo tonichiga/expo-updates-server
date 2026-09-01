@@ -102,6 +102,7 @@ export default function EmbeddedUpdatesPage() {
               <thead className="bg-zinc-100 dark:bg-zinc-800">
                 <tr>
                   <th className="px-4 py-4 text-left">Created At</th>
+                  <th className="px-4 py-4 text-left">App version</th>
                   <th className="px-4 py-4 text-left">Platform</th>
                   <th className="px-4 py-4 text-left">Channel</th>
                   <th className="px-4 py-4 text-left">Embedded ID</th>
@@ -111,7 +112,7 @@ export default function EmbeddedUpdatesPage() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td className="px-3 py-4 text-zinc-500" colSpan={5}>
+                    <td className="px-3 py-4 text-zinc-500" colSpan={6}>
                       Загрузка...
                     </td>
                   </tr>
@@ -119,7 +120,7 @@ export default function EmbeddedUpdatesPage() {
 
                 {!loading && items.length === 0 ? (
                   <tr>
-                    <td className="px-3 py-4 text-zinc-500" colSpan={5}>
+                    <td className="px-3 py-4 text-zinc-500" colSpan={6}>
                       Embedded записи не найдены
                     </td>
                   </tr>
@@ -133,6 +134,9 @@ export default function EmbeddedUpdatesPage() {
                       >
                         <td className="px-4 py-4">
                           {new Date(item.createdAt).toLocaleString("uk-UA")}
+                        </td>
+                        <td className="px-4 py-4">
+                          {item.appVersion || "—"}
                         </td>
                         <td className="px-4 py-4">{item.platform}</td>
                         <td className="px-4 py-4">{item.channel}</td>

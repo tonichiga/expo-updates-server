@@ -89,7 +89,7 @@ type UpdateMetaState = {
   disabledAt: string | null;
 };
 
-type OtaUpdateRow = {
+export type OtaUpdateRow = {
   id: string;
   update_id: string;
   build_id: string;
@@ -112,7 +112,7 @@ type OtaUpdateRow = {
   modified_at: string;
 };
 
-type OtaChannelRow = {
+export type OtaChannelRow = {
   id: number;
   runtime_version: string;
   channel: string;
@@ -131,6 +131,7 @@ type OtaChannelRow = {
 export type UpdateRecord = {
   key: string;
   encodedKey: string;
+  appVersion: string | null;
   comment: string | null;
   runtimeVersion: string;
   platform: "ios" | "android";
@@ -228,6 +229,24 @@ function mapUpdateMeta(row: OtaUpdateRow): UpdateMetaState {
   };
 }
 
+function getManifestAppVersion(
+  manifest: Record<string, unknown>,
+): string | null {
+  const expoClient = manifest.expoClient;
+  if (
+    !expoClient ||
+    typeof expoClient !== "object" ||
+    Array.isArray(expoClient)
+  ) {
+    return null;
+  }
+
+  const version = (expoClient as Record<string, unknown>).version;
+  return typeof version === "string" && version.trim()
+    ? version.trim()
+    : null;
+}
+
 function channelLatestToJson(
   channel: OtaChannelRow | null,
   newestUpdateId?: string | null,
@@ -273,7 +292,7 @@ async function getNewestUpdateByScope(
   return (data as OtaUpdateRow | null) || null;
 }
 
-function mapRowToRecord(
+export function mapRowToRecord(
   row: OtaUpdateRow,
   channel: OtaChannelRow | null,
 ): UpdateRecord {
@@ -292,6 +311,7 @@ function mapRowToRecord(
   return {
     key,
     encodedKey: encodeUpdateKey(row.update_id),
+    appVersion: getManifestAppVersion(row.manifest),
     comment: row.comment,
     runtimeVersion: row.runtime_version,
     platform: row.platform,

@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
 const requireAdminAccess = vi.hoisted(() => vi.fn());
+const listEmbeddedUpdates = vi.hoisted(() =>
+  vi.fn(async (): Promise<Array<Record<string, unknown>>> => []),
+);
 const registerEmbeddedUpdate = vi.hoisted(() =>
   vi.fn(async (input) => ({
     ...input,
@@ -22,7 +25,7 @@ vi.mock("@/src/server/lib/admin-embedded-updates", async (importOriginal) => {
     >();
   return {
     ...original,
-    listEmbeddedUpdates: vi.fn(async () => []),
+    listEmbeddedUpdates,
     registerEmbeddedUpdate,
   };
 });
@@ -51,6 +54,7 @@ describe("POST /api/admin/embedded-updates", () => {
           },
           body: JSON.stringify({
             id: "55555555-5555-4555-8555-555555555555",
+            appVersion: " 2.4.1 ",
             createdAt: "2026-01-01T00:00:00Z",
             channel: "Production",
             platform: "ios",
@@ -66,10 +70,41 @@ describe("POST /api/admin/embedded-updates", () => {
     );
     expect(registerEmbeddedUpdate).toHaveBeenCalledWith({
       embeddedUpdateId: "55555555-5555-4555-8555-555555555555",
+      appVersion: "2.4.1",
       createdAt: "2026-01-01T00:00:00.000Z",
       channel: "production",
       platform: "ios",
     });
+  });
+
+  it("lists appVersion as a nullable per-update value", async () => {
+    requireAdminAccess.mockResolvedValue({
+      type: "access-token",
+      id: "token-id",
+      name: "admin",
+      scopes: ["updates:read"],
+    });
+    listEmbeddedUpdates.mockResolvedValueOnce([
+      {
+        embeddedUpdateId: "55555555-5555-4555-8555-555555555555",
+        appVersion: null,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        channel: "production",
+        platform: "ios",
+        isEmbedded: true,
+        insertedAt: "2026-01-01T00:00:00.000Z",
+        modifiedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ]);
+    const { GET } = await import("./route");
+    const response = await GET(
+      new NextRequest(
+        "https://updates.example.com/api/admin/embedded-updates",
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    expect((await response.json()).items[0].appVersion).toBeNull();
   });
 
   it("rejects invalid registration payloads", async () => {
