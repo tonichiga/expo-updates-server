@@ -114,6 +114,7 @@ function makeUpdate(overrides: Row = {}): Row {
         expoClient: {
           name: "Example",
           slug: "example",
+          version: "2.1.0",
         },
       },
     },
@@ -461,7 +462,203 @@ describe("GET /api/manifest", () => {
     expect(body).not.toContain('"launchAsset"');
   });
 
-  it("serves an older active update when rollback mode is enabled", async () => {
+  it("trusts a newer registered app version when a cached APK rebuild reuses the embedded ID and stale timestamp", async () => {
+    const embeddedUpdateId = "55555555-5555-4555-8555-555555555555";
+    database.channels.push({
+      latest_update_id: selectedUpdateId,
+      active_update_id: null,
+      active_changed_at: "2026-08-28T09:00:00.000Z",
+      served_manifest_id: servedManifestId,
+      served_manifest_changed_at: "2026-08-28T09:00:00.000Z",
+      runtime_version: "1.1.20",
+      channel: "development",
+      platform: "android",
+    });
+    const candidateUpdate = makeUpdate({
+      runtime_version: "1.1.20",
+      channel: "development",
+      created_at: "2026-08-28T08:00:00.000Z",
+    });
+    (
+      candidateUpdate.manifest as {
+        extra: { expoClient: { version: string } };
+      }
+    ).extra.expoClient.version = "1.7.10";
+    database.updates.push(candidateUpdate);
+    database.embeddedUpdates.push({
+      embedded_update_id: embeddedUpdateId,
+      app_version: "1.7.11",
+      created_at: "2026-08-27T08:00:00.000Z",
+      channel: "production",
+      platform: "android",
+    });
+    const consoleLog = vi
+      .spyOn(console, "log")
+      .mockImplementation(() => undefined);
+
+    const response = await requestManifest(
+      makeRequest({
+        "expo-runtime-version": "1.1.20",
+        "expo-channel-name": "development",
+        "expo-embedded-update-id": embeddedUpdateId,
+      }),
+    );
+    const body = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(body).toContain('{"type":"noUpdateAvailable"}');
+    expect(body).not.toContain('"launchAsset"');
+    expect(consoleLog).toHaveBeenCalledWith(
+      expect.stringContaining("blockingReason=app-version"),
+    );
+    consoleLog.mockRestore();
+  });
+
+  it("derives a current OTA baseline app version from the manifest root", async () => {
+    database.channels.push({
+      latest_update_id: selectedUpdateId,
+      active_update_id: null,
+      active_changed_at: "2026-08-28T09:00:00.000Z",
+      served_manifest_id: servedManifestId,
+      served_manifest_changed_at: "2026-08-28T09:00:00.000Z",
+      runtime_version: "1.1.20",
+      channel: "production",
+      platform: "android",
+    });
+    database.updates.push(
+      makeUpdate({
+        runtime_version: "1.1.20",
+        manifest: {
+          expoClient: { version: "1.7.10" },
+          launchAsset: {
+            hash: "bundle-hash",
+            key: "bundle-key",
+            path: "bundles/android.js",
+          },
+        },
+      }),
+      makeUpdate({
+        update_id: previousUpdateId,
+        build_id: previousUpdateId,
+        runtime_version: "1.1.20",
+        channel: "beta",
+        created_at: "2026-08-27T08:00:00.000Z",
+        manifest: { expoClient: { version: "1.7.11" } },
+      }),
+    );
+
+    const body = await (
+      await requestManifest(
+        makeRequest({
+          "expo-runtime-version": "1.1.20",
+          "expo-current-update-id": previousUpdateId,
+        }),
+      )
+    ).text();
+
+    expect(body).toContain('{"type":"noUpdateAvailable"}');
+    expect(body).not.toContain('"launchAsset"');
+  });
+
+  it.each([
+    ["equal", "2.1.0"],
+    ["unparseable", "release-two"],
+    ["missing", null],
+  ])(
+    "preserves timestamp protection when app versions are %s",
+    async (_case, appVersion) => {
+      const embeddedUpdateId = "66666666-6666-4666-8666-666666666666";
+      database.channels.push({
+        latest_update_id: selectedUpdateId,
+        active_update_id: null,
+        active_changed_at: "2026-08-28T09:00:00.000Z",
+        served_manifest_id: servedManifestId,
+        served_manifest_changed_at: "2026-08-28T09:00:00.000Z",
+        runtime_version: "1.0.0",
+        channel: "production",
+        platform: "android",
+      });
+      database.updates.push(makeUpdate());
+      database.embeddedUpdates.push({
+        embedded_update_id: embeddedUpdateId,
+        app_version: appVersion,
+        created_at: "2026-08-29T08:00:00.000Z",
+        channel: "production",
+        platform: "android",
+      });
+
+      const body = await (
+        await requestManifest(
+          makeRequest({ "expo-embedded-update-id": embeddedUpdateId }),
+        )
+      ).text();
+
+      expect(body).toContain('{"type":"noUpdateAvailable"}');
+      expect(body).not.toContain('"launchAsset"');
+    },
+  );
+
+  it("serves selected app version 2.1.0 when installed 2.0.0 has a newer timestamp", async () => {
+    const embeddedUpdateId = "88888888-8888-4888-8888-888888888888";
+    database.channels.push({
+      latest_update_id: selectedUpdateId,
+      active_update_id: null,
+      active_changed_at: "2026-08-28T09:00:00.000Z",
+      served_manifest_id: servedManifestId,
+      served_manifest_changed_at: "2026-08-28T09:00:00.000Z",
+      runtime_version: "1.0.0",
+      channel: "production",
+      platform: "android",
+    });
+    database.updates.push(makeUpdate());
+    database.embeddedUpdates.push({
+      embedded_update_id: embeddedUpdateId,
+      app_version: "2.0.0",
+      created_at: "2026-08-29T08:00:00.000Z",
+      channel: "production",
+      platform: "android",
+    });
+
+    const body = await (
+      await requestManifest(
+        makeRequest({ "expo-embedded-update-id": embeddedUpdateId }),
+      )
+    ).text();
+
+    expect(body).toContain('"launchAsset"');
+  });
+
+  it("does not apply version or date protection across platforms", async () => {
+    const embeddedUpdateId = "77777777-7777-4777-8777-777777777777";
+    database.channels.push({
+      latest_update_id: selectedUpdateId,
+      active_update_id: null,
+      active_changed_at: "2026-08-28T09:00:00.000Z",
+      served_manifest_id: servedManifestId,
+      served_manifest_changed_at: "2026-08-28T09:00:00.000Z",
+      runtime_version: "1.0.0",
+      channel: "production",
+      platform: "android",
+    });
+    database.updates.push(makeUpdate());
+    database.embeddedUpdates.push({
+      embedded_update_id: embeddedUpdateId,
+      app_version: "9.0.0",
+      created_at: "2026-08-29T08:00:00.000Z",
+      channel: "production",
+      platform: "ios",
+    });
+
+    const body = await (
+      await requestManifest(
+        makeRequest({ "expo-embedded-update-id": embeddedUpdateId }),
+      )
+    ).text();
+
+    expect(body).toContain('"launchAsset"');
+  });
+
+  it("serves an older app version when rollback mode is enabled", async () => {
     database.channels.push({
       latest_update_id: selectedUpdateId,
       active_update_id: previousUpdateId,
@@ -472,8 +669,14 @@ describe("GET /api/manifest", () => {
       channel: "production",
       platform: "android",
     });
+    const latestUpdate = makeUpdate();
+    (
+      latestUpdate.manifest as {
+        extra: { expoClient: { version: string } };
+      }
+    ).extra.expoClient.version = "2.2.0";
     database.updates.push(
-      makeUpdate(),
+      latestUpdate,
       makeUpdate({
         update_id: previousUpdateId,
         build_id: previousUpdateId,
