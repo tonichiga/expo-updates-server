@@ -15,6 +15,8 @@ const registrarRelativePath = path.join(
 );
 const legacyRegistrarSha256 =
   "29c48288d4804c072129da0ef60a12ad0892809eb8d57a14be94d039d990d6d7";
+const manifestOnlyRegistrarSha256 =
+  "89997ef11a939ce00e65159bd8e04845f16b184d5192f8fb56b1bc4204b07bca";
 const legacyAndroidRegistrar = `#!/bin/sh
 
 set -eu
@@ -120,8 +122,93 @@ function readCurrentRegistrar() {
   );
 }
 
+function createManifestOnlyRegistrar() {
+  const manifestOnly = readCurrentRegistrar()
+    .replace(
+      `
+export function readExpoAppVersion(appRoot, readFile = fs.readFileSync) {
+  try {
+    const appJson = JSON.parse(
+      readFile(path.join(appRoot, "app.json"), "utf8"),
+    );
+    const appVersion = appJson?.expo?.version;
+    return typeof appVersion === "string" && appVersion.trim()
+      ? appVersion.trim()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function parseEmbeddedManifestForProject(
+  content,
+  appRoot,
+  fallbackDate = new Date(),
+  readFile = fs.readFileSync,
+) {
+  const fields = parseEmbeddedManifest(content, fallbackDate);
+  return {
+    ...fields,
+    appVersion: fields.appVersion || readExpoAppVersion(appRoot, readFile),
+  };
+}
+`,
+      "",
+    )
+    .replace(
+      `function readChannel(appRoot, explicitChannel) {
+  const configuredChannel =
+    explicitChannel || process.env.EXPO_UPDATE_CHANNEL;
+  if (configuredChannel) {
+    return configuredChannel.trim().toLowerCase();
+  }
+
+  const appJson = JSON.parse(
+    fs.readFileSync(path.join(appRoot, "app.json"), "utf8"),
+  );
+  return String(
+    appJson.expo?.updates?.requestHeaders?.["expo-channel-name"] ||
+`,
+      `function readChannel(appRoot, explicitChannel) {
+  if (explicitChannel) {
+    return explicitChannel.trim().toLowerCase();
+  }
+
+  const appJson = JSON.parse(
+    fs.readFileSync(path.join(appRoot, "app.json"), "utf8"),
+  );
+  return String(
+    process.env.EXPO_UPDATE_CHANNEL ||
+      appJson.expo?.updates?.requestHeaders?.["expo-channel-name"] ||
+`,
+    )
+    .replace(
+      `  const fields = parseEmbeddedManifestForProject(
+    fs.readFileSync(manifestPath, "utf8"),
+    ROOT_DIR,
+    fs.statSync(manifestPath).mtime,
+  );
+`,
+      `  const fields = parseEmbeddedManifest(
+    fs.readFileSync(manifestPath, "utf8"),
+    fs.statSync(manifestPath).mtime,
+  );
+`,
+    );
+
+  const digest = crypto
+    .createHash("sha256")
+    .update(manifestOnly)
+    .digest("hex");
+  if (digest !== manifestOnlyRegistrarSha256) {
+    throw new Error(`Manifest-only registrar fixture hash changed: ${digest}`);
+  }
+
+  return manifestOnly;
+}
+
 function createLegacyRegistrar() {
-  const legacy = readCurrentRegistrar()
+  const legacy = createManifestOnlyRegistrar()
     .replace(
       `  const appVersion =
     readPath(manifest, [
@@ -647,6 +734,31 @@ describe("configureExpoApp", () => {
     const registrarPath = path.join(appRoot, registrarRelativePath);
     fs.mkdirSync(path.dirname(registrarPath), { recursive: true });
     fs.writeFileSync(registrarPath, createLegacyRegistrar());
+
+    configureExpoApp(
+      {
+        app: appRoot,
+        certificate: certificatePath,
+        serverUrl: "https://updates.example.com",
+        channel: "production",
+        runtimeVersion: "1.0.0",
+      },
+      {
+        commandRunner: createRunner().commandRunner,
+        templateRoot,
+      },
+    );
+
+    expect(fs.readFileSync(registrarPath, "utf8")).toBe(
+      readCurrentRegistrar(),
+    );
+  });
+
+  it("upgrades the manifest-only embedded registrar without force", () => {
+    const { appRoot, certificatePath, templateRoot } = createFixture();
+    const registrarPath = path.join(appRoot, registrarRelativePath);
+    fs.mkdirSync(path.dirname(registrarPath), { recursive: true });
+    fs.writeFileSync(registrarPath, createManifestOnlyRegistrar());
 
     configureExpoApp(
       {

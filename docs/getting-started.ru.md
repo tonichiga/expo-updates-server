@@ -479,6 +479,10 @@ npm run ota:build:android:aab
 зарегистрирует embedded update. Для iOS CLI добавляет Xcode Build Phase,
 который вызывает `scripts/ota-register-embedded/register-ios.sh`, поэтому
 достаточно собрать Release/Archive в Xcode.
+Версия приложения сначала берётся из embedded manifest, а при её отсутствии —
+из нормализованного `expo.version` в статическом `app.json` проекта. Если
+fallback отсутствует или некорректен, `app_version` остаётся `null`, но
+корректная в остальном регистрация не прерывается.
 
 Для удалённого CI или Xcode Cloud не передавайте пароль PostgreSQL. Создайте
 отдельный access token:

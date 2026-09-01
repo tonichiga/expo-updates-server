@@ -55,6 +55,91 @@ describe("embedded update registrar", () => {
     expect(first.createdAt).toBe("2026-02-03T04:05:06.000Z");
   });
 
+  it("falls back from a real-shape Expo manifest to app.json version", async () => {
+    const {
+      parseEmbeddedManifest,
+      parseEmbeddedManifestForProject,
+    } = await import(registrarUrl);
+    const manifest = JSON.stringify({
+      id: "55555555-5555-4555-8555-555555555555",
+      commitTime: 1_767_225_600,
+      assets: [],
+    });
+    const fallbackDate = new Date("2026-02-03T04:05:06Z");
+    const readAppJson = (filePath: string, encoding: string) => {
+      expect(filePath).toBe(path.join("/expo-project", "app.json"));
+      expect(encoding).toBe("utf8");
+      return JSON.stringify({ expo: { version: " 1.7.11 " } });
+    };
+
+    expect(parseEmbeddedManifest(manifest, fallbackDate).appVersion).toBeNull();
+    expect(
+      parseEmbeddedManifestForProject(
+        manifest,
+        "/expo-project",
+        fallbackDate,
+        readAppJson,
+      ),
+    ).toEqual({
+      embeddedUpdateId: "55555555-5555-4555-8555-555555555555",
+      appVersion: "1.7.11",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+  });
+
+  it("keeps manifest app version ahead of the app.json fallback", async () => {
+    const { parseEmbeddedManifestForProject } = await import(registrarUrl);
+    let appJsonRead = false;
+    const result = parseEmbeddedManifestForProject(
+      JSON.stringify({
+        id: "55555555-5555-4555-8555-555555555555",
+        commitTime: "2026-01-01T00:00:00Z",
+        assets: [],
+        extra: { expoClient: { version: "2.4.1" } },
+      }),
+      "/expo-project",
+      new Date("2026-02-03T04:05:06Z"),
+      () => {
+        appJsonRead = true;
+        return JSON.stringify({ expo: { version: "1.7.11" } });
+      },
+    );
+
+    expect(result.appVersion).toBe("2.4.1");
+    expect(appJsonRead).toBe(false);
+  });
+
+  it.each([
+    ["missing", () => {
+      throw new Error("ENOENT");
+    }],
+    ["blank", () => JSON.stringify({ expo: { version: "   " } })],
+    ["malformed JSON", () => "{not-json"],
+    ["malformed version", () =>
+      JSON.stringify({ expo: { version: { major: 1 } } })],
+  ])(
+    "keeps registration fields valid when app.json version is %s",
+    async (_case, readAppJson) => {
+      const { parseEmbeddedManifestForProject } = await import(registrarUrl);
+      const result = parseEmbeddedManifestForProject(
+        JSON.stringify({
+          id: "55555555-5555-4555-8555-555555555555",
+          commitTime: "2026-01-01T00:00:00Z",
+          assets: [],
+        }),
+        "/expo-project",
+        new Date("2026-02-03T04:05:06Z"),
+        readAppJson,
+      );
+
+      expect(result).toEqual({
+        embeddedUpdateId: "55555555-5555-4555-8555-555555555555",
+        appVersion: null,
+        createdAt: "2026-01-01T00:00:00.000Z",
+      });
+    },
+  );
+
   it("contains no application-specific paths or names", () => {
     const templateRoot = path.resolve("templates/expo-app");
     const files = [

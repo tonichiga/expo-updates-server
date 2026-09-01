@@ -372,6 +372,7 @@ native binary registers its embedded update:
 
 ```text
 embedded_update_id
+app_version
 created_at
 channel
 platform
@@ -382,6 +383,12 @@ Register the value after each iOS and Android release build in
 `ota_embedded_updates`. The embedded ID and creation time must come from the
 generated Expo embedded manifest, not from a random value created before the
 build.
+
+For `app_version`, the registrar keeps a version found in the embedded
+manifest as the highest-priority value. Expo SDKs that omit it there fall back
+to the trimmed string `expo.version` from the project's static `app.json`.
+Missing, blank, malformed or unreadable fallback configuration leaves
+`app_version` null without blocking an otherwise valid registration.
 
 The MIEX application contains a reference implementation:
 

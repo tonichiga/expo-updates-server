@@ -376,6 +376,10 @@ Use `npm run ota:build:android:aab` for an App Bundle. After Gradle succeeds,
 registers the embedded update. For iOS, the configurator adds an Xcode Build
 Phase that invokes `scripts/ota-register-embedded/register-ios.sh`, so a
 Release/Archive build in Xcode performs registration automatically.
+The registrar uses an app version from the embedded manifest when available;
+otherwise it falls back to the normalized `expo.version` in the project's
+static `app.json`. A missing or invalid fallback remains `null` and does not
+fail an otherwise valid registration.
 
 For remote CI or Xcode Cloud, do not provide PostgreSQL credentials. Create a
 dedicated token:
