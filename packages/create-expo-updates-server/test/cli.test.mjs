@@ -59,9 +59,38 @@ async function createPackageFixture(root) {
     ["Dockerfile", "FROM node:24-alpine\n"],
     ["README.md", "# Fixture\n"],
     ["docker-compose.yml", "services: {}\n"],
+    [
+      "app/api/admin/guard-actions/[id]/route.ts",
+      "export const DELETE = () => undefined;\n",
+    ],
+    [
+      "app/api/admin/guard-actions/route.ts",
+      "export const GET = () => undefined;\n",
+    ],
+    [
+      "docs/migrations/2026-09-01-p1-guard-actions.sql",
+      "SELECT 1;\n",
+    ],
+    [
+      "docs/migrations/2026-09-01-p2-simplify-ota-guard-policy.sql",
+      "SELECT 1;\n",
+    ],
+    [
+      "docs/migrations/2026-09-01-policy-publication-correction.sql",
+      "SELECT 1;\n",
+    ],
     ["docs/migrations/schema.sql", "SELECT 1;\n"],
+    ["docs/ota-update-policy.md", "# OTA Update Policy\n"],
     ["package-lock.json", `${JSON.stringify(generatedLock, null, 2)}\n`],
     ["package.json", `${JSON.stringify(generatedPackage, null, 2)}\n`],
+    [
+      "src/client/guard-action-combobox.tsx",
+      "export const GuardActionCombobox = () => null;\n",
+    ],
+    [
+      "src/server/lib/guard-actions.ts",
+      "export const listGuardActions = () => [];\n",
+    ],
   ]);
   const files = [];
   let totalSize = 0;
