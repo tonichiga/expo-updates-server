@@ -2,14 +2,86 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
+import crypto from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import { configureExpoApp } from "./expo-app-configurator.mjs";
 
 const temporaryDirectories: string[] = [];
+const appTemplateRoot = path.resolve("templates/expo-app");
+const registrarRelativePath = path.join(
+  "scripts",
+  "ota-register-embedded",
+  "index.mjs",
+);
+const legacyRegistrarSha256 =
+  "29c48288d4804c072129da0ef60a12ad0892809eb8d57a14be94d039d990d6d7";
+
+function readCurrentRegistrar() {
+  return fs.readFileSync(
+    path.join(appTemplateRoot, registrarRelativePath),
+    "utf8",
+  );
+}
+
+function createLegacyRegistrar() {
+  const legacy = readCurrentRegistrar()
+    .replace(
+      `  const appVersion =
+    readPath(manifest, [
+      ["extra", "expoClient", "version"],
+      ["expoClient", "version"],
+      ["version"],
+    ]) ||
+    readPath(root, [
+      ["extra", "expoClient", "version"],
+      ["expoClient", "version"],
+      ["version"],
+    ]);
+`,
+      "",
+    )
+    .replace(
+      `    appVersion: typeof appVersion === "string" ? appVersion : null,
+`,
+      "",
+    )
+    .replace(
+      "        embedded_update_id, app_version, created_at, channel, platform, is_embedded\n" +
+        "      ) VALUES ($1, $2, $3, $4, $5, true)",
+      "        embedded_update_id, created_at, channel, platform, is_embedded\n" +
+        "      ) VALUES ($1, $2, $3, $4, true)",
+    )
+    .replace(
+      `        app_version = COALESCE(
+          NULLIF(BTRIM(EXCLUDED.app_version), ''),
+          ota_embedded_updates.app_version
+        ),
+`,
+      "",
+    )
+    .replace("        input.appVersion || null,\n", "");
+
+  const digest = crypto
+    .createHash("sha256")
+    .update(legacy)
+    .digest("hex");
+  if (digest !== legacyRegistrarSha256) {
+    throw new Error(`Legacy registrar fixture hash changed: ${digest}`);
+  }
+
+  return legacy;
+}
 
 function createFixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "ota-expo-config-"));
   temporaryDirectories.push(root);
+
+  const templateRoot = path.join(root, "expo-app-template");
+  fs.cpSync(appTemplateRoot, templateRoot, { recursive: true });
+  fs.writeFileSync(
+    path.join(templateRoot, ".env.ota.example"),
+    "EXPO_UPDATE_CHANNEL=production\n",
+  );
 
   const appRoot = path.join(root, "app");
   fs.mkdirSync(appRoot, { recursive: true });
@@ -69,7 +141,7 @@ function createFixture() {
     certificatePath,
   ]);
 
-  return { appRoot, certificatePath };
+  return { appRoot, certificatePath, templateRoot };
 }
 
 function createRunner() {
@@ -101,7 +173,7 @@ afterEach(() => {
 
 describe("configureExpoApp", () => {
   it("configures receiving, publishing and native prebuild", () => {
-    const { appRoot, certificatePath } = createFixture();
+    const { appRoot, certificatePath, templateRoot } = createFixture();
     const { calls, commandRunner } = createRunner();
 
     const result = configureExpoApp(
@@ -113,7 +185,7 @@ describe("configureExpoApp", () => {
         runtimeVersion: "1.2.3",
         platform: "all",
       },
-      { commandRunner },
+      { commandRunner, templateRoot },
     );
 
     const appJson = JSON.parse(
@@ -277,7 +349,7 @@ describe("configureExpoApp", () => {
   });
 
   it("creates publisher credentials from local Docker settings", () => {
-    const { appRoot, certificatePath } = createFixture();
+    const { appRoot, certificatePath, templateRoot } = createFixture();
     const serverRoot = path.dirname(appRoot);
     fs.writeFileSync(
       path.join(serverRoot, ".env"),
@@ -305,6 +377,7 @@ describe("configureExpoApp", () => {
       {
         commandRunner: createRunner().commandRunner,
         serverRoot,
+        templateRoot,
       },
     );
 
@@ -328,7 +401,7 @@ describe("configureExpoApp", () => {
   });
 
   it("stops an existing Android Gradle daemon before prebuild", () => {
-    const { appRoot, certificatePath } = createFixture();
+    const { appRoot, certificatePath, templateRoot } = createFixture();
     const gradleWrapper = path.join(appRoot, "android", "gradlew");
     fs.mkdirSync(path.dirname(gradleWrapper), { recursive: true });
     fs.writeFileSync(gradleWrapper, "#!/bin/sh\n");
@@ -343,7 +416,7 @@ describe("configureExpoApp", () => {
         runtimeVersion: "1.0.0",
         platform: "android",
       },
-      { commandRunner },
+      { commandRunner, templateRoot },
     );
 
     const stopIndex = calls.findIndex(
@@ -458,6 +531,90 @@ describe("configureExpoApp", () => {
 
     expect(fs.readFileSync(path.join(appRoot, "app.json"), "utf8")).toBe(
       originalAppJson,
+    );
+  });
+
+  it("upgrades the exact legacy embedded registrar without force", () => {
+    const { appRoot, certificatePath, templateRoot } = createFixture();
+    const registrarPath = path.join(appRoot, registrarRelativePath);
+    fs.mkdirSync(path.dirname(registrarPath), { recursive: true });
+    fs.writeFileSync(registrarPath, createLegacyRegistrar());
+
+    configureExpoApp(
+      {
+        app: appRoot,
+        certificate: certificatePath,
+        serverUrl: "https://updates.example.com",
+        channel: "production",
+        runtimeVersion: "1.0.0",
+      },
+      {
+        commandRunner: createRunner().commandRunner,
+        templateRoot,
+      },
+    );
+
+    expect(fs.readFileSync(registrarPath, "utf8")).toBe(
+      readCurrentRegistrar(),
+    );
+  });
+
+  it("rejects a customized legacy embedded registrar without force", () => {
+    const { appRoot, certificatePath, templateRoot } = createFixture();
+    const registrarPath = path.join(appRoot, registrarRelativePath);
+    const customizedRegistrar =
+      `${createLegacyRegistrar()}\n// User customization.\n`;
+    fs.mkdirSync(path.dirname(registrarPath), { recursive: true });
+    fs.writeFileSync(registrarPath, customizedRegistrar);
+
+    expect(() =>
+      configureExpoApp(
+        {
+          app: appRoot,
+          certificate: certificatePath,
+          serverUrl: "https://updates.example.com",
+          channel: "production",
+          runtimeVersion: "1.0.0",
+        },
+        {
+          commandRunner: createRunner().commandRunner,
+          templateRoot,
+        },
+      ),
+    ).toThrow(`Refusing to overwrite ${registrarPath}`);
+
+    expect(fs.readFileSync(registrarPath, "utf8")).toBe(
+      customizedRegistrar,
+    );
+  });
+
+  it("accepts the identical current embedded registrar idempotently", () => {
+    const { appRoot, certificatePath, templateRoot } = createFixture();
+    const registrarPath = path.join(appRoot, registrarRelativePath);
+    const currentRegistrar = readCurrentRegistrar();
+    const options = {
+      app: appRoot,
+      certificate: certificatePath,
+      serverUrl: "https://updates.example.com",
+      channel: "production",
+      runtimeVersion: "1.0.0",
+    };
+    fs.mkdirSync(path.dirname(registrarPath), { recursive: true });
+    fs.writeFileSync(registrarPath, currentRegistrar);
+
+    const firstRunner = createRunner();
+    const secondRunner = createRunner();
+    configureExpoApp(options, {
+      commandRunner: firstRunner.commandRunner,
+      templateRoot,
+    });
+    configureExpoApp(options, {
+      commandRunner: secondRunner.commandRunner,
+      templateRoot,
+    });
+
+    expect(fs.readFileSync(registrarPath, "utf8")).toBe(
+      currentRegistrar,
     );
   });
 });

@@ -1,9 +1,13 @@
 import { execFileSync } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const CHANNEL_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+// Exact registrar template shipped before embedded app-version support.
+const LEGACY_EMBEDDED_REGISTRAR_SHA256 =
+  "29c48288d4804c072129da0ef60a12ad0892809eb8d57a14be94d039d990d6d7";
 const PUBLISHER_DEPENDENCIES = [
   "@aws-sdk/client-s3",
   "dotenv",
@@ -191,6 +195,30 @@ function assertCopyAllowed(source, destination, force) {
       );
     }
   }
+}
+
+function assertEmbeddedRegistrarCopyAllowed(source, destination, force) {
+  if (!fs.existsSync(destination) || force) {
+    return;
+  }
+
+  const current = fs.readFileSync(destination);
+  const next = fs.readFileSync(source);
+  if (current.equals(next)) {
+    return;
+  }
+
+  const currentSha256 = crypto
+    .createHash("sha256")
+    .update(current)
+    .digest("hex");
+  if (currentSha256 === LEGACY_EMBEDDED_REGISTRAR_SHA256) {
+    return;
+  }
+
+  throw new Error(
+    `Refusing to overwrite ${destination}. Re-run with --force.`,
+  );
 }
 
 function copyFile(source, destination) {
@@ -578,7 +606,11 @@ export function configureExpoApp(
   for (const file of publisherFiles) {
     assertCopyAllowed(file.source, file.destination, force);
   }
-  assertCopyAllowed(registrarSource, registrarDestination, force);
+  assertEmbeddedRegistrarCopyAllowed(
+    registrarSource,
+    registrarDestination,
+    force,
+  );
   assertCopyAllowed(
     androidRegistrarSource,
     androidRegistrarDestination,
