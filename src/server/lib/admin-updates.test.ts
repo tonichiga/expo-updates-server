@@ -49,6 +49,38 @@ describe("OTA admin update mapping", () => {
     );
   });
 
+  it("maps an inactive initial-disabled draft as policy-editable", () => {
+    const row = makeRow();
+    row.is_active = false;
+    row.disabled_at = row.created_at;
+    row.policy_published_at = null;
+
+    const item = mapRowToRecord(row, null);
+
+    expect(item.status).toBe("disabled");
+    expect(item.policyPublishedAt).toBeNull();
+    expect(item.policyEditable).toBe(true);
+  });
+
+  it.each([
+    ["active without a marker", true, null],
+    [
+      "inactive after publication",
+      false,
+      "2026-01-01T00:00:00.000Z",
+    ],
+  ])("maps an %s update as locked", (_case, active, publishedAt) => {
+    const row = makeRow();
+    row.is_active = active;
+    row.disabled_at = active ? null : "2026-01-02T00:00:00.000Z";
+    row.policy_published_at = publishedAt;
+
+    const item = mapRowToRecord(row, null);
+
+    expect(item.policyPublishedAt).toBe(publishedAt);
+    expect(item.policyEditable).toBe(false);
+  });
+
   it("maps expoClient.version from the stored manifest", () => {
     const item = mapRowToRecord(
       makeRow({ expoClient: { version: "2.4.1" } }),

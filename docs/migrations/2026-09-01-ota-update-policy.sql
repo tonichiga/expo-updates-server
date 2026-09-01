@@ -15,8 +15,10 @@ alter table public.ota_updates
   add constraint ota_updates_policy_version_chk
     check (policy_version > 0);
 
--- Active rows, rows with an administrative state-change timestamp, rollback
--- targets, and explicitly pinned rows have participated in delivery.
+-- Active rows, rows disabled after their initial draft marker, rollback
+-- targets, explicitly pinned rows, and demonstrably served rows have
+-- participated in delivery. Uploads start inactive with disabled_at equal to
+-- created_at; that initial marker is not a publication event.
 update public.ota_updates u
 set policy_published_at = coalesce(
   u.updated_at,
@@ -27,12 +29,21 @@ set policy_published_at = coalesce(
 where u.policy_published_at is null
   and (
     u.is_active
-    or (u.disabled_at is not null and u.updated_at is not null)
+    or (
+      u.disabled_at is not null
+      and u.disabled_at is distinct from u.created_at
+      and u.updated_at is not null
+    )
     or u.rolled_back_from_update_id is not null
     or exists (
       select 1
       from public.ota_update_channels c
       where c.active_update_id = u.update_id
+    )
+    or exists (
+      select 1
+      from public.ota_served_manifest_log sml
+      where sml.update_id = u.update_id
     )
   );
 

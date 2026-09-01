@@ -345,7 +345,7 @@ export function mapRowToRecord(
         ? row.policy_version
         : 1,
     policyPublishedAt: row.policy_published_at || null,
-    policyEditable: !row.policy_published_at,
+    policyEditable: !row.is_active && !row.policy_published_at,
   };
 }
 
@@ -389,7 +389,7 @@ function rowToPolicy(row: OtaUpdateRow): UpdatePolicyRecord {
     ...validated,
     policyVersion: row.policy_version,
     publishedAt: row.policy_published_at,
-    editable: !row.policy_published_at,
+    editable: !row.is_active && !row.policy_published_at,
   };
 }
 
@@ -407,7 +407,7 @@ export async function replaceUpdatePolicyByKey(
   assertExpectedPolicyVersion(expectedPolicyVersion);
   const updateId = extractUpdateIdFromKey(key);
   const row = await getUpdateRowById(updateId);
-  if (row.policy_published_at) {
+  if (row.is_active || row.policy_published_at) {
     throw new UpdatePolicyPublishedError(
       "Update policy is immutable after publication.",
     );
@@ -423,6 +423,7 @@ export async function replaceUpdatePolicyByKey(
       policy_version: row.policy_version + 1,
     })
     .eq("update_id", updateId)
+    .eq("is_active", false)
     .eq("policy_version", row.policy_version)
     .is("policy_published_at", null)
     .select("*")
@@ -438,7 +439,7 @@ export async function replaceUpdatePolicyByKey(
   }
   if (!data) {
     const current = await getUpdateRowById(updateId);
-    if (current.policy_published_at) {
+    if (current.is_active || current.policy_published_at) {
       throw new UpdatePolicyPublishedError(
         "Update policy is immutable after publication.",
       );
