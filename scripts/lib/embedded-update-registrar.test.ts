@@ -1,15 +1,86 @@
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import vm from "node:vm";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 const registrarUrl = pathToFileURL(
   path.resolve(
     "templates/expo-app/scripts/ota-register-embedded/index.mjs",
   ),
 ).href;
+const temporaryDirectories: string[] = [];
+
+function createIosRegistrarFixture() {
+  const projectRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), "ota-ios-registrar-"),
+  );
+  temporaryDirectories.push(projectRoot);
+
+  const registrarDirectory = path.join(
+    projectRoot,
+    "scripts",
+    "ota-register-embedded",
+  );
+  const iosRegistrar = path.join(registrarDirectory, "register-ios.sh");
+  const jsRegistrar = path.join(registrarDirectory, "index.mjs");
+  fs.mkdirSync(registrarDirectory, { recursive: true });
+  fs.copyFileSync(
+    path.resolve(
+      "templates/expo-app/scripts/ota-register-embedded/register-ios.sh",
+    ),
+    iosRegistrar,
+  );
+  fs.writeFileSync(jsRegistrar, "// Fake registrar; fake Node must run this.\n");
+
+  const targetBuildDirectory = path.join(projectRoot, "build");
+  const resourcesFolder = "Fixture.app";
+  const manifestPath = path.join(
+    targetBuildDirectory,
+    resourcesFolder,
+    "app.manifest",
+  );
+  fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
+  fs.writeFileSync(manifestPath, "{}\n");
+
+  const fakeNode = path.join(projectRoot, "fake-node");
+  fs.writeFileSync(
+    fakeNode,
+    `#!/bin/sh
+if [ "$1" != "${jsRegistrar}" ] ||
+  [ "$2" != "--manifest" ] ||
+  [ "$3" != "${manifestPath}" ] ||
+  [ "$4" != "--platform" ] ||
+  [ "$5" != "ios" ]; then
+  echo "Unexpected fake Node arguments: $*" >&2
+  exit 64
+fi
+`,
+  );
+  fs.chmodSync(fakeNode, 0o755);
+
+  const pathWithoutNode = "/usr/bin:/bin";
+  const env = {
+    ...process.env,
+    PATH: pathWithoutNode,
+    NODE_BINARY: "",
+    CONFIGURATION: "Release",
+    OTA_EMBEDDED_REGISTER_STRICT: "true",
+    TARGET_BUILD_DIR: targetBuildDirectory,
+    UNLOCALIZED_RESOURCES_FOLDER_PATH: resourcesFolder,
+    CI_ARCHIVE_PATH: "",
+  };
+
+  return { env, fakeNode, iosRegistrar, projectRoot };
+}
+
+afterEach(() => {
+  for (const directory of temporaryDirectories.splice(0)) {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
 
 describe("embedded update registrar", () => {
   it("extracts Expo update fields from a nested manifest", async () => {
@@ -239,6 +310,61 @@ describe("embedded update registrar", () => {
     expect(nonStrict.stderr).toContain("iOS app.manifest was not found");
     expect(strict.status).toBe(1);
     expect(strict.stderr).toContain("iOS app.manifest was not found");
+  });
+
+  it("uses executable NODE_BINARY when PATH does not contain Node", () => {
+    const { env, fakeNode, iosRegistrar } = createIosRegistrarFixture();
+    const result = spawnSync("/bin/sh", [iosRegistrar], {
+      encoding: "utf8",
+      env: {
+        ...env,
+        NODE_BINARY: fakeNode,
+      },
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+  });
+
+  it("loads absolute NODE_BINARY from ios/.xcode.env.local", () => {
+    const { env, fakeNode, iosRegistrar, projectRoot } =
+      createIosRegistrarFixture();
+    const iosDirectory = path.join(projectRoot, "ios");
+    fs.mkdirSync(iosDirectory, { recursive: true });
+    fs.writeFileSync(
+      path.join(iosDirectory, ".xcode.env"),
+      [
+        'export UNUSED_XCODE_VALUE="$INTENTIONALLY_UNSET_XCODE_VALUE"',
+        "export NODE_BINARY=/path/from/base/xcode-env",
+        "",
+      ].join("\n"),
+    );
+    fs.writeFileSync(
+      path.join(iosDirectory, ".xcode.env.local"),
+      `export NODE_BINARY="${fakeNode}"\n`,
+    );
+
+    const result = spawnSync("/bin/sh", [iosRegistrar], {
+      encoding: "utf8",
+      env,
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+  });
+
+  it("fails clearly in strict mode when Node cannot be resolved", () => {
+    const { env, iosRegistrar, projectRoot } = createIosRegistrarFixture();
+    const result = spawnSync("/bin/sh", [iosRegistrar], {
+      encoding: "utf8",
+      env,
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Node.js executable was not found");
+    expect(result.stderr).toContain(
+      `Set NODE_BINARY to an absolute executable path in ${projectRoot}/ios/.xcode.env.local`,
+    );
   });
 
   it("fails clearly when the Xcode Cloud project root is unavailable", () => {

@@ -20,6 +20,36 @@ PROJECT_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)" ||
   fail_registration "unable to resolve the Expo project root."
 REGISTRAR_PATH="$PROJECT_ROOT/scripts/ota-register-embedded/index.mjs"
 MANIFEST_PATH=""
+NODE_EXECUTABLE=""
+
+if [ -f "$PROJECT_ROOT/ios/.xcode.env" ]; then
+  set +u
+  . "$PROJECT_ROOT/ios/.xcode.env"
+  set -u
+fi
+
+if [ -f "$PROJECT_ROOT/ios/.xcode.env.local" ]; then
+  set +u
+  . "$PROJECT_ROOT/ios/.xcode.env.local"
+  set -u
+fi
+
+if [ -n "${NODE_BINARY:-}" ] && [ -x "$NODE_BINARY" ]; then
+  NODE_EXECUTABLE="$NODE_BINARY"
+else
+  NODE_FROM_PATH="$(command -v node 2>/dev/null || true)"
+  if [ -n "$NODE_FROM_PATH" ] && [ -x "$NODE_FROM_PATH" ]; then
+    NODE_EXECUTABLE="$NODE_FROM_PATH"
+  elif [ -x "/opt/homebrew/bin/node" ]; then
+    NODE_EXECUTABLE="/opt/homebrew/bin/node"
+  elif [ -x "/usr/local/bin/node" ]; then
+    NODE_EXECUTABLE="/usr/local/bin/node"
+  fi
+fi
+
+if [ -z "$NODE_EXECUTABLE" ]; then
+  fail_registration "Node.js executable was not found. Set NODE_BINARY to an absolute executable path in $PROJECT_ROOT/ios/.xcode.env.local (for example: export NODE_BINARY=/absolute/path/to/node)."
+fi
 
 if [ ! -f "$REGISTRAR_PATH" ]; then
   fail_registration "registrar was not found at $REGISTRAR_PATH."
@@ -48,7 +78,7 @@ if [ -z "$MANIFEST_PATH" ]; then
   fail_registration "iOS app.manifest was not found."
 fi
 
-if ! node "$REGISTRAR_PATH" \
+if ! "$NODE_EXECUTABLE" "$REGISTRAR_PATH" \
   --manifest "$MANIFEST_PATH" \
   --platform ios; then
   if [ "${OTA_EMBEDDED_REGISTER_STRICT:-false}" = "true" ]; then

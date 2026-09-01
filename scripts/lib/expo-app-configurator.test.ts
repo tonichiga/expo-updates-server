@@ -17,6 +17,8 @@ const legacyRegistrarSha256 =
   "29c48288d4804c072129da0ef60a12ad0892809eb8d57a14be94d039d990d6d7";
 const manifestOnlyRegistrarSha256 =
   "89997ef11a939ce00e65159bd8e04845f16b184d5192f8fb56b1bc4204b07bca";
+const previousCanonicalIosRegistrarSha256 =
+  "37e0edac0397e5dc1d48d1641a8ed1f113495e3d24ce1d3c66c62e31c0ca7198";
 const legacyAndroidRegistrar = `#!/bin/sh
 
 set -eu
@@ -114,6 +116,73 @@ module.exports = function withOtaEmbeddedRegistration(config) {
   });
 };
 `;
+const previousCanonicalIosRegistrar = `#!/bin/sh
+
+set -eu
+
+if [ "\${CONFIGURATION:-Release}" = "Debug" ]; then
+  exit 0
+fi
+
+fail_registration() {
+  echo "Embedded update registration failed: $1" >&2
+  if [ "\${OTA_EMBEDDED_REGISTER_STRICT:-false}" = "true" ]; then
+    exit 1
+  fi
+  exit 0
+}
+
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)" ||
+  fail_registration "unable to resolve the registration script directory."
+PROJECT_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)" ||
+  fail_registration "unable to resolve the Expo project root."
+REGISTRAR_PATH="$PROJECT_ROOT/scripts/ota-register-embedded/index.mjs"
+MANIFEST_PATH=""
+
+if [ ! -f "$REGISTRAR_PATH" ]; then
+  fail_registration "registrar was not found at $REGISTRAR_PATH."
+fi
+
+if [ -n "\${TARGET_BUILD_DIR:-}" ] &&
+  [ -n "\${UNLOCALIZED_RESOURCES_FOLDER_PATH:-}" ] &&
+  [ -f "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/app.manifest" ]; then
+  MANIFEST_PATH="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/app.manifest"
+fi
+
+if [ -z "$MANIFEST_PATH" ] && [ -n "\${CI_ARCHIVE_PATH:-}" ]; then
+  for candidate in "$CI_ARCHIVE_PATH"/Products/Applications/*.app/app.manifest; do
+    if [ -f "$candidate" ]; then
+      MANIFEST_PATH="$candidate"
+      break
+    fi
+  done
+fi
+
+if [ -z "$MANIFEST_PATH" ] && [ -n "\${TARGET_BUILD_DIR:-}" ]; then
+  MANIFEST_PATH="$(find "$TARGET_BUILD_DIR" -type f -name app.manifest 2>/dev/null | head -n 1 || true)"
+fi
+
+if [ -z "$MANIFEST_PATH" ]; then
+  fail_registration "iOS app.manifest was not found."
+fi
+
+if ! node "$REGISTRAR_PATH" \\
+  --manifest "$MANIFEST_PATH" \\
+  --platform ios; then
+  if [ "\${OTA_EMBEDDED_REGISTER_STRICT:-false}" = "true" ]; then
+    exit 1
+  fi
+fi
+`;
+
+if (
+  crypto
+    .createHash("sha256")
+    .update(previousCanonicalIosRegistrar)
+    .digest("hex") !== previousCanonicalIosRegistrarSha256
+) {
+  throw new Error("Previous canonical iOS registrar fixture hash changed");
+}
 
 function readCurrentRegistrar() {
   return fs.readFileSync(
@@ -831,6 +900,78 @@ describe("configureExpoApp", () => {
 
     expect(fs.readFileSync(registrarPath, "utf8")).toBe(
       currentRegistrar,
+    );
+  });
+
+  it("upgrades the previous canonical iOS registrar without force", () => {
+    const { appRoot, certificatePath, templateRoot } = createFixture();
+    const registrarPath = path.join(
+      appRoot,
+      "scripts",
+      "ota-register-embedded",
+      "register-ios.sh",
+    );
+    fs.mkdirSync(path.dirname(registrarPath), { recursive: true });
+    fs.writeFileSync(registrarPath, previousCanonicalIosRegistrar);
+
+    configureExpoApp(
+      {
+        app: appRoot,
+        certificate: certificatePath,
+        serverUrl: "https://updates.example.com",
+        channel: "production",
+        runtimeVersion: "1.0.0",
+      },
+      {
+        commandRunner: createRunner().commandRunner,
+        templateRoot,
+      },
+    );
+
+    expect(fs.readFileSync(registrarPath, "utf8")).toBe(
+      fs.readFileSync(
+        path.join(
+          appTemplateRoot,
+          "scripts",
+          "ota-register-embedded",
+          "register-ios.sh",
+        ),
+        "utf8",
+      ),
+    );
+  });
+
+  it("rejects a customized previous iOS registrar without force", () => {
+    const { appRoot, certificatePath, templateRoot } = createFixture();
+    const registrarPath = path.join(
+      appRoot,
+      "scripts",
+      "ota-register-embedded",
+      "register-ios.sh",
+    );
+    const customizedRegistrar =
+      `${previousCanonicalIosRegistrar}\n# User customization.\n`;
+    fs.mkdirSync(path.dirname(registrarPath), { recursive: true });
+    fs.writeFileSync(registrarPath, customizedRegistrar);
+
+    expect(() =>
+      configureExpoApp(
+        {
+          app: appRoot,
+          certificate: certificatePath,
+          serverUrl: "https://updates.example.com",
+          channel: "production",
+          runtimeVersion: "1.0.0",
+        },
+        {
+          commandRunner: createRunner().commandRunner,
+          templateRoot,
+        },
+      ),
+    ).toThrow(`Refusing to overwrite ${registrarPath}`);
+
+    expect(fs.readFileSync(registrarPath, "utf8")).toBe(
+      customizedRegistrar,
     );
   });
 

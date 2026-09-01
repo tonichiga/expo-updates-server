@@ -14,6 +14,9 @@ const LEGACY_GENERATED_FILE_SHA256 = {
     "45a0fddd24600d109359e90ea1f347c70b411307ec232beba22dd71d8c369fe4",
   iosRegistrar:
     "21e4a557a49feb40bbc391db5d44c64962fdb7d9db86394c477379861e571116",
+  canonicalIosRegistrars: [
+    "37e0edac0397e5dc1d48d1641a8ed1f113495e3d24ce1d3c66c62e31c0ca7198",
+  ],
   xcodeCloudHook:
     "3dd1d92a782de37b8efd40662624dce21bc3d1b30442ee8dc1dd7d4c3a7b7823",
   iosPlugin:
@@ -729,7 +732,12 @@ export function configureExpoApp(
     [LEGACY_GENERATED_FILE_SHA256.iosPlugin],
   );
   if (platform !== "android") {
-    assertCopyAllowed(iosRegisterSource, iosRegisterDestination, force);
+    assertGeneratedCopyAllowed(
+      iosRegisterSource,
+      iosRegisterDestination,
+      force,
+      LEGACY_GENERATED_FILE_SHA256.canonicalIosRegistrars,
+    );
     assertGeneratedCopyAllowed(
       xcodeCloudHookSource,
       xcodeCloudHookDestination,
