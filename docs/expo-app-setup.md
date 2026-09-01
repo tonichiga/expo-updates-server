@@ -457,9 +457,13 @@ Create a dedicated access token with `npm run create-access-token` (or
 
 The app configurator installs:
 
-- Android APK/AAB build commands that register `app.manifest` after Gradle;
-- an iOS Xcode Build Phase for local Release/Archive builds;
-- `ci_scripts/ci_post_xcodebuild.sh` for Xcode Cloud.
+- Android APK/AAB build commands that invoke
+  `scripts/ota-register-embedded/register-android.sh` after Gradle;
+- an iOS Xcode Build Phase that invokes
+  `scripts/ota-register-embedded/register-ios.sh` for local Release/Archive
+  builds;
+- `ci_scripts/ci_post_xcodebuild.sh`, a thin Xcode Cloud adapter that invokes
+  the same `register-ios.sh`.
 
 Registered binaries are visible at `/updates/embedded`.
 

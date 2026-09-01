@@ -5,9 +5,22 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const CHANNEL_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
-// Exact registrar template shipped before embedded app-version support.
-const LEGACY_EMBEDDED_REGISTRAR_SHA256 =
-  "29c48288d4804c072129da0ef60a12ad0892809eb8d57a14be94d039d990d6d7";
+const LEGACY_GENERATED_FILE_SHA256 = {
+  embeddedRegistrar:
+    "29c48288d4804c072129da0ef60a12ad0892809eb8d57a14be94d039d990d6d7",
+  androidRegistrar:
+    "45a0fddd24600d109359e90ea1f347c70b411307ec232beba22dd71d8c369fe4",
+  iosRegistrar:
+    "21e4a557a49feb40bbc391db5d44c64962fdb7d9db86394c477379861e571116",
+  xcodeCloudHook:
+    "3dd1d92a782de37b8efd40662624dce21bc3d1b30442ee8dc1dd7d4c3a7b7823",
+  iosPlugin:
+    "9bd619449c3f2f6c91628bd0de885c60eab41fbecbae9420781d7929d83df844",
+};
+const ANDROID_REGISTER_SCRIPT =
+  "scripts/ota-register-embedded/register-android.sh";
+const LEGACY_ANDROID_REGISTER_SCRIPT =
+  "scripts/ota-register-embedded/android-register-embedded-update.sh";
 const PUBLISHER_DEPENDENCIES = [
   "@aws-sdk/client-s3",
   "dotenv",
@@ -197,7 +210,19 @@ function assertCopyAllowed(source, destination, force) {
   }
 }
 
-function assertEmbeddedRegistrarCopyAllowed(source, destination, force) {
+function getFileSha256(filePath) {
+  return crypto
+    .createHash("sha256")
+    .update(fs.readFileSync(filePath))
+    .digest("hex");
+}
+
+function assertGeneratedCopyAllowed(
+  source,
+  destination,
+  force,
+  recognizedSha256 = [],
+) {
   if (!fs.existsSync(destination) || force) {
     return;
   }
@@ -208,17 +233,48 @@ function assertEmbeddedRegistrarCopyAllowed(source, destination, force) {
     return;
   }
 
-  const currentSha256 = crypto
-    .createHash("sha256")
-    .update(current)
-    .digest("hex");
-  if (currentSha256 === LEGACY_EMBEDDED_REGISTRAR_SHA256) {
+  if (recognizedSha256.includes(getFileSha256(destination))) {
     return;
   }
 
   throw new Error(
     `Refusing to overwrite ${destination}. Re-run with --force.`,
   );
+}
+
+function planLegacyFileMigration(
+  filePath,
+  generatedSha256,
+  description,
+  warnings,
+) {
+  if (!fs.existsSync(filePath)) {
+    return null;
+  }
+
+  if (getFileSha256(filePath) === generatedSha256) {
+    return { filePath, generatedSha256, description };
+  }
+
+  warnings.push(
+    `Preserved customized legacy ${description} at ${filePath}. Remove it manually after verifying the canonical registration scripts.`,
+  );
+  return null;
+}
+
+function removeLegacyGeneratedFile(migration, warnings) {
+  if (!migration || !fs.existsSync(migration.filePath)) {
+    return;
+  }
+
+  if (getFileSha256(migration.filePath) !== migration.generatedSha256) {
+    warnings.push(
+      `Preserved ${migration.description} at ${migration.filePath} because it changed during configuration.`,
+    );
+    return;
+  }
+
+  fs.unlinkSync(migration.filePath);
 }
 
 function copyFile(source, destination) {
@@ -374,11 +430,26 @@ function patchPackageJson(packageJson, platform) {
     ...(packageJson.scripts || {}),
     "ota:publish": "node scripts/ota-publish/index.mjs",
   };
+  for (const scriptName of [
+    "ota:build:android:apk",
+    "ota:build:android:aab",
+  ]) {
+    if (
+      typeof packageJson.scripts[scriptName] === "string" &&
+      packageJson.scripts[scriptName].includes(
+        LEGACY_ANDROID_REGISTER_SCRIPT,
+      )
+    ) {
+      packageJson.scripts[scriptName] = packageJson.scripts[
+        scriptName
+      ].replace(LEGACY_ANDROID_REGISTER_SCRIPT, ANDROID_REGISTER_SCRIPT);
+    }
+  }
   if (platform !== "ios") {
     packageJson.scripts["ota:build:android:apk"] =
-      "cd android && ./gradlew app:assembleRelease && cd .. && OTA_EMBEDDED_REGISTER_STRICT=true sh scripts/ota-register-embedded/android-register-embedded-update.sh";
+      `cd android && ./gradlew app:assembleRelease && cd .. && OTA_EMBEDDED_REGISTER_STRICT=true sh ${ANDROID_REGISTER_SCRIPT}`;
     packageJson.scripts["ota:build:android:aab"] =
-      "cd android && ./gradlew app:bundleRelease && cd .. && OTA_EMBEDDED_REGISTER_STRICT=true sh scripts/ota-register-embedded/android-register-embedded-update.sh";
+      `cd android && ./gradlew app:bundleRelease && cd .. && OTA_EMBEDDED_REGISTER_STRICT=true sh ${ANDROID_REGISTER_SCRIPT}`;
   }
   return packageJson;
 }
@@ -534,9 +605,15 @@ export function configureExpoApp(
     templateRoot,
     "scripts",
     "ota-register-embedded",
-    "android-register-embedded-update.sh",
+    "register-android.sh",
   );
   const androidRegistrarDestination = path.join(
+    appRoot,
+    "scripts",
+    "ota-register-embedded",
+    "register-android.sh",
+  );
+  const legacyAndroidRegistrarDestination = path.join(
     appRoot,
     "scripts",
     "ota-register-embedded",
@@ -554,10 +631,17 @@ export function configureExpoApp(
   );
   const iosRegisterSource = path.join(
     templateRoot,
-    "ci_scripts",
-    "register-embedded-update.sh",
+    "scripts",
+    "ota-register-embedded",
+    "register-ios.sh",
   );
   const iosRegisterDestination = path.join(
+    appRoot,
+    "scripts",
+    "ota-register-embedded",
+    "register-ios.sh",
+  );
+  const legacyIosRegisterDestination = path.join(
     appRoot,
     "ci_scripts",
     "register-embedded-update.sh",
@@ -594,6 +678,25 @@ export function configureExpoApp(
       ),
     }),
   );
+  const migrationWarnings = [];
+  const legacyFileMigrations = [
+    planLegacyFileMigration(
+      legacyAndroidRegistrarDestination,
+      LEGACY_GENERATED_FILE_SHA256.androidRegistrar,
+      "Android registrar",
+      migrationWarnings,
+    ),
+  ];
+  if (platform !== "android") {
+    legacyFileMigrations.push(
+      planLegacyFileMigration(
+        legacyIosRegisterDestination,
+        LEGACY_GENERATED_FILE_SHA256.iosRegistrar,
+        "iOS registrar",
+        migrationWarnings,
+      ),
+    );
+  }
 
   assertCopyAllowed(certificatePath, certificateDestination, force);
   assertCopyAllowed(publisherSource, publisherDestination, force);
@@ -606,23 +709,30 @@ export function configureExpoApp(
   for (const file of publisherFiles) {
     assertCopyAllowed(file.source, file.destination, force);
   }
-  assertEmbeddedRegistrarCopyAllowed(
+  assertGeneratedCopyAllowed(
     registrarSource,
     registrarDestination,
     force,
+    [LEGACY_GENERATED_FILE_SHA256.embeddedRegistrar],
   );
   assertCopyAllowed(
     androidRegistrarSource,
     androidRegistrarDestination,
     force,
   );
-  assertCopyAllowed(iosPluginSource, iosPluginDestination, force);
+  assertGeneratedCopyAllowed(
+    iosPluginSource,
+    iosPluginDestination,
+    force,
+    [LEGACY_GENERATED_FILE_SHA256.iosPlugin],
+  );
   if (platform !== "android") {
     assertCopyAllowed(iosRegisterSource, iosRegisterDestination, force);
-    assertCopyAllowed(
+    assertGeneratedCopyAllowed(
       xcodeCloudHookSource,
       xcodeCloudHookDestination,
       force,
+      [LEGACY_GENERATED_FILE_SHA256.xcodeCloudHook],
     );
   }
   if (
@@ -684,6 +794,9 @@ export function configureExpoApp(
     fs.chmodSync(iosRegisterDestination, 0o755);
     fs.chmodSync(xcodeCloudHookDestination, 0o755);
   }
+  for (const migration of legacyFileMigrations) {
+    removeLegacyGeneratedFile(migration, migrationWarnings);
+  }
 
   return {
     appRoot,
@@ -694,5 +807,6 @@ export function configureExpoApp(
     platform,
     packageManager,
     publisherEnvConfigured: Boolean(localPublisherEnv),
+    migrationWarnings,
   };
 }

@@ -15,6 +15,103 @@ const registrarRelativePath = path.join(
 );
 const legacyRegistrarSha256 =
   "29c48288d4804c072129da0ef60a12ad0892809eb8d57a14be94d039d990d6d7";
+const legacyAndroidRegistrar = `#!/bin/sh
+
+set -eu
+
+PROJECT_ROOT="$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)"
+MANIFEST_PATH="$(find "$PROJECT_ROOT/android/app/build" -type f -name app.manifest 2>/dev/null | head -n 1 || true)"
+
+if [ -z "$MANIFEST_PATH" ]; then
+  echo "Embedded update registration failed: Android app.manifest was not found." >&2
+  [ "\${OTA_EMBEDDED_REGISTER_STRICT:-false}" = "true" ] && exit 1
+  exit 0
+fi
+
+if ! node "$PROJECT_ROOT/scripts/ota-register-embedded/index.mjs" \\
+  --manifest "$MANIFEST_PATH" \\
+  --platform android; then
+  [ "\${OTA_EMBEDDED_REGISTER_STRICT:-false}" = "true" ] && exit 1
+fi
+`;
+const legacyIosRegistrar = `#!/bin/sh
+
+set -eu
+
+if [ "\${CONFIGURATION:-Release}" = "Debug" ]; then
+  exit 0
+fi
+
+PROJECT_ROOT="\${CI_PRIMARY_REPOSITORY_PATH:-$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)}"
+MANIFEST_PATH=""
+
+for candidate in \\
+  "\${TARGET_BUILD_DIR:-}/\${UNLOCALIZED_RESOURCES_FOLDER_PATH:-}/app.manifest" \\
+  "\${CI_ARCHIVE_PATH:-}/Products/Applications/"*.app/app.manifest
+do
+  if [ -f "$candidate" ]; then
+    MANIFEST_PATH="$candidate"
+    break
+  fi
+done
+
+if [ -z "$MANIFEST_PATH" ] && [ -n "\${TARGET_BUILD_DIR:-}" ]; then
+  MANIFEST_PATH="$(find "$TARGET_BUILD_DIR" -type f -name app.manifest 2>/dev/null | head -n 1 || true)"
+fi
+
+if [ -z "$MANIFEST_PATH" ]; then
+  echo "Embedded update registration failed: iOS app.manifest was not found." >&2
+  [ "\${OTA_EMBEDDED_REGISTER_STRICT:-false}" = "true" ] && exit 1
+  exit 0
+fi
+
+if ! node "$PROJECT_ROOT/scripts/ota-register-embedded/index.mjs" \\
+  --manifest "$MANIFEST_PATH" \\
+  --platform ios; then
+  [ "\${OTA_EMBEDDED_REGISTER_STRICT:-false}" = "true" ] && exit 1
+fi
+`;
+const legacyXcodeCloudHook = `#!/bin/sh
+
+set -eu
+
+export OTA_EMBEDDED_REGISTER_STRICT="\${OTA_EMBEDDED_REGISTER_STRICT:-true}"
+sh "\${CI_PRIMARY_REPOSITORY_PATH}/ci_scripts/register-embedded-update.sh"
+`;
+const legacyIosPlugin = `const { withXcodeProject } = require("expo/config-plugins");
+
+const PHASE_NAME = "Register Expo embedded update";
+
+module.exports = function withOtaEmbeddedRegistration(config) {
+  return withXcodeProject(config, (projectConfig) => {
+    const project = projectConfig.modResults;
+    const phases =
+      project.hash.project.objects.PBXShellScriptBuildPhase || {};
+    const phaseExists = Object.values(phases).some(
+      (phase) =>
+        phase &&
+        typeof phase === "object" &&
+        phase.name === \`"\${PHASE_NAME}"\`,
+    );
+
+    if (!phaseExists) {
+      project.addBuildPhase(
+        [],
+        "PBXShellScriptBuildPhase",
+        PHASE_NAME,
+        project.getFirstTarget().uuid,
+        {
+          shellPath: "/bin/sh",
+          shellScript:
+            'OTA_EMBEDDED_REGISTER_STRICT=true sh "$PROJECT_DIR/../ci_scripts/register-embedded-update.sh"',
+        },
+      );
+    }
+
+    return projectConfig;
+  });
+};
+`;
 
 function readCurrentRegistrar() {
   return fs.readFileSync(
@@ -203,6 +300,7 @@ describe("configureExpoApp", () => {
       platform: "all",
       packageManager: "npm",
       publisherEnvConfigured: false,
+      migrationWarnings: [],
     });
 
     expect(appJson.expo.runtimeVersion).toBe("1.2.3");
@@ -229,7 +327,7 @@ describe("configureExpoApp", () => {
       "node scripts/ota-publish/index.mjs",
     );
     expect(packageJson.scripts["ota:build:android:apk"]).toContain(
-      "scripts/ota-register-embedded/android-register-embedded-update.sh",
+      "scripts/ota-register-embedded/register-android.sh",
     );
     expect(
       fs.readFileSync(
@@ -294,7 +392,17 @@ describe("configureExpoApp", () => {
           appRoot,
           "scripts",
           "ota-register-embedded",
-          "android-register-embedded-update.sh",
+          "register-android.sh",
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      fs.existsSync(
+        path.join(
+          appRoot,
+          "scripts",
+          "ota-register-embedded",
+          "register-ios.sh",
         ),
       ),
     ).toBe(true);
@@ -311,7 +419,7 @@ describe("configureExpoApp", () => {
       fs.existsSync(
         path.join(appRoot, "ci_scripts", "register-embedded-update.sh"),
       ),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       fs.existsSync(
         path.join(appRoot, "ci_scripts", "ci_post_xcodebuild.sh"),
@@ -615,6 +723,141 @@ describe("configureExpoApp", () => {
 
     expect(fs.readFileSync(registrarPath, "utf8")).toBe(
       currentRegistrar,
+    );
+  });
+
+  it("migrates exact legacy platform registrars without force", () => {
+    const { appRoot, certificatePath, templateRoot } = createFixture();
+    const legacyAndroidPath = path.join(
+      appRoot,
+      "scripts",
+      "ota-register-embedded",
+      "android-register-embedded-update.sh",
+    );
+    const legacyIosPath = path.join(
+      appRoot,
+      "ci_scripts",
+      "register-embedded-update.sh",
+    );
+    const xcodeCloudHookPath = path.join(
+      appRoot,
+      "ci_scripts",
+      "ci_post_xcodebuild.sh",
+    );
+    const iosPluginPath = path.join(
+      appRoot,
+      "plugins",
+      "with-ota-embedded-registration.js",
+    );
+    fs.mkdirSync(path.dirname(legacyAndroidPath), { recursive: true });
+    fs.mkdirSync(path.dirname(legacyIosPath), { recursive: true });
+    fs.mkdirSync(path.dirname(iosPluginPath), { recursive: true });
+    fs.writeFileSync(legacyAndroidPath, legacyAndroidRegistrar);
+    fs.writeFileSync(legacyIosPath, legacyIosRegistrar);
+    fs.writeFileSync(xcodeCloudHookPath, legacyXcodeCloudHook);
+    fs.writeFileSync(iosPluginPath, legacyIosPlugin);
+
+    const packagePath = path.join(appRoot, "package.json");
+    const packageJson = JSON.parse(fs.readFileSync(packagePath, "utf8"));
+    packageJson.scripts["ota:build:android:apk"] =
+      "build && sh scripts/ota-register-embedded/android-register-embedded-update.sh";
+    fs.writeFileSync(packagePath, JSON.stringify(packageJson, null, 2));
+
+    const result = configureExpoApp(
+      {
+        app: appRoot,
+        certificate: certificatePath,
+        serverUrl: "https://updates.example.com",
+        channel: "production",
+        runtimeVersion: "1.0.0",
+      },
+      {
+        commandRunner: createRunner().commandRunner,
+        templateRoot,
+      },
+    );
+
+    const configuredPackage = JSON.parse(
+      fs.readFileSync(packagePath, "utf8"),
+    );
+    expect(result.migrationWarnings).toEqual([]);
+    expect(fs.existsSync(legacyAndroidPath)).toBe(false);
+    expect(fs.existsSync(legacyIosPath)).toBe(false);
+    expect(fs.readFileSync(xcodeCloudHookPath, "utf8")).toContain(
+      "scripts/ota-register-embedded/register-ios.sh",
+    );
+    expect(fs.readFileSync(iosPluginPath, "utf8")).toContain(
+      "scripts/ota-register-embedded/register-ios.sh",
+    );
+    expect(
+      fs.existsSync(
+        path.join(
+          appRoot,
+          "scripts",
+          "ota-register-embedded",
+          "register-android.sh",
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      fs.existsSync(
+        path.join(
+          appRoot,
+          "scripts",
+          "ota-register-embedded",
+          "register-ios.sh",
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      configuredPackage.scripts["ota:build:android:apk"],
+    ).toContain("scripts/ota-register-embedded/register-android.sh");
+  });
+
+  it("preserves and reports customized obsolete platform registrars", () => {
+    const { appRoot, certificatePath, templateRoot } = createFixture();
+    const legacyAndroidPath = path.join(
+      appRoot,
+      "scripts",
+      "ota-register-embedded",
+      "android-register-embedded-update.sh",
+    );
+    const legacyIosPath = path.join(
+      appRoot,
+      "ci_scripts",
+      "register-embedded-update.sh",
+    );
+    fs.mkdirSync(path.dirname(legacyAndroidPath), { recursive: true });
+    fs.mkdirSync(path.dirname(legacyIosPath), { recursive: true });
+    fs.writeFileSync(legacyAndroidPath, "# custom Android registrar\n");
+    fs.writeFileSync(legacyIosPath, "# custom iOS registrar\n");
+
+    const result = configureExpoApp(
+      {
+        app: appRoot,
+        certificate: certificatePath,
+        serverUrl: "https://updates.example.com",
+        channel: "production",
+        runtimeVersion: "1.0.0",
+      },
+      {
+        commandRunner: createRunner().commandRunner,
+        templateRoot,
+      },
+    );
+
+    expect(fs.readFileSync(legacyAndroidPath, "utf8")).toBe(
+      "# custom Android registrar\n",
+    );
+    expect(fs.readFileSync(legacyIosPath, "utf8")).toBe(
+      "# custom iOS registrar\n",
+    );
+    expect(result.migrationWarnings).toHaveLength(2);
+    expect(result.migrationWarnings.join("\n")).toContain(
+      "Preserved customized legacy Android registrar",
+    );
+    expect(result.migrationWarnings.join("\n")).toContain(
+      "Preserved customized legacy iOS registrar",
     );
   });
 });

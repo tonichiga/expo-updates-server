@@ -1,6 +1,8 @@
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import vm from "node:vm";
 import { describe, expect, it } from "vitest";
 
 const registrarUrl = pathToFileURL(
@@ -57,8 +59,8 @@ describe("embedded update registrar", () => {
     const templateRoot = path.resolve("templates/expo-app");
     const files = [
       "scripts/ota-register-embedded/index.mjs",
-      "scripts/ota-register-embedded/android-register-embedded-update.sh",
-      "ci_scripts/register-embedded-update.sh",
+      "scripts/ota-register-embedded/register-android.sh",
+      "scripts/ota-register-embedded/register-ios.sh",
       "ci_scripts/ci_post_xcodebuild.sh",
       "plugins/with-ota-embedded-registration.js",
     ];
@@ -67,5 +69,165 @@ describe("embedded update registrar", () => {
       .join("\n");
 
     expect(content.toLowerCase()).not.toContain("miex");
+  });
+
+  it("uses the canonical iOS registrar from local Xcode and Xcode Cloud", () => {
+    const templateRoot = path.resolve("templates/expo-app");
+    const iosRegistrar = fs.readFileSync(
+      path.join(
+        templateRoot,
+        "scripts/ota-register-embedded/register-ios.sh",
+      ),
+      "utf8",
+    );
+    const cloudAdapter = fs.readFileSync(
+      path.join(templateRoot, "ci_scripts/ci_post_xcodebuild.sh"),
+      "utf8",
+    );
+    const plugin = fs.readFileSync(
+      path.join(
+        templateRoot,
+        "plugins/with-ota-embedded-registration.js",
+      ),
+      "utf8",
+    );
+
+    expect(iosRegistrar).toContain(
+      '${TARGET_BUILD_DIR:-}',
+    );
+    expect(iosRegistrar).toContain('${CI_ARCHIVE_PATH:-}');
+    expect(iosRegistrar).toContain(
+      '${OTA_EMBEDDED_REGISTER_STRICT:-false}',
+    );
+    expect(iosRegistrar).toContain(
+      '[ "${CONFIGURATION:-Release}" = "Debug" ]',
+    );
+    expect(cloudAdapter).toContain(
+      "scripts/ota-register-embedded/register-ios.sh",
+    );
+    expect(cloudAdapter).toContain("CI_PRIMARY_REPOSITORY_PATH");
+    expect(plugin).toContain(
+      'scripts/ota-register-embedded/register-ios.sh',
+    );
+    expect(plugin).not.toContain("ci_scripts/register-embedded-update.sh");
+  });
+
+  it("preserves iOS Debug skip and strict/non-strict behavior", () => {
+    const iosRegistrar = path.resolve(
+      "templates/expo-app/scripts/ota-register-embedded/register-ios.sh",
+    );
+    const baseEnv = {
+      ...process.env,
+      TARGET_BUILD_DIR: "",
+      UNLOCALIZED_RESOURCES_FOLDER_PATH: "",
+      CI_ARCHIVE_PATH: "",
+    };
+
+    const debug = spawnSync("sh", [iosRegistrar], {
+      encoding: "utf8",
+      env: {
+        ...baseEnv,
+        CONFIGURATION: "Debug",
+        OTA_EMBEDDED_REGISTER_STRICT: "true",
+      },
+    });
+    const nonStrict = spawnSync("sh", [iosRegistrar], {
+      encoding: "utf8",
+      env: {
+        ...baseEnv,
+        CONFIGURATION: "Release",
+        OTA_EMBEDDED_REGISTER_STRICT: "false",
+      },
+    });
+    const strict = spawnSync("sh", [iosRegistrar], {
+      encoding: "utf8",
+      env: {
+        ...baseEnv,
+        CONFIGURATION: "Release",
+        OTA_EMBEDDED_REGISTER_STRICT: "true",
+      },
+    });
+
+    expect(debug.status).toBe(0);
+    expect(debug.stderr).toBe("");
+    expect(nonStrict.status).toBe(0);
+    expect(nonStrict.stderr).toContain("iOS app.manifest was not found");
+    expect(strict.status).toBe(1);
+    expect(strict.stderr).toContain("iOS app.manifest was not found");
+  });
+
+  it("fails clearly when the Xcode Cloud project root is unavailable", () => {
+    const cloudAdapter = path.resolve(
+      "templates/expo-app/ci_scripts/ci_post_xcodebuild.sh",
+    );
+    const result = spawnSync("sh", [cloudAdapter], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        CI_PRIMARY_REPOSITORY_PATH:
+          "/path-that-does-not-exist/expo-app",
+      },
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "CI_PRIMARY_REPOSITORY_PATH is unavailable",
+    );
+  });
+
+  it("updates an existing Xcode registration phase to the canonical path", () => {
+    const pluginPath = path.resolve(
+      "templates/expo-app/plugins/with-ota-embedded-registration.js",
+    );
+    const pluginSource = fs.readFileSync(pluginPath, "utf8");
+    const pluginModule = { exports: {} as (config: unknown) => unknown };
+    const loadPlugin = vm.runInNewContext(
+      `(function (require, module, exports) { ${pluginSource}\n })`,
+    );
+    loadPlugin(
+      (specifier: string) => {
+        if (specifier !== "expo/config-plugins") {
+          throw new Error(`Unexpected module: ${specifier}`);
+        }
+        return {
+          withXcodeProject: (
+            config: unknown,
+            action: (value: unknown) => unknown,
+          ) => action(config),
+        };
+      },
+      pluginModule,
+      pluginModule.exports,
+    );
+
+    const phase = {
+      name: '"Register Expo embedded update"',
+      shellPath: "/bin/sh",
+      shellScript: '"legacy path"',
+    };
+    const projectConfig = {
+      modResults: {
+        hash: {
+          project: {
+            objects: {
+              PBXShellScriptBuildPhase: { phase },
+            },
+          },
+        },
+        addBuildPhase: () => {
+          throw new Error("Existing phase must be updated, not duplicated");
+        },
+        getFirstTarget: () => ({ uuid: "TARGET" }),
+      },
+    };
+
+    pluginModule.exports(projectConfig);
+
+    expect(phase.shellScript).toContain(
+      "scripts/ota-register-embedded/register-ios.sh",
+    );
+    expect(phase.shellScript).not.toContain(
+      "ci_scripts/register-embedded-update.sh",
+    );
   });
 });
