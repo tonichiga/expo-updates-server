@@ -211,21 +211,23 @@ export default function UpdatePolicyEditor({
               />
               Enabled
             </label>
-            <input
-              type="number"
-              min={0}
-              value={rule.priority}
-              disabled={editingDisabled}
-              onChange={(event) =>
-                updateRule(ruleIndex, (current) => ({
-                  ...current,
-                  priority: Number(event.target.value),
-                }))
-              }
-              aria-label="Rule priority"
-              className="w-24 rounded border border-zinc-300 bg-transparent p-2 text-sm dark:border-zinc-700"
-              placeholder="Priority"
-            />
+            <label className="flex items-center gap-2 text-sm">
+              Priority
+              <input
+                type="number"
+                min={0}
+                value={rule.priority}
+                disabled={editingDisabled}
+                onChange={(event) =>
+                  updateRule(ruleIndex, (current) => ({
+                    ...current,
+                    priority: Number(event.target.value),
+                  }))
+                }
+                aria-describedby={`rule-priority-help-${ruleIndex}`}
+                className="w-24 rounded border border-zinc-300 bg-transparent p-2 text-sm dark:border-zinc-700"
+              />
+            </label>
             <input
               value={rule.action}
               maxLength={100}
@@ -254,6 +256,13 @@ export default function UpdatePolicyEditor({
               Remove rule
             </button>
           </div>
+          <p
+            id={`rule-priority-help-${ruleIndex}`}
+            className="text-xs text-zinc-500"
+          >
+            Lower numbers run first. Compared only among Guard rules attached
+            to this update—not across OTA updates or versions.
+          </p>
           <label className="block text-xs text-zinc-500">
             Optional payload JSON
             <textarea
