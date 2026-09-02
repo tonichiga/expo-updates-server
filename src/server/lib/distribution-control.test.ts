@@ -5,7 +5,7 @@ const database = vi.hoisted(() => ({
     blocked: false,
     version: 1,
     reason: null as string | null,
-    changed_at: "2026-09-02T00:00:00.000Z",
+    changed_at: "2026-09-02T00:00:00.000Z" as string | Date,
     changed_by: {
       type: "system",
       id: "migration",
@@ -41,7 +41,7 @@ vi.mock("./supabase.js", () => ({
         version: database.row.version + 1,
         reason:
           typeof params.p_reason === "string" ? params.p_reason : null,
-        changed_at: "2026-09-02T00:01:00.000Z",
+        changed_at: new Date("2026-09-02T00:01:00.000Z"),
         changed_by: params.p_changed_by as typeof database.row.changed_by,
       };
       return { data: [database.row], error: null };
@@ -91,6 +91,26 @@ describe("OTA distribution control service", () => {
     await expect(isOtaDistributionBlocked()).resolves.toBe(false);
   });
 
+  it("normalizes a PostgreSQL timestamptz Date to an ISO string", async () => {
+    database.row.changed_at = new Date("2026-09-01T21:31:08.722Z");
+
+    await expect(getDistributionControlState()).resolves.toMatchObject({
+      changedAt: "2026-09-01T21:31:08.722Z",
+    });
+  });
+
+  it("rejects invalid changed_at strings and Dates", async () => {
+    database.row.changed_at = "not-a-date";
+    await expect(getDistributionControlState()).rejects.toThrow(
+      "Invalid OTA distribution control changed_at.",
+    );
+
+    database.row.changed_at = new Date(Number.NaN);
+    await expect(getDistributionControlState()).rejects.toThrow(
+      "Invalid OTA distribution control changed_at.",
+    );
+  });
+
   it("does not interpret a database error or missing singleton as active", async () => {
     database.readError = { message: "relation does not exist" };
     await expect(isOtaDistributionBlocked()).rejects.toThrow(
@@ -116,6 +136,7 @@ describe("OTA distribution control service", () => {
       blocked: true,
       version: 2,
       reason: "INC-42 bad rollout",
+      changedAt: "2026-09-02T00:01:00.000Z",
       changedBy: principal,
     });
     expect(database.rpcParams).toMatchObject({
