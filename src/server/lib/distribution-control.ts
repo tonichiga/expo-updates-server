@@ -92,6 +92,18 @@ function parsePrincipal(value: unknown): DistributionControlPrincipal {
   };
 }
 
+function parseChangedAt(value: unknown): string {
+  const changedAt =
+    value instanceof Date
+      ? value
+      : new Date(requiredString(value, "changed_at", 100));
+
+  if (Number.isNaN(changedAt.getTime())) {
+    throw new Error("Invalid OTA distribution control changed_at.");
+  }
+  return changedAt.toISOString();
+}
+
 function parseStateRow(value: unknown): DistributionControlState {
   if (!isRecord(value)) {
     throw new Error("OTA distribution control state is missing.");
@@ -106,10 +118,7 @@ function parseStateRow(value: unknown): DistributionControlState {
     throw new Error("Invalid OTA distribution control state.");
   }
 
-  const changedAt = requiredString(value.changed_at, "changed_at", 100);
-  if (Number.isNaN(Date.parse(changedAt))) {
-    throw new Error("Invalid OTA distribution control changed_at.");
-  }
+  const changedAt = parseChangedAt(value.changed_at);
 
   const reason =
     value.reason === null
