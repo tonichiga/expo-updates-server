@@ -10,6 +10,7 @@
     "README.md",
     "app/**",
     "docker-compose.yml",
+    "docker/minio.Dockerfile",
     "docs/expo-app-setup.md",
     "docs/getting-started.md",
     "docs/getting-started.ru.md",

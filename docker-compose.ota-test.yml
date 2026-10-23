@@ -1,14 +1,10 @@
-# Local test fallback: upstream MinIO container images are no longer public.
+# Local test image names and loopback-only app port.
 services:
   minio:
     image: ota-test-minio:2025-10-15
     build:
       context: .
-      dockerfile: docker/minio-test.Dockerfile
-  minio-init:
-    image: ota-test-app
-    pull_policy: never
-    entrypoint: ["node", "/app/scripts/ensure-test-bucket.mjs"]
+      dockerfile: docker/minio.Dockerfile
   app:
     image: ota-test-app
     ports: !override

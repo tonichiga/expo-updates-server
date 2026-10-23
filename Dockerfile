@@ -10,6 +10,11 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
+FROM production-dependencies AS storage-init
+COPY scripts/ensure-storage-bucket.mjs ./scripts/ensure-storage-bucket.mjs
+USER node
+ENTRYPOINT ["node", "/app/scripts/ensure-storage-bucket.mjs"]
+
 FROM node:24-alpine AS builder
 
 WORKDIR /app

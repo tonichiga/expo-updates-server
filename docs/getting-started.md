@@ -125,6 +125,10 @@ docker compose up -d --build
 docker compose ps
 ```
 
+The first build compiles a pinned MinIO release from source and may take several
+minutes. Go runs inside Docker; no host installation is needed. Subsequent starts
+reuse the built image. Bucket creation is automatic; no `minio/mc` image is needed.
+
 Wait until `postgres`, `minio` and `app` are `healthy`. `/api/health` currently
 checks the database only. Verify that the app can also read a valid signing key:
 

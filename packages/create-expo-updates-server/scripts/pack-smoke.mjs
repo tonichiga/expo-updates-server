@@ -3,6 +3,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import { dockerSmoke } from "./docker-smoke.mjs";
 
 const packageDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const repositoryRoot = path.resolve(packageDir, "../..");
@@ -165,6 +166,7 @@ try {
   console.log(
     `npm pack smoke test passed (${packResult.size} bytes, ${packedFiles.length} files).`,
   );
+  if (process.argv.includes("--docker")) await dockerSmoke(generatedRoot);
 } finally {
   await rm(workRoot, { recursive: true, force: true });
 }
