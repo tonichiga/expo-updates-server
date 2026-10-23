@@ -190,7 +190,9 @@ export function patchOtaRootHook(text, filename, appRoot) {
     )
       hookStatement = parent;
     else fail("the existing hook must be unconditional at the top level");
-    if (hook.arguments.length > 1) fail("unsupported hook arguments");
+    if (hook.arguments.length > 1 || hook.arguments.some(ts.isSpreadElement)) {
+      fail("unsupported hook arguments");
+    }
     props = "autoCheck={false}";
     if (hook.arguments[0])
       props += ` {...${hook.arguments[0].getText(source)}}`;

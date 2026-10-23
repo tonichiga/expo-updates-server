@@ -125,6 +125,7 @@ export default () => <><Updates autoUpdate /><Stack /></>;`;
     "import { useOtaUpdates } from '../../ota-client'; export default function Root() { if (loading) return null; const updates = useOtaUpdates(); return null; }",
     "import { OtaUpdates } from '../../ota-client'; export default function Root(OtaUpdates) { return null; }",
     "import { useOtaUpdates } from '@/ota-client'; export default function Root() { useOtaUpdates(); return null; }",
+    "import { useOtaUpdates } from '../../ota-client'; export default function Root() { useOtaUpdates(...options); return null; }",
     "import { useOtaUpdates, OtaUpdateGate } from '../../ota-client'; export default function Root() { const ota = useOtaUpdates(); return <OtaUpdateGate controller={ota}><Text>{ota.status}</Text></OtaUpdateGate>; }",
   ])("rejects an unsafe root before changing it: %s", (source) => {
     expect(() => patch(source)).toThrow("Cannot automatically connect");
