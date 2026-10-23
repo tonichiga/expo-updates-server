@@ -44,9 +44,17 @@ publication must use the tag-triggered Trusted Publishing workflow.
    ```bash
    npm ci
    npm run installer:check
-   npm run installer:pack-smoke
+   npm run installer:pack-smoke -- --docker
    npm run docs:build
    ```
+
+   Run this with Docker Engine and Compose 2.24.4+ available. The `--docker`
+   smoke test boots the project generated from the packed npm artifact with
+   fresh volumes, temporary credentials/keys and random loopback ports. It checks
+   database health, signing-key access, storage upload/download and repeatable
+   bucket initialization, then removes only its own containers and volumes.
+   The first MinIO source build takes several minutes. Without `--docker`,
+   pack smoke verifies generation and dependency installation only.
 
 4. Open a pull request and merge it only after CI and review pass.
 5. On the merged commit, create and push exactly:

@@ -22,7 +22,9 @@ services:
       retries: 20
 
   minio:
-    image: minio/minio:latest
+    build:
+      context: .
+      dockerfile: docker/minio.Dockerfile
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
@@ -40,17 +42,13 @@ services:
       retries: 20
 
   minio-init:
-    image: minio/mc:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: storage-init
     depends_on:
       minio:
         condition: service_healthy
-    entrypoint:
-      - /bin/sh
-      - -c
-      - >
-        mc alias set local http://minio:9000
-        "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}" &&
-        mc mb --ignore-existing "local/$${OTA_STORAGE_BUCKET}"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-expo_updates}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-expo_updates_local}
