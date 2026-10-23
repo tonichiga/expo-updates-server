@@ -4,6 +4,23 @@ This guide takes you from an empty machine to a working OTA server and a
 connected Expo application. Deep Docker, PostgreSQL or Supabase knowledge is
 not required.
 
+## Before you start
+
+Use Node.js 24 and npm on the host (also for Docker-based setup), Docker Compose,
+and OpenSSL. Building the app also needs the platform's native toolchain: Java/Android
+SDK or macOS/Xcode. The server's Docker image does not provide the mobile toolchain.
+
+Create the server files, or use an existing source checkout:
+
+```bash
+npx create-expo-updates-server@latest my-server
+cd my-server
+```
+
+NPX only creates files; Docker/Supabase determine where those files run.
+Follow the Docker path below for a first test. Run server commands from this folder
+until the guide explicitly switches to the application folder.
+
 ## What you will have
 
 At the end you can:
@@ -58,7 +75,10 @@ POSTGRES_PASSWORD=choose-a-long-random-password
 MINIO_ROOT_PASSWORD=choose-another-long-random-password
 ```
 
-Do not publish `.env` to GitHub.
+For this Docker setup, use separate random hexadecimal passwords, for example
+values generated with `openssl rand -hex 32`. Compose embeds the database password
+in a URL and the configurator copies storage values between env files; special
+characters currently need additional handling. Do not publish `.env` to GitHub.
 
 If port `3000` is busy:
 
@@ -105,7 +125,23 @@ docker compose up -d --build
 docker compose ps
 ```
 
-Wait until `postgres`, `minio` and `app` are `healthy`.
+Wait until `postgres`, `minio` and `app` are `healthy`. `/api/health` currently
+checks the database only. Verify that the app can also read a valid signing key:
+
+```bash
+docker compose exec app node -e "require('node:crypto').createPrivateKey(require('node:fs').readFileSync('/run/secrets/ota/code-signing-private-key.pem')); console.log('Signing key OK')"
+```
+
+On Linux bind mounts, a host-owned `chmod 600` key can be unreadable to the
+container's UID/GID `1001`. If the check reports `EACCES`, grant that group read
+access and rerun the check:
+
+```bash
+sudo chgrp 1001 secrets/code-signing-private-key.pem
+chmod 640 secrets/code-signing-private-key.pem
+```
+
+The `secrets` directory must also allow traversal by the container user.
 
 ## Step 6. Database setup is automatic
 
@@ -254,6 +290,10 @@ role key is a backend secret. Never place it in the Expo application.
 
 ## Step 6. Configure the OTA server
 
+Create a matching [signing key pair](#step-4-create-the-signing-key-pair) first.
+Set the private-key path below to the actual server-readable file; retain the
+public certificate for application configuration.
+
 Create `.env.local`:
 
 ```env
@@ -291,186 +331,105 @@ Choose the `admin` role for the first user.
 
 These steps are the same for Docker and Supabase.
 
-## Automatic CLI configuration
+## 1. Configure the application
 
-For an Expo application with a static `app.json`, run this command from the OTA
-server repository:
+Prerequisites: Node.js/npm on the host, a static `app.json` Expo project, the
+public signing certificate, and the HTTPS server URL reachable from the phone.
+Use the same URL for the server's `OTA_PUBLIC_BASE_URL`. The configurator runs
+on the host even when the server runs in Docker.
+
+From the **server directory**:
 
 ```bash
+npm ci
 npm run configure-app
 ```
 
-The CLI asks for the application path, public certificate, server URL, channel,
-runtime, platform and overwrite preference. It displays a summary and requires
-confirmation before changing files or running `expo prebuild`.
+Select the app directory, certificate, public URL, channel, runtime and platform.
+The CLI installs dependencies, configures native updates, generates the identity
+and telemetry client, inserts the root hook/gate, installs publisher/registration
+scripts and runs prebuild. Review its summary before applying changes.
 
-For CI or advanced usage, pass the same values as flags:
+For flags, supported root components and reruns, see
+[automatic configuration](./expo-app-setup.md#automatic-configuration).
+Dynamic `app.config.*` projects require [manual client integration](./ota-client-lifecycle.md#manual-integration);
+the bundled publisher currently reads static `app.json` only.
 
-```bash
-npm run configure-app -- \
-  --app /full/path/to/expo-application \
-  --certificate /full/path/code-signing-certificate.pem \
-  --server-url https://updates.example.com \
-  --channel production \
-  --runtime-version 1.0.0
-```
+## 2. Check publisher and build credentials
 
-The CLI:
-
-1. validates the Expo project;
-2. installs the Expo-compatible `expo-updates` version;
-3. configures URL, channel, runtime and code signing in `app.json`;
-4. copies the public certificate;
-5. installs a portable publish script;
-6. creates `.env.ota.example`;
-7. adds `npm run ota:publish`;
-8. installs publisher dependencies;
-9. installs Android, Xcode and Xcode Cloud embedded registration hooks;
-10. runs `expo prebuild` to synchronize native projects.
-
-Use `--platform ios` or `--platform android` to prebuild one platform. The
-default is both platforms.
-
-Existing generated publisher or certificate files are not overwritten. Add
-`--force` only when replacement is intentional.
-
-The CLI stops when `app.config.ts`, `app.config.js`, `app.config.mjs` or
-`app.config.cjs` exists because dynamic Expo config overrides `app.json`.
-
-After configuration:
+Switch to the **application directory**. For local Docker exposed through
+localhost or `*.devtunnels.ms`, the configurator can create `.env.ota` from the
+server's `.env`. Keep that generated file. If it does not exist, create it once:
 
 ```bash
 cd /full/path/to/expo-application
-cp .env.ota.example .env.ota
+[ -f .env.ota ] || cp .env.ota.example .env.ota
 ```
 
-Fill in the publisher credentials, then run:
+Fill any missing database and storage credentials from your server setup. Keep
+this file ignored by Git and out of application imports. The publisher needs
+`OTA_DATABASE_URL` and S3 credentials; an admin access token does not replace them.
 
-```bash
-npm run ota:publish -- --message "Describe the change"
-```
+Embedded-build registration can use the same local `OTA_DATABASE_URL`. For
+registration over HTTP, provide `OTA_SERVER_URL` and an `OTA_ACCESS_TOKEN` with
+`updates:write`; create it with `docker compose exec app npm run create-access-token`
+from the **server directory** for Docker, or `npm run create-access-token` for
+a server running directly with npm. See [embedded registration](./expo-app-setup.md#_6-register-embedded-updates).
 
-For local Docker with a `localhost` server URL, the CLI creates the ignored
-`.env.ota` automatically from the OTA server `.env`. Manual configuration is
-only required for a remote server, Supabase or another storage provider.
-Microsoft Dev Tunnel URLs (`*.devtunnels.ms`) are also recognized as local
-Docker exposure: the public tunnel is used for `OTA_SERVER_URL`, while the
-publisher connects directly to MinIO at `http://127.0.0.1:9000`.
+## 3. Build and install a native release
 
-The update is uploaded as inactive. Activate it in the admin panel after
-review. The following sections describe the equivalent manual setup.
+Before building, choose how the app will download and apply updates.
 
-## Register the update embedded in a binary
+The generated root checks automatically, but defaults to manual download/restart.
+Add the [manual controls example](./ota-client-lifecycle.md#_3-add-manual-update-controls)
+to a test screen, or explicitly configure automation using the [hook options](./ota-client-lifecycle.md).
+The generator does not add test buttons to your application's UI.
 
-Every release binary contains an embedded update. The server needs its ID for
-reliable rollback and emergency redirects. The configurator installs this flow
-automatically.
-
-For local Docker, build Android with:
+From the **application directory**, with the Android toolchain installed:
 
 ```bash
 npm run ota:build:android:apk
 ```
 
-Use `npm run ota:build:android:aab` for an App Bundle. After Gradle succeeds,
-`scripts/ota-register-embedded/register-android.sh` finds `app.manifest` and
-registers the embedded update. For iOS, the configurator adds an Xcode Build
-Phase that invokes `scripts/ota-register-embedded/register-ios.sh`, so a
-Release/Archive build in Xcode performs registration automatically.
-The registrar uses an app version from the embedded manifest when available;
-otherwise it falls back to the normalized `expo.version` in the project's
-static `app.json`. A missing or invalid fallback remains `null` and does not
-fail an otherwise valid registration.
+Install `android/app/build/outputs/apk/release/app-release.apk` on the phone.
+For iOS, build a signed Release/Archive in Xcode; the generated build phase
+registers the embedded update. Registration must succeed before continuing.
 
-For remote CI or Xcode Cloud, do not provide PostgreSQL credentials. Create a
-dedicated token:
+URL, runtime, channel, certificate and added native modules require a new native
+build. Expo Go and development mode do not test this lifecycle. Launch the release
+and confirm it appears under `/updates/devices`; confirm its embedded update under
+`/updates/embedded`.
 
-```bash
-docker compose exec app npm run create-access-token
-```
+## 4. Publish the first OTA
 
-Keep the default `updates:write` scope and add the displayed token to CI
-secrets:
-
-```env
-OTA_SERVER_URL=https://updates.example.com
-OTA_ACCESS_TOKEN=ota_...
-```
-
-The configurator also creates `ci_scripts/ci_post_xcodebuild.sh`, a thin Xcode
-Cloud lifecycle adapter that invokes the same `register-ios.sh`. The token is
-shown only once and must never be committed or included in the mobile binary.
-Verify registered binaries at `/updates/embedded`.
-
-## Step 1. Install Expo Updates
+Make a visible JavaScript change **after building the binary**. Keep its compatible
+runtime and channel; change `expo.version` if you want a distinct version label.
+From the **application directory**:
 
 ```bash
-npx expo install expo-updates
+npm run ota:publish -- --platform android --message "First OTA smoke test"
 ```
 
-## Step 2. Copy the public certificate
+Use `--platform ios` for iOS. The command exports and uploads the update as inactive.
+In `/updates`, verify platform/runtime/channel, select the intended device audience,
+then activate the update.
 
-Copy `code-signing-certificate.pem` into a `certificates` directory in the Expo
-application. Never copy the private key into the mobile project.
+## 5. Download, restart and verify
 
-## Step 3. Configure Expo
+Check → download → restart. Confirm the visible change and the new running version
+under `/updates/devices`. Download alone must not change the reported running version.
+The Installation ID should stay unchanged across an OTA restart.
 
-Use the `app.config.ts` example in
-[`expo-app-setup.md`](https://github.com/tonichiga/expo-updates-server/blob/main/docs/expo-app-setup.md).
-Set:
+For a separate first-install test and idempotent configurator reruns, use
+[fresh app verification](./expo-app-setup.md#verify-generation-in-a-fresh-application).
 
-- `EXPO_OTA_SERVER_URL`;
-- `EXPO_UPDATE_CHANNEL`;
-- `EXPO_RUNTIME_VERSION`.
+## Diagnose the setup
 
-A physical device cannot reach the computer through `localhost`. Production
-requires a public HTTPS URL. For local device testing, use the
-[HTTPS Dev Tunnel setup](#recommended-use-an-https-tunnel-for-device-testing)
-instead of a plain HTTP LAN address.
-
-## Step 4. Build a new native binary
-
-The OTA URL, channel, runtime and certificate are native settings. Build the
-iOS or Android application again after changing them.
-
-## Step 5. Publish an update
-
-After automatic configuration, use:
-
-```bash
-npm run ota:publish -- --message "Describe the change"
-```
-
-The publisher exports JavaScript, uploads assets and inserts database records.
-The new update remains inactive until you approve it.
-
-## Step 6. Activate the update
-
-1. Open `/updates` in the admin panel.
-2. Find the new update.
-3. Confirm its channel, runtime and platform.
-4. Activate it manually.
-
-## Step 7. Test on a device
-
-Before testing, complete the
-[Expo application setup tutorial](https://github.com/tonichiga/expo-updates-server/blob/main/docs/expo-app-setup.md).
-In particular, add the
-[`checkForUpdateAsync`, `fetchUpdateAsync`, and `reloadAsync` flow](https://github.com/tonichiga/expo-updates-server/blob/main/docs/expo-app-setup.md#5-check-and-install-updates-in-the-application)
-to a screen or startup flow in the application.
-
-Then:
-
-1. Create and install a release build containing the OTA URL, runtime,
-   channel, and public certificate.
-2. Publish an update with a visible test change.
-3. Activate the update in the admin panel.
-4. Open the release build and trigger the update check.
-5. Download the update, reload the application, and confirm the test change.
-
-Expo Go and development mode are not suitable for this test because the
-application must use the native update configuration embedded in the release
-binary.
+From the **server directory**, run `npm run doctor -- --app /full/path/to/expo-application`.
+This checks the running Docker stack and app source without changing them.
+For npm/remote deployments add `--mode remote --server-env .env.local`.
+Use `--offline` before starting services. See [doctor](./doctor.md) for custom
+Compose projects, JSON output and the checks that still require a real device.
 
 ## Troubleshooting
 

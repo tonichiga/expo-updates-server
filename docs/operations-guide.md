@@ -75,6 +75,11 @@ Passwords must contain at least 12 characters. Only bcrypt hashes are stored.
 
 ## 5. Manual startup
 
+Before starting, create the [signing key pair](./expo-app-setup.md#_2-create-the-code-signing-certificate)
+and set `CODE_SIGNING_PRIVATE_KEY_PATH` to the private key's absolute path.
+The server process must be able to read it; retain the public certificate for the app.
+The health endpoint below verifies the database, not signing or storage readiness.
+
 ```bash
 npm ci
 npm run build
@@ -314,8 +319,90 @@ docker compose exec -T postgres \
 
 Never deploy code that reads a new table before creating that table.
 
+### Manifest identity migration (2026-10-16)
+
+Apply `docs/migrations/2026-10-16-manifest-identity.sql` before deploying the
+matching server code. Fresh installations receive these changes from
+`schema.sql`. Existing installations must already have the distribution
+control migration described above.
+
+For this upgrade, stop OTA distribution, apply the migration, replace all
+server instances, and then resume distribution. Do not serve traffic from a
+mixture of old and new instances: older code can return a manifest even when
+its asynchronous mapping write fails. Reverting to that code reintroduces
+the identity bug; keeping the new SQL triggers alone is insufficient.
+
+Each manifest UUID is now derived from the channel publication epoch and the
+actual selected update UUID. An inactive upload can therefore use the stable
+fallback without sharing its manifest ID with the eventual activated update.
+Activation advances the channel epoch even if its latest pointer is unchanged.
+Pointer changes and repeated rollback operations advance the epoch clock by
+at least one millisecond, so successive publications remain ordered for Expo.
+
+The server records the manifest-to-update mapping before returning a manifest.
+Missing mapping tables, lookup errors, or failed mapping writes now fail the
+request instead of silently changing IDs or losing history. Identical mapping
+retries are allowed; assigning an existing manifest ID to a different update
+or scope is rejected by PostgreSQL. No-update responses need no new mapping.
+
+Existing mapping rows are preserved and remain readable by the new server.
+Previously overwritten historical mappings cannot be automatically repaired.
+This change protects ID-to-update correspondence; it does not freeze all
+published JSON/assets or change the existing deletion/retention policy.
+Current admin channel IDs represent publication epochs, not the derived UUIDs
+returned to devices.
+
+The SQL regression script can be run against a **disposable** database after
+applying the schema and migration:
+
+```bash
+psql "$OTA_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 \
+  -f scripts/tests/manifest-identity.sql
+```
+
+It verifies draft activation, repeated activation/rollback, monotonic clocks,
+the global distribution guard, and immutable mapping upserts. It temporarily
+changes the global switch and rolls back its fixtures; do not run it against
+a live OTA database.
+
 ## 12. Expo application integration
 
 Client configuration, code-signing certificates, embedded update registration,
 manual update checks and the current publish workflow are described in
 [`expo-app-setup.md`](expo-app-setup.md).
+
+## Installation telemetry
+
+After the manifest identity and distribution-control migrations above, apply the
+following files in order before deploying the updated server:
+
+```sh
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+  -f docs/migrations/2026-10-19-device-heartbeat.sql \
+  -f docs/migrations/2026-10-22-device-analytics.sql \
+  -f docs/migrations/2026-10-22-device-version-metadata.sql \
+  -f docs/migrations/2026-10-22-device-targeting.sql \
+  -f docs/migrations/2026-10-22-device-targeting-activation.sql
+```
+
+Fresh installations use only `schema.sql`, which includes these changes. Reapplying
+these migrations preserves collection start, installation records and release audiences.
+The final migration moves public-versus-targeted activation into an atomic database
+operation, allows deactivation cleanup during the global stop, and adds the separate
+`ota-force-update` catalog entry. Apply it before deploying the matching server.
+
+Rerun the stock app configurator to install the generated identity/telemetry client and
+root `useOtaUpdates`/`OtaUpdateGate` integration. Adding SecureStore or the other native
+client dependencies requires a native rebuild with a compatible runtime; do not publish
+JavaScript that imports unavailable native modules to an older runtime. Existing clients
+already sending heartbeats can populate analytics without a native rebuild, but the new
+Device ID and hook lifecycle need the updated client. See
+[client lifecycle](./ota-client-lifecycle.md) and [device targeting](./device-targeting.md).
+
+The **Установки** page (`/updates/devices`) shows current launch adoption, daily
+activity, and cohorts. Daily history begins at migration time; pre-upgrade
+history is unavailable. Retention has an independent 90-day window and uses
+fully observed later days. Existing installations remain visible in current
+composition cohorts. See [installation telemetry](./installation-telemetry.md)
+for exact filter/window semantics, migration checks, the event contract, client
+entry behavior, access rules and limitations.

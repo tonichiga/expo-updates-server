@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1,
   "include": [
+    ".dockerignore",
     ".env.docker.example",
     ".env.example",
     ".gitignore",
@@ -29,7 +30,16 @@
     "src/**",
     "templates/**",
     "tsconfig.json",
-    "vitest.config.mts"
+    "vitest.config.mts",
+    "components.json",
+    "components/**",
+    "hooks/**",
+    "lib/**",
+    "docs/installation-telemetry.md",
+    "docs/admin-ui.md",
+    "docs/device-targeting.md",
+    "docs/ota-client-lifecycle.md",
+    "docs/doctor.md"
   ],
   "deny": [
     ".git/**",

@@ -1,4 +1,12 @@
 "use client";
+import { useI18n } from "@/src/client/i18n/provider";
+
+import { Textarea } from "@/components/ui/textarea";
+
+import { NativeSelect } from "@/components/ui/native-select";
+
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 import {
   deleteUpdate,
@@ -9,7 +17,7 @@ import {
   updateJsonFile,
 } from "@/src/client/admin-api";
 import { UpdateDetail } from "@/src/client/admin-types";
-import LogoutButton from "@/src/client/logout-button";
+import UpdateAudienceEditor from "@/src/client/update-audience-editor";
 import UpdatePolicyEditor from "@/src/client/update-policy-editor";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -30,6 +38,7 @@ function prettyJson(value: unknown): string {
 }
 
 export default function UpdateDetailsPage() {
+  const { t } = useI18n();
   const params = useParams<{ encodedKey: string }>();
   const router = useRouter();
   const encodedKey = params.encodedKey;
@@ -199,7 +208,7 @@ export default function UpdateDetailsPage() {
     try {
       await updateJsonFile(encodedKey, selectedFile, parsed);
       await reload();
-      setSuccess(`Файл ${selectedFile} обновлён`);
+      setSuccess(t("Файл {0} обновлён", [selectedFile]));
     } catch (saveError: unknown) {
       setError((saveError as Error).message || "Ошибка сохранения");
     } finally {
@@ -209,7 +218,9 @@ export default function UpdateDetailsPage() {
 
   const handleRollback = async () => {
     const confirmed = window.confirm(
-      "Вы действительно хотите начать распространение предыдущей версии обновления?",
+      t(
+        "Вы действительно хотите начать распространение предыдущей версии обновления?",
+      ),
     );
     if (!confirmed) {
       return;
@@ -221,7 +232,7 @@ export default function UpdateDetailsPage() {
     try {
       await rollbackUpdate(encodedKey);
       await reload();
-      setSuccess("Rollback активирован");
+      setSuccess(t("Rollback активирован"));
     } catch (rollbackError: unknown) {
       setError((rollbackError as Error).message || "Rollback не выполнен");
     } finally {
@@ -231,7 +242,7 @@ export default function UpdateDetailsPage() {
 
   const handlePromote = async () => {
     const confirmed = window.confirm(
-      "Вернуть распространение к последнему апдейту (promote)?",
+      t("Вернуть распространение к последнему апдейту (promote)?"),
     );
     if (!confirmed) {
       return;
@@ -243,7 +254,7 @@ export default function UpdateDetailsPage() {
     try {
       await promoteUpdate(encodedKey);
       await reload();
-      setSuccess("Promote выполнен: распространение возвращено к latest");
+      setSuccess(t("Promote выполнен: распространение возвращено к latest"));
     } catch (promoteError: unknown) {
       setError((promoteError as Error).message || "Promote не выполнен");
     } finally {
@@ -263,7 +274,9 @@ export default function UpdateDetailsPage() {
       const disabled = detail.status !== "disabled";
       await setUpdateDisabled(encodedKey, disabled);
       await reload();
-      setSuccess(disabled ? "Апдейт деактивирован" : "Апдейт активирован");
+      setSuccess(
+        disabled ? t("Апдейт деактивирован") : t("Апдейт активирован"),
+      );
     } catch (toggleError: unknown) {
       setError((toggleError as Error).message || "Не удалось изменить статус");
     } finally {
@@ -277,7 +290,7 @@ export default function UpdateDetailsPage() {
       return;
     }
 
-    const confirmed = window.confirm("Удалить апдейт полностью из bucket?");
+    const confirmed = window.confirm(t("Удалить апдейт полностью из bucket?"));
     if (!confirmed) {
       return;
     }
@@ -296,37 +309,32 @@ export default function UpdateDetailsPage() {
   };
 
   return (
-    <main className="min-h-screen bg-zinc-50 p-4 dark:bg-zinc-950 md:p-8">
-      <div className="mx-auto max-w-7xl space-y-4">
-        <header className="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 md:flex-row md:items-center md:justify-between">
-          <div>
-            <Link
-              href="/updates"
-              className="text-sm text-blue-600 hover:underline dark:text-blue-400"
-            >
-              ← К списку
-            </Link>
-            <span className="mx-2 text-zinc-400">|</span>
-            <Link
-              href="/updates/embedded"
-              className="text-sm text-blue-600 hover:underline dark:text-blue-400"
-            >
-              Embedded
-            </Link>
-            <h1 className="mt-1 text-xl font-semibold">Детали апдейта</h1>
-          </div>
-          <LogoutButton />
+    <div className="mx-auto max-w-[1600px] space-y-6 p-4 md:p-8">
+      <div className="space-y-6">
+        <header className="space-y-2">
+          <Link
+            href="/updates"
+            className="inline-flex items-center text-xs text-muted-foreground hover:text-primary"
+          >
+            {t("← Все обновления")}
+          </Link>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {t("Детали обновления")}
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            {t("Метаданные, политика доставки и управление публикацией.")}
+          </p>
         </header>
 
         {loading ? (
-          <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-            Загрузка...
+          <div className="rounded-xl border border-border bg-card p-5 ">
+            {t("Загрузка...")}
           </div>
         ) : null}
 
         {error ? (
           <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
-            {error}
+            {t(error)}
           </div>
         ) : null}
 
@@ -347,31 +355,34 @@ export default function UpdateDetailsPage() {
             {channelState.rollbackActive ? (
               <section className="rounded-xl border border-orange-300 bg-orange-50 p-4 dark:border-orange-700 dark:bg-orange-950/30">
                 <p className="text-sm font-medium text-orange-900 dark:text-orange-200">
-                  ⚠️ Rollback активен в этом канале/платформе.
+                  {t("⚠️ Rollback активен в этом канале/платформе.")}
                 </p>
                 <p className="mt-1 text-xs text-orange-800 dark:text-orange-300">
-                  Сейчас раздаётся updateId: {channelState.activeUpdateId}
+                  {t("Сейчас раздаётся updateId: ")}
+                  {channelState.activeUpdateId}
                 </p>
                 <p className="mt-1 text-xs text-orange-800 dark:text-orange-300">
-                  Новые апдейты автоматически игнорируются до выполнения
-                  Promote.
+                  {t(
+                    "Новые апдейты автоматически игнорируются до выполнения Promote.",
+                  )}
                 </p>
               </section>
             ) : null}
 
             {detail.isIgnoredByRollback ? (
-              <section className="rounded-xl border border-zinc-300 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/40">
-                <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                  Этот апдейт сейчас не доставляется.
+              <section className="rounded-xl border border-border bg-muted/30 p-4 ">
+                <p className="text-sm font-medium text-foreground">
+                  {t("Этот апдейт сейчас не доставляется.")}
                 </p>
-                <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
-                  Причина: активен rollback, автодоставка новых апдейтов
-                  выключена.
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {t(
+                    "Причина: активен rollback, автодоставка новых апдейтов выключена.",
+                  )}
                 </p>
               </section>
             ) : null}
 
-            <section className="grid gap-4 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 md:grid-cols-2 lg:grid-cols-4">
+            <Card className="grid gap-4 rounded-xl border border-border bg-card p-5  md:grid-cols-2 lg:grid-cols-4 shadow-none">
               <Info label="Runtime" value={detail.runtimeVersion} />
               <Info label="Platform" value={detail.platform} />
               <Info label="Channel" value={detail.channel} />
@@ -381,13 +392,16 @@ export default function UpdateDetailsPage() {
                 value={detail.createdAt || detail.createdAtPath}
               />
               <Info label="Status" value={detail.status} />
-              <Info label="Latest" value={detail.isLatest ? "Да" : "Нет"} />
               <Info
-                label="Rollback"
-                value={detail.isRollbackActive ? "Активен" : "Нет"}
+                label="Latest"
+                value={detail.isLatest ? t("Да") : t("Нет")}
               />
               <Info
-                label="Доставка"
+                label="Rollback"
+                value={detail.isRollbackActive ? t("Активен") : t("Нет")}
+              />
+              <Info
+                label={t("Доставка")}
                 value={
                   detail.isIgnoredByRollback
                     ? "Ignored by rollback"
@@ -408,80 +422,89 @@ export default function UpdateDetailsPage() {
                 className="md:col-span-2 lg:col-span-2"
               />
               <Info
-                label="Комментарий"
+                label={t("Комментарий")}
                 value={detail.comment || "-"}
                 className="md:col-span-2 lg:col-span-2"
               />
               <Info
-                label="Активный update ID"
+                label={t("Активный update ID")}
                 value={channelState.activeUpdateId || "-"}
                 className="md:col-span-2 lg:col-span-2"
               />
-            </section>
+            </Card>
 
+            <UpdateAudienceEditor
+              key={encodedKey}
+              encodedKey={encodedKey}
+              platform={detail.platform}
+            />
             <UpdatePolicyEditor
               key={`${encodedKey}-${detail.policyVersion}-${detail.policyPublishedAt || "draft"}`}
               encodedKey={encodedKey}
               onSaved={reload}
             />
 
-            <section className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+            <Card className="gap-4 p-5 shadow-none">
               <div className="flex flex-wrap gap-2">
                 {canRollback ? (
-                  <button
+                  <Button
+                    variant="outline"
+                    size="sm"
                     type="button"
                     onClick={handleRollback}
                     disabled={saving}
-                    className="rounded-md border border-orange-300 bg-orange-50 px-4 py-4 text-sm text-orange-800 hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-orange-700 dark:bg-orange-950/30 dark:text-orange-300 dark:hover:bg-orange-950/50"
                   >
                     Rollback
-                  </button>
+                  </Button>
                 ) : null}
                 {canPromote ? (
-                  <button
+                  <Button
+                    variant="default"
+                    size="sm"
                     type="button"
                     onClick={handlePromote}
                     disabled={saving}
-                    className="rounded-md border border-emerald-300 bg-emerald-50 px-4 py-4 text-sm text-emerald-800 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300 dark:hover:bg-emerald-950/50"
                   >
                     Promote
-                  </button>
+                  </Button>
                 ) : null}
                 {showToggleDisabledButton ? (
-                  <button
+                  <Button
+                    variant="outline"
+                    size="sm"
                     type="button"
                     onClick={handleToggleDisabled}
                     disabled={saving}
-                    className="rounded-md border border-amber-300 px-4 py-4 text-sm text-amber-700 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-950/40"
                   >
                     {detail.status === "disabled"
-                      ? "Активировать"
-                      : "Деактивировать"}
-                  </button>
+                      ? t("Активировать")
+                      : t("Деактивировать")}
+                  </Button>
                 ) : null}
                 {canDelete ? (
-                  <button
+                  <Button
+                    variant="destructive"
+                    size="sm"
                     type="button"
                     onClick={handleDelete}
                     disabled={saving}
-                    className="rounded-md border border-red-300 px-4 py-4 text-sm text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-950/40"
                   >
-                    Удалить апдейт
-                  </button>
+                    {t("Удалить апдейт")}
+                  </Button>
                 ) : null}
               </div>
-            </section>
+            </Card>
 
-            <section className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+            <Card className="gap-4 p-5 shadow-none">
               <div className="flex flex-wrap items-center gap-2">
-                <label className="text-sm">JSON файл</label>
-                <select
+                <label className="text-sm">{t("JSON файл")}</label>
+                <NativeSelect
                   value={selectedFile}
                   onChange={(event) =>
                     setSelectedFile(event.target.value as EditableFile)
                   }
-                  aria-label="Выбор JSON файла"
-                  className="rounded-md border border-zinc-300 bg-transparent px-2 py-2 text-sm dark:border-zinc-700"
+                  aria-label={t("Выбор JSON файла")}
+                  className="rounded-md border border-input bg-background px-2 py-2 text-sm "
                 >
                   <option value="update-info.json">update-info.json</option>
                   <option value="update-meta.json">update-meta.json</option>
@@ -489,8 +512,10 @@ export default function UpdateDetailsPage() {
                   <option value="channel-latest.json">
                     channel latest.json
                   </option>
-                </select>
-                <button
+                </NativeSelect>
+                <Button
+                  variant="outline"
+                  size="sm"
                   type="button"
                   onClick={handleSaveJson}
                   disabled={
@@ -498,35 +523,36 @@ export default function UpdateDetailsPage() {
                     channelLatestLocked ||
                     updateMetaDistributionLocked
                   }
-                  className="rounded-md border border-zinc-300 px-4 py-4 text-sm hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:hover:bg-zinc-800"
                 >
-                  Сохранить JSON
-                </button>
+                  {t("Сохранить JSON")}
+                </Button>
               </div>
               {channelLatestLocked ? (
                 <p className="mt-2 text-xs text-orange-700 dark:text-orange-300">
-                  Редактирование channel latest.json заблокировано: активен
-                  rollback или глобальный аварийный выключатель.
+                  {t(
+                    "Редактирование channel latest.json заблокировано: активен rollback или глобальный аварийный выключатель.",
+                  )}
                 </p>
               ) : null}
               {updateMetaDistributionLocked ? (
                 <p className="mt-2 text-xs text-red-700 dark:text-red-300">
-                  Активация через update-meta.json недоступна при глобальной
-                  блокировке. Деактивация с isActive=false остаётся доступна.
+                  {t(
+                    "Активация через update-meta.json недоступна при глобальной блокировке. Деактивация с isActive=false остаётся доступна.",
+                  )}
                 </p>
               ) : null}
-              <textarea
+              <Textarea
                 value={editorValue}
                 onChange={(event) => setEditorValue(event.target.value)}
-                aria-label="Редактор JSON"
-                className="mt-3 h-120 w-full rounded-md border border-zinc-300 bg-zinc-50 p-3 font-mono text-xs outline-none ring-blue-500 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950"
+                aria-label={t("Редактор JSON")}
+                className="mt-3 h-120 w-full rounded-md border border-border bg-muted/30 p-3 font-mono text-xs outline-none ring-blue-500 focus:ring-2 "
                 spellCheck={false}
               />
-            </section>
+            </Card>
           </>
         ) : null}
       </div>
-    </main>
+    </div>
   );
 }
 
@@ -541,10 +567,8 @@ function Info({
 }) {
   return (
     <div className={className}>
-      <p className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-        {label}
-      </p>
-      <p className="mt-1 break-all text-sm">{value}</p>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="mt-1.5 break-all text-sm font-medium">{value}</p>
     </div>
   );
 }

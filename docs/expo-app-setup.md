@@ -6,9 +6,11 @@ receiving and publishing updates.
 ## Automatic configuration
 
 Applications using a static `app.json` can be configured from the OTA server
-repository:
+repository. Install the server dependencies on the host first, including when
+the server itself runs in Docker:
 
 ```bash
+npm ci
 npm run configure-app
 ```
 
@@ -27,26 +29,145 @@ npm run configure-app -- \
 ```
 
 The command patches `app.json` and `package.json`, copies the public
-certificate, installs `expo-updates`, adds the portable publisher and runs
+certificate, installs `expo-updates` and the identity/telemetry dependencies, adds the portable publisher and runs
 `expo prebuild`. It supports npm, pnpm, Yarn and Bun lockfiles.
+
+It also generates `ota-client/` and starts identity/installation telemetry from
+`ota-entry.js`, preserving the original application entry. For Expo Router,
+the configurator inserts `useOtaUpdates` into `src/app/_layout` (or `app/_layout`)
+and wraps the root's rendered content with `OtaUpdateGate`. Standard `App`
+entry components are supported too, including platform variants. No manual
+Installation ID, Device ID, or heartbeat wiring is needed. The initial hook
+options are `{ autoCheck: true, autoUpdate: false, autoReload: false }`;
+customized options are preserved on later configurations. See the generated
+[OTA client lifecycle](./ota-client-lifecycle.md) for update modes and the hook API.
+If generation is unavailable, follow [manual hook integration](./ota-client-lifecycle.md#manual-integration).
+
+The source patch uses syntax-tree locations and keeps existing imports, comments,
+directives, component code and nested callbacks. Unsupported root exports
+(such as a class, asynchronous function, HOC or re-export) stop configuration
+before any application writes. Export a synchronous root function or a local
+function identifier to make the patch possible. A custom entry whose root
+cannot be identified keeps its existing startup behavior and prints a warning
+that update orchestration still needs integration in its root component;
+identity and telemetry remain connected through the generated bootstrap.
+An existing `useOtaUpdates` import must use a relative path to `ota-client`.
+Unresolved aliases such as `@/ota-client` stop the patch before writing, so a
+second hook cannot silently override an existing automation configuration.
 
 Options:
 
 ```text
 --platform all|ios|android
 --force
+--server-env /full/path/to/server.env
 ```
 
 The CLI intentionally refuses dynamic `app.config.*` projects and refuses to
 replace generated files unless `--force` is provided. The sections below
-document the equivalent manual configuration.
+document native configuration; [manual hook integration](./ota-client-lifecycle.md#manual-integration)
+covers client files, dependencies, root wiring and controls. `--force` permits generated
+file replacement; it does not bypass unsupported dynamic configs or root shapes.
+`--server-env` selects the local server environment used to prepare publisher settings.
+For an isolated test stand, explicitly pass its `.env.ota-test`.
 
-## 1. Install Expo Updates
+## Verify generation in a fresh application
 
-Install the Expo-compatible version of `expo-updates`:
+Use a separate app to check first-time generation, and retain an existing app to
+check upgrades/reruns. Do not reuse another app's runtime just to make a test OTA
+appear: the new app has its own native compatibility boundary.
+
+Create a sibling Expo Router application using the SDK 58 template used for this
+client's integration checks:
 
 ```bash
-npx expo install expo-updates
+npx create-expo-app@latest ota-smoke-app --template default@sdk-58
+```
+
+The explicit template pins the SDK family; see the official
+[create-expo-app reference](https://docs.expo.dev/more/create-expo/). For another SDK,
+use its compatible packages and repeat the release-device checks below.
+
+Prepare a reachable HTTPS OTA server and its matching public signing certificate.
+Then run from the **server repository**, adjusting the application/certificate paths:
+
+```bash
+npm run configure-app -- \
+  --app /full/path/to/ota-smoke-app \
+  --certificate /full/path/code-signing-certificate.pem \
+  --server-url https://updates.example.com \
+  --channel hook-smoke \
+  --runtime-version hook-smoke-sdk58-v1 \
+  --platform android
+```
+
+For the isolated local stand, add `--server-env .env.ota-test` and use the public
+tunnel URL for `--server-url`. Configure the same public base on the server so
+asset downloads also work from the phone. Use a distinct Android package/iOS bundle
+identifier when installing this app alongside an existing test app.
+
+Inspect the resulting diff before building:
+
+| File/change | Expected result |
+| --- | --- |
+| `app.json` | Correct HTTPS URL, certificate, runtime, channel; native automatic checks disabled |
+| `package.json` | Client dependencies, `main: "ota-entry.js"`, publisher and selected platform build scripts |
+| `ota-client-entry.json` | Original application entry retained |
+| `ota-client/` | Public API, nested model/UI files and public `config.json` |
+| Root `_layout` / `App` | One unconditional hook and a gate; existing navigation/providers retained |
+| `.env.ota` | Local publisher/build credentials; ignored by Git, never imported by app code |
+
+Before building, add the
+[manual controls example](./ota-client-lifecycle.md#_3-add-manual-update-controls)
+to a test screen, or explicitly enable download/reload automation through the hook
+options. The default root only checks; a stock Expo template has no OTA test buttons.
+These controls/options must be in the binary you install so it can receive the first OTA.
+
+From the **application directory**, run:
+
+```bash
+npx expo lint
+npx tsc --noEmit
+npm run ota:build:android:apk
+```
+
+The Android command requires a working local Java/Android toolchain. Before running
+it, configure embedded registration in `.env.ota`: local Docker can use the generated
+`OTA_DATABASE_URL`; HTTP registration requires `OTA_SERVER_URL` and an
+`OTA_ACCESS_TOKEN` with `updates:write`. The generated script treats registration
+failure as a build failure. See [embedded registration](#_6-register-embedded-updates).
+For iOS, configure with `--platform ios`/`all` and build a signed Release/Archive.
+
+Install the release APK from `android/app/build/outputs/apk/release/app-release.apk`.
+After its first launch, verify the installation in `/updates/devices`.
+
+Make a visible JS change and update `expo.version` for a distinct chart label,
+keeping the compatible runtime unchanged. Publish **after the native build**:
+
+```bash
+npm run ota:publish -- --platform android --message "Fresh app hook smoke test"
+```
+
+The release appears inactive in `/updates`. Select the intended device audience,
+activate it, then check/download/restart. A check or download alone must not move
+the installation to the new running version in analytics; the next launch heartbeat
+should. Confirm the Installation ID stays unchanged across the OTA restart.
+
+Finally, rerun the same configurator command. Check that it does not duplicate the
+hook/gate or replace the stored original entry. Change a hook option in the root
+and rerun to verify that the option survives. Use `--force` only when intentionally
+replacing changed generated files; it does not bypass unsupported root shapes.
+For the manual fallback test, use a separate clean copy and follow
+[manual integration](./ota-client-lifecycle.md#manual-integration) without running
+the generator. Keep these as separate checks so generated leftovers cannot hide
+missing manual setup steps.
+
+## 1. Install client dependencies
+
+For manual setup, install Expo-compatible versions of all client dependencies:
+
+```bash
+npx expo install expo-updates expo-application expo-crypto expo-secure-store @react-native-async-storage/async-storage
 ```
 
 The application does not send an admin access token when checking for an
@@ -112,8 +233,10 @@ an unknown key.
 
 ## 3. Configure the Expo application
 
-Use a dynamic Expo config so the channel cannot accidentally remain
-`development` in a production binary.
+The automatic path updates static `app.json`. For manual setup, the dynamic config
+below requires an explicit channel and runtime for each build. The current configurator
+and stock publisher read static `app.json`; they do not evaluate dynamic config.
+Do not use the stock publisher with conflicting static and resolved dynamic values.
 
 Example `app.config.ts`:
 
@@ -187,8 +310,10 @@ Each native binary requests an update using three selection keys:
 runtimeVersion + channel + platform
 ```
 
-The server looks up only the latest active update inside that exact scope.
-Updates do not cross runtime versions, channels, or platforms.
+Within that scope, the server applies activation/rollback rules and the device
+audience before selecting an eligible update. Ordinary delivery does not cross
+runtime versions, channels or platforms; explicit emergency redirects are a separate
+[recovery mechanism](./ota-emergency-recovery.md).
 
 ```mermaid
 flowchart TD
@@ -327,31 +452,27 @@ expected URL, runtime, channel and certificate.
 
 ## 5. Check and install updates in the application
 
-With `checkAutomatically: "NEVER"`, the application controls the user
-experience:
+Use the generated `useOtaUpdates` controller with `OtaUpdateGate` in the root
+layout. `configure-app` inserts this integration automatically. If the files or root
+patch are missing, follow [manual integration](./ota-client-lifecycle.md#manual-integration),
+including the complete Router example and manual controls.
 
-```ts
-import * as Updates from "expo-updates";
+The root defaults to automatic checks and manual download/restart:
 
-export async function checkForOtaUpdate() {
-  if (__DEV__) {
-    return { available: false };
-  }
-
-  const result = await Updates.checkForUpdateAsync();
-  return { available: result.isAvailable };
-}
-
-export async function installOtaUpdate() {
-  const result = await Updates.fetchUpdateAsync();
-
-  if (!result.isNew) {
-    return;
-  }
-
-  await Updates.reloadAsync();
-}
+```tsx
+const ota = useOtaUpdates({
+  autoCheck: true,
+  autoUpdate: false,
+  autoReload: false,
+});
 ```
+
+Screens use `useOtaUpdates()` and its `check()`, `download()` and `reload()` methods.
+Identity setup, telemetry and update policies share one controller. Do not replace
+these actions with direct `Updates.checkForUpdateAsync()`/`fetchUpdateAsync()` calls:
+those bypass hook orchestration. Keep native `checkAutomatically: "NEVER"`.
+See [the lifecycle reference](./ota-client-lifecycle.md) for force/store/background
+behavior, errors and custom guard handlers.
 
 Expo Updates automatically sends the runtime headers used by the server,
 including:
@@ -390,12 +511,17 @@ to the trimmed string `expo.version` from the project's static `app.json`.
 Missing, blank, malformed or unreadable fallback configuration leaves
 `app_version` null without blocking an otherwise valid registration.
 
-The MIEX application contains a reference implementation:
+The configurator installs the implementation from `templates/expo-app/`:
 
 ```text
-scripts/build-update/register-embedded-update.mjs
-android/ci_scripts/register_embedded_update_android.sh
+scripts/ota-register-embedded/register-android.sh
+scripts/ota-register-embedded/register-ios.sh
+plugins/with-ota-embedded-registration.js
 ```
+
+If configuring entirely by hand, integrate these registrar scripts with your build
+pipeline and configure their server URL/access token; copying the client hook alone
+does not register native builds.
 
 Registration should be a required CI step for production builds. If it fails,
 the binary should not be distributed.
@@ -419,30 +545,31 @@ A publisher performs these steps:
 8. Leave the update inactive when manual activation is required.
 9. Activate or roll back from the admin panel after validation.
 
-The MIEX application already implements this workflow under:
+The configurator installs the portable publisher under `scripts/ota-publish/`
+and adds `ota:publish` to the application's `package.json`. It uses static `app.json`
+for runtime/channel metadata. Configure the application's ignored `.env.ota` using
+`.env.ota.example`; local Docker values can be prepared with `--server-env`.
 
-```text
-scripts/build-update/
+Run from the **application** directory:
+
+```bash
+npm run ota:publish -- --platform android --message "Fix checkout validation"
 ```
 
-Its relevant environment is:
+Use `--platform ios` or `--platform all` as needed. This command exports and uploads
+the OTA and creates an inactive release in the admin panel; activation is separate.
+Do not use EAS Update to publish to this self-hosted server.
+
+Required publisher settings include:
 
 ```env
 EXPO_UPDATE_CHANNEL=production
 OTA_DATABASE_URL=postgresql://...
 OTA_DATABASE_SSL=true
-OTA_SYNC_UPDATES_DB=true
-
 R2_ENDPOINT=https://...
 R2_ACCESS_KEY_ID=...
 R2_SECRET_ACCESS_KEY=...
 R2_BUCKET=expo-updates
-```
-
-Example publish command in that application:
-
-```bash
-npm run local-update:production -- -m "Fix checkout validation"
 ```
 
 The application's configured channel, exported runtime, uploaded storage path

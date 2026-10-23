@@ -1,3 +1,4 @@
+import { planOtaClient } from './ota-client-configurator.mjs';
 import { execFileSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -143,7 +144,7 @@ function getPackageCommands(packageManager, platform) {
 
   if (packageManager === "pnpm") {
     return {
-      installExpoUpdates: ["pnpm", ["exec", "expo", "install", "expo-updates"]],
+      installExpoUpdates: ["pnpm", ["exec", "expo", "install", "expo-updates", "expo-application", "expo-crypto", "expo-secure-store", "@react-native-async-storage/async-storage"]],
       installPublisherDependencies: [
         "pnpm",
         ["add", "--save-dev", ...PUBLISHER_DEPENDENCIES],
@@ -154,7 +155,7 @@ function getPackageCommands(packageManager, platform) {
 
   if (packageManager === "yarn") {
     return {
-      installExpoUpdates: ["yarn", ["expo", "install", "expo-updates"]],
+      installExpoUpdates: ["yarn", ["expo", "install", "expo-updates", "expo-application", "expo-crypto", "expo-secure-store", "@react-native-async-storage/async-storage"]],
       installPublisherDependencies: [
         "yarn",
         ["add", "--dev", ...PUBLISHER_DEPENDENCIES],
@@ -165,7 +166,7 @@ function getPackageCommands(packageManager, platform) {
 
   if (packageManager === "bun") {
     return {
-      installExpoUpdates: ["bunx", ["expo", "install", "expo-updates"]],
+      installExpoUpdates: ["bunx", ["expo", "install", "expo-updates", "expo-application", "expo-crypto", "expo-secure-store", "@react-native-async-storage/async-storage"]],
       installPublisherDependencies: [
         "bun",
         ["add", "--dev", ...PUBLISHER_DEPENDENCIES],
@@ -175,7 +176,7 @@ function getPackageCommands(packageManager, platform) {
   }
 
   return {
-    installExpoUpdates: ["npx", ["expo", "install", "expo-updates"]],
+    installExpoUpdates: ["npx", ["expo", "install", "expo-updates", "expo-application", "expo-crypto", "expo-secure-store", "@react-native-async-storage/async-storage"]],
     installPublisherDependencies: [
       "npm",
       ["install", "--save-dev", ...PUBLISHER_DEPENDENCIES],
@@ -327,6 +328,7 @@ function getLocalDockerPublisherEnv({
   channel,
   serverRoot,
   serverUrl,
+  serverEnv,
 }) {
   const hostname = new URL(serverUrl).hostname;
   const usesLocalDocker =
@@ -337,7 +339,7 @@ function getLocalDockerPublisherEnv({
     return null;
   }
 
-  const serverEnvPath = path.join(serverRoot, ".env");
+  const serverEnvPath = serverEnv ? path.resolve(serverEnv) : path.join(serverRoot, ".env");
   if (!fs.existsSync(serverEnvPath)) {
     return null;
   }
@@ -451,9 +453,9 @@ function patchPackageJson(packageJson, platform) {
     }
   }
   if (platform !== "ios") {
-    packageJson.scripts["ota:build:android:apk"] =
+    packageJson.scripts["ota:build:android:apk"] ||=
       `cd android && ./gradlew app:assembleRelease && cd .. && OTA_EMBEDDED_REGISTER_STRICT=true sh ${ANDROID_REGISTER_SCRIPT}`;
-    packageJson.scripts["ota:build:android:aab"] =
+    packageJson.scripts["ota:build:android:aab"] ||=
       `cd android && ./gradlew app:bundleRelease && cd .. && OTA_EMBEDDED_REGISTER_STRICT=true sh ${ANDROID_REGISTER_SCRIPT}`;
   }
   return packageJson;
@@ -559,6 +561,7 @@ export function configureExpoApp(
   validateCertificate(certificatePath);
   const manifestUrl = resolveManifestUrl(rawOptions.serverUrl);
   const project = validateProject(appRoot);
+  const clientPlan = planOtaClient({ appRoot, templateRoot, packageJson: project.packageJson, manifestUrl, channel, force });
   const packageManager = detectPackageManager(appRoot);
   const commands = getPackageCommands(packageManager, platform);
   const certificateDestination = path.join(
@@ -663,6 +666,7 @@ export function configureExpoApp(
   );
   const publisherEnvDestination = path.join(appRoot, ".env.ota");
   const localPublisherEnv = getLocalDockerPublisherEnv({
+    serverEnv: rawOptions.serverEnv,
     channel,
     serverRoot,
     serverUrl: manifestUrl,
@@ -683,7 +687,7 @@ export function configureExpoApp(
       ),
     }),
   );
-  const migrationWarnings = [];
+  const migrationWarnings = [...clientPlan.warnings];
   const legacyFileMigrations = [
     planLegacyFileMigration(
       legacyAndroidRegistrarDestination,
@@ -766,6 +770,7 @@ export function configureExpoApp(
     }),
   );
 
+  clientPlan.apply();
   copyFile(certificatePath, certificateDestination);
   copyFile(publisherSource, publisherDestination);
   copyFile(exportCommandSource, exportCommandDestination);
@@ -792,7 +797,7 @@ export function configureExpoApp(
   const installedPackageJson = readJson(project.packagePath);
   writeJson(
     project.packagePath,
-    patchPackageJson(installedPackageJson, platform),
+    clientPlan.patchPackage(patchPackageJson(installedPackageJson, platform)),
   );
 
   commandRunner(...commands.installPublisherDependencies, appRoot);

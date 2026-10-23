@@ -1,8 +1,9 @@
+import { Audience, RequestIdentity } from "../devices/audience";
 import { supabase } from "../lib/supabase.js";
 import { UpdateDeliveryMode } from "../lib/update-policy";
 import { getManifestAppVersion } from "./manifest-values";
 
-export type OtaUpdateRow = {
+export type OtaUpdateRow = Partial<Audience> & {
   update_id: string;
   build_id: string;
   runtime_version: string;
@@ -36,70 +37,22 @@ export type EmbeddedUpdateMeta = {
   app_version: string | null;
 };
 
-let hasServedManifestLogTable: boolean | null = null;
-
-function isMissingServedManifestLogTableError(error: unknown): boolean {
-  if (!error || typeof error !== "object") {
-    return false;
-  }
-
-  const message =
-    "message" in error && typeof error.message === "string"
-      ? error.message.toLowerCase()
-      : "";
-
-  return (
-    message.includes("ota_served_manifest_log") &&
-    message.includes("does not exist")
-  );
-}
-
-export function resolveManifestId(
-  servedManifestId: string | null,
-  updateId: string,
-): string {
-  return hasServedManifestLogTable === true && servedManifestId
-    ? servedManifestId
-    : updateId;
-}
-
 export async function resolveUpdateIdFromServedManifestId(
   servedManifestId: string,
 ): Promise<string | null> {
-  if (hasServedManifestLogTable === false) {
-    return null;
+  const { data, error } = await supabase
+    .from("ota_served_manifest_log")
+    .select("update_id")
+    .eq("served_manifest_id", servedManifestId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to resolve served manifest: ${error.message}`);
   }
-
-  try {
-    const { data, error } = await supabase
-      .from("ota_served_manifest_log")
-      .select("update_id")
-      .eq("served_manifest_id", servedManifestId)
-      .maybeSingle();
-
-    if (isMissingServedManifestLogTableError(error)) {
-      hasServedManifestLogTable = false;
-      return null;
-    }
-
-    if (error || !data) {
-      if (hasServedManifestLogTable === null) {
-        hasServedManifestLogTable = true;
-      }
-      return null;
-    }
-
-    hasServedManifestLogTable = true;
-    return (data as { update_id: string }).update_id || null;
-  } catch (error: unknown) {
-    if (isMissingServedManifestLogTableError(error)) {
-      hasServedManifestLogTable = false;
-    }
-    return null;
-  }
+  return (data as { update_id: string } | null)?.update_id || null;
 }
 
-export function logServedManifest({
+export async function recordServedManifest({
   servedManifestId,
   updateId,
   runtimeVersion,
@@ -113,12 +66,10 @@ export function logServedManifest({
   channel: string;
   platform: string;
   reason: string;
-}): void {
-  if (hasServedManifestLogTable === false) {
-    return;
-  }
-
-  supabase
+}): Promise<void> {
+  // The database rejects reassignment of an existing ID to another update.
+  // Await this write before returning a manifest to a device.
+  const { error } = await supabase
     .from("ota_served_manifest_log")
     .upsert(
       {
@@ -131,27 +82,11 @@ export function logServedManifest({
       },
       { onConflict: "served_manifest_id" },
     )
-    .then(({ error }) => {
-      if (isMissingServedManifestLogTableError(error)) {
-        hasServedManifestLogTable = false;
-        return;
-      }
+    .execute();
 
-      if (!error && hasServedManifestLogTable === null) {
-        hasServedManifestLogTable = true;
-      }
-
-      if (
-        error &&
-        !error.message?.includes("duplicate") &&
-        !error.message?.includes("unique")
-      ) {
-        console.warn(
-          `[${new Date().toLocaleTimeString()}] ⚠️ Failed to log served manifest: ${error.message}`,
-        );
-      }
-    })
-    .catch(() => undefined);
+  if (error) {
+    throw new Error(`Failed to record served manifest: ${error.message}`);
+  }
 }
 
 export async function getChannelRow({
@@ -252,27 +187,21 @@ export async function getLatestActiveUpdate({
   runtimeVersion,
   channel,
   platform,
+  identity,
 }: {
   runtimeVersion: string;
   channel: string;
   platform: "ios" | "android";
+  identity: RequestIdentity;
 }): Promise<OtaUpdateRow | null> {
-  const { data, error } = await supabase
-    .from("ota_updates")
-    .select("*")
-    .eq("runtime_version", runtimeVersion)
-    .eq("channel", channel)
-    .eq("platform", platform)
-    .eq("is_active", true)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(
-      `Failed to load latest active update row: ${error.message}`,
-    );
-  }
-
-  return (data as OtaUpdateRow | null) || null;
+  const { data, error } = await supabase.rpc("ota_latest_eligible_update", {
+    p_runtime: runtimeVersion,
+    p_channel: channel,
+    p_platform: platform,
+    p_installation: identity.installationId,
+    p_device: identity.deviceId,
+  });
+  if (error)
+    throw new Error(`Failed to load eligible update: ${error.message}`);
+  return data?.[0] || null;
 }

@@ -3,15 +3,15 @@ layout: home
 
 hero:
   name: Expo Updates Server
-  text: Own your Expo OTA delivery
-  tagline: Self-host signed updates, promote releases deliberately, roll back safely, and recover misconfigured native builds.
+  text: See what’s running.<br>Choose who updates.
+  tagline: Signed OTA updates, installation analytics, and device targeting for your Expo apps. All on your own infrastructure.
   actions:
     - theme: brand
-      text: Install with NPX
-      link: /npm-installer
-    - theme: alt
       text: Quick Start
       link: /getting-started
+    - theme: alt
+      text: Create project with NPX
+      link: /npm-installer
     - theme: alt
       text: View on GitHub
       link: https://github.com/tonichiga/expo-updates-server
@@ -37,37 +37,18 @@ features:
     details: Manage role-based access, scoped automation tokens, embedded builds, and release history from the admin panel.
 ---
 
-## Install in seconds
+## From project files to the first OTA
 
-Create a new project directory:
+Start with the [Quick Start](/getting-started) ([Русский](/getting-started.ru)).
+It covers project creation, Docker, signing keys, administrator setup, connecting
+an Expo app, installing a native release and publishing the first OTA.
 
-```bash
-npx create-expo-updates-server@latest my-server
-cd my-server
-```
+The [npm initializer](/npm-installer) creates the server files; it is also the
+starting point for Docker or [hosted Supabase infrastructure](/supabase-setup).
 
-Or initialize the current empty directory:
-
-```bash
-npx create-expo-updates-server@latest .
-```
-
-The initializer bundles and verifies the complete server template. Continue
-with the [npm initializer guide](/npm-installer) for Docker and local npm
-startup commands.
-
-## Choose your path
-
-Create a standalone project with the
-[npm initializer](/npm-installer), or start locally with the
-[English Quick Start](/getting-started) or
-[Russian Quick Start](/getting-started.ru). For a hosted database and object
-storage, follow the [Supabase setup](/supabase-setup).
-
-When the server is ready, connect a native application with the
-[Expo application setup](/expo-app-setup), then use the
-[operations guide](/operations-guide) for production deployment, backups,
-rollbacks, and incident response.
+Already have a running server? Continue with [Expo application setup](/expo-app-setup).
+For an unsupported app structure, see [manual client integration](/ota-client-lifecycle#manual-integration).
+For ongoing deployment, backups and recovery, use the [operations guide](/operations-guide).
 
 ## Project actions
 

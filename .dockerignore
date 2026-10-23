@@ -1,0 +1,16 @@
+node_modules
+.next
+.git
+.env*
+secrets
+local-certificates
+**/*.pem
+coverage
+docs/.vitepress/cache
+docs/.vitepress/dist
+packages/create-expo-updates-server/dist
+packages/create-expo-updates-server/.test-work
+packages/create-expo-updates-server/.smoke-work
+*.tgz
+*.log
+*.tsbuildinfo

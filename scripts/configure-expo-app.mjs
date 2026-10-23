@@ -28,7 +28,8 @@ Required:
 
 Optional:
   --platform         all, ios or android (default: all)
-  --force            Replace generated publisher/certificate files
+  --server-env       Local Docker env file (default: server .env)
+  --force            Replace generated client, publisher and certificate files
   --help             Show this message
 `);
 }
@@ -60,7 +61,8 @@ function parseArgs(argv) {
     }
     index += 1;
 
-    if (key === "app") options.app = value;
+    if (key === "server-env") options.serverEnv = value;
+    else if (key === "app") options.app = value;
     else if (key === "certificate") options.certificate = value;
     else if (key === "server-url") options.serverUrl = value;
     else if (key === "channel") options.channel = value;
@@ -121,7 +123,7 @@ try {
     `Publisher environment: ${
       result.publisherEnvConfigured
         ? "configured from local Docker .env"
-        : "fill .env.ota.example manually"
+        : "verify .env.ota credentials; create from .env.ota.example only if missing"
     }`,
   );
   if (result.migrationWarnings.length > 0) {
@@ -131,20 +133,14 @@ try {
     }
   }
   console.log("\nNext:");
+  let step = 1;
   if (!result.publisherEnvConfigured) {
-    console.log(
-      "1. Copy .env.ota.example to .env.ota and add publisher secrets.",
-    );
+    console.log(`${step++}. Keep any existing .env.ota; create it from .env.ota.example only if missing, then verify publisher/registration credentials.`);
   }
-  console.log(
-    `${result.publisherEnvConfigured ? "1" : "2"}. Publish with: npm run ota:publish -- --message "Update description"`,
-  );
-  console.log(
-    `${result.publisherEnvConfigured ? "2" : "3"}. Activate the update in the OTA admin panel.`,
-  );
-  console.log(
-    `${result.publisherEnvConfigured ? "3" : "4"}. Build Android with npm run ota:build:android:apk or build iOS in Xcode.`,
-  );
+  console.log(`${step++}. In the app, add manual check/download/reload controls or enable hook automation before building. The generated root only auto-checks by default.`);
+  console.log(`${step++}. Build and install a native binary with telemetry dependencies: npm run ota:build:android:apk or Xcode for iOS. Do this before delivering ota-client via OTA.`);
+  console.log(`${step++}. Publish with: npm run ota:publish -- --message "Update description"`);
+  console.log(`${step++}. Activate the update in the OTA admin panel.`);
 } catch (error) {
   console.error(`Expo OTA configuration failed: ${error.message}`);
   process.exit(1);

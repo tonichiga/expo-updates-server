@@ -1,4 +1,12 @@
 "use client";
+import { useI18n } from "@/src/client/i18n/provider";
+
+import { Textarea } from "@/components/ui/textarea";
+
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { ShieldCheck, ShieldAlert, ChevronDown, RefreshCw } from "lucide-react";
 
 import {
   AdminApiError,
@@ -9,6 +17,7 @@ import type { DistributionControlResponse } from "./admin-types";
 import { useCallback, useEffect, useState } from "react";
 
 export function useDistributionControlState() {
+  const { t } = useI18n();
   const [state, setState] = useState<DistributionControlResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -37,7 +46,7 @@ export function useDistributionControlState() {
     return () => window.clearTimeout(timeoutId);
   }, [refresh]);
 
-  return { state, setState, loading, error, setError, refresh };
+  return { state, setState, loading, error: t(error), setError, refresh };
 }
 
 function formatChangedBy(state: DistributionControlResponse): string {
@@ -54,20 +63,22 @@ export function DistributionControlBanner({
   loading: boolean;
   error: string;
 }) {
+  const { t, formatLocale } = useI18n();
   if (loading) {
     return (
-      <section className="rounded-xl border border-zinc-300 bg-zinc-100 p-4 text-sm dark:border-zinc-700 dark:bg-zinc-900">
-        Проверка глобального статуса OTA…
+      <section className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
+        {t("Проверка глобального статуса OTA…")}
       </section>
     );
   }
 
   if (error || !state) {
     return (
-      <section className="rounded-xl border border-red-400 bg-red-50 p-4 text-sm text-red-900 dark:border-red-700 dark:bg-red-950/40 dark:text-red-200">
-        ⚠️ Глобальный статус OTA недоступен. Распространяющие действия
-        отключены до восстановления связи.
-        {error ? <p className="mt-1 text-xs">{error}</p> : null}
+      <section className="rounded-lg border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive">
+        {t(
+          "Глобальный статус OTA недоступен. Распространяющие действия отключены до восстановления связи.",
+        )}
+        {error ? <p className="mt-1 text-xs">{t(error)}</p> : null}
       </section>
     );
   }
@@ -77,11 +88,11 @@ export function DistributionControlBanner({
   }
 
   return (
-    <section className="rounded-xl border-2 border-red-500 bg-red-50 p-4 text-red-950 dark:bg-red-950/50 dark:text-red-100">
-      <p className="font-semibold">⛔ OTA DISTRIBUTION BLOCKED</p>
+    <section className="rounded-lg border border-destructive/25 bg-destructive/5 p-4 text-destructive">
+      <p className="font-semibold">{t("Распространение OTA остановлено")}</p>
       <p className="mt-1 text-sm">{state.reason}</p>
       <p className="mt-2 text-xs">
-        {new Date(state.changedAt).toLocaleString("uk-UA")} ·{" "}
+        {new Date(state.changedAt).toLocaleString(formatLocale)} ·{" "}
         {formatChangedBy(state)}
       </p>
     </section>
@@ -89,11 +100,13 @@ export function DistributionControlBanner({
 }
 
 export default function DistributionControl() {
+  const { t, formatLocale } = useI18n();
   const { state, setState, loading, error, setError, refresh } =
     useDistributionControlState();
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [expanded, setExpanded] = useState(false);
 
   const changeState = async (blocked: boolean) => {
     if (!state) {
@@ -108,8 +121,10 @@ export default function DistributionControl() {
 
     const confirmed = window.confirm(
       blocked
-        ? "Немедленно остановить выдачу manifest и всех OTA assets для всех клиентов?"
-        : "Возобновить глобальное OTA-распространение?",
+        ? t(
+            "Немедленно остановить выдачу manifest и всех OTA assets для всех клиентов?",
+          )
+        : t("Возобновить глобальное OTA-распространение?"),
     );
     if (!confirmed) {
       return;
@@ -128,8 +143,8 @@ export default function DistributionControl() {
       setReason("");
       setMessage(
         blocked
-          ? "OTA-распространение остановлено."
-          : "OTA-распространение возобновлено.",
+          ? t("OTA-распространение остановлено.")
+          : t("OTA-распространение возобновлено."),
       );
     } catch (saveError: unknown) {
       if (saveError instanceof AdminApiError && saveError.status === 409) {
@@ -150,82 +165,121 @@ export default function DistributionControl() {
   };
 
   return (
-    <section
-      className={`rounded-xl border-2 p-4 ${
-        state?.blocked
-          ? "border-red-500 bg-red-50 dark:bg-red-950/50"
-          : "border-emerald-400 bg-emerald-50 dark:bg-emerald-950/30"
-      }`}
-    >
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider">
-            Global OTA emergency switch
-          </p>
-          <h2 className="mt-1 text-xl font-bold">
-            {loading ? "LOADING…" : state?.blocked ? "BLOCKED" : "ACTIVE"}
-          </h2>
-          {state ? (
-            <div className="mt-2 space-y-1 text-sm">
-              <p>
-                {state.blocked
-                  ? state.reason
-                  : "Manifest и assets выдаются в обычном режиме."}
-              </p>
-              <p className="text-xs opacity-75">
-                Изменено: {new Date(state.changedAt).toLocaleString("uk-UA")} ·{" "}
-                {formatChangedBy(state)} · version {state.version}
-              </p>
+    <Card className="gap-0 overflow-hidden py-0 shadow-none">
+      <div className="flex flex-wrap items-center justify-between gap-4 p-4">
+        <div className="flex items-start gap-3">
+          <div
+            className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${state?.blocked || error ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground"}`}
+          >
+            {loading ? (
+              <RefreshCw className="size-4 animate-spin" />
+            ) : state?.blocked || error ? (
+              <ShieldAlert className="size-4" />
+            ) : (
+              <ShieldCheck className="size-4" />
+            )}
+          </div>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-sm font-semibold">
+                {t("Распространение OTA")}
+              </h2>
+              <Badge
+                variant="secondary"
+                className={
+                  state?.blocked || error
+                    ? "bg-destructive/10 text-destructive"
+                    : ""
+                }
+              >
+                {loading
+                  ? t("Проверка…")
+                  : error || !state
+                    ? t("Недоступно")
+                    : state.blocked
+                      ? t("Остановлено")
+                      : t("Работает")}
+              </Badge>
             </div>
-          ) : null}
+            <p className="mt-1 text-xs text-muted-foreground">
+              {state?.blocked
+                ? state.reason
+                : t("Глобальное управление выдачей manifest и assets.")}
+            </p>
+          </div>
         </div>
-
         {state?.canWrite ? (
-          <div className="w-full max-w-xl">
-            {!state.blocked ? (
-              <textarea
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setExpanded((value) => !value)}
+            aria-expanded={expanded}
+            aria-controls="distribution-controls"
+          >
+            {t("Управление")}
+            <ChevronDown
+              className={`transition-transform ${expanded ? "rotate-180" : ""}`}
+            />
+          </Button>
+        ) : state ? (
+          <Badge variant="outline">Read only · updates:write</Badge>
+        ) : null}
+      </div>
+      {expanded && state?.canWrite && (
+        <div
+          id="distribution-controls"
+          className="space-y-3 border-t bg-muted/20 p-4"
+        >
+          <p className="text-xs text-muted-foreground">
+            {t("Изменено: ")}
+            {new Date(state.changedAt).toLocaleString(formatLocale)} ·{" "}
+            {formatChangedBy(state)} · version {state.version}
+          </p>
+          {!state.blocked && (
+            <label className="block space-y-2 text-sm font-medium">
+              {t("Причина остановки")}
+              <Textarea
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}
                 maxLength={500}
-                aria-label="Причина аварийной блокировки OTA"
-                placeholder="Обязательная причина остановки (до 500 символов)"
-                className="min-h-20 w-full rounded-md border border-red-300 bg-white p-2 text-sm text-zinc-950 dark:border-red-800 dark:bg-zinc-950 dark:text-zinc-100"
+                aria-label={t("Причина аварийной блокировки OTA")}
+                placeholder={t(
+                  "Обязательная причина остановки (до 500 символов)",
+                )}
+                className="block min-h-20 w-full max-w-2xl rounded-md border border-input bg-background p-3 text-sm font-normal outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
-            ) : null}
-            <button
-              type="button"
-              disabled={saving || loading}
-              onClick={() => void changeState(!state.blocked)}
-              className={`mt-2 rounded-md px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60 ${
-                state.blocked
-                  ? "bg-emerald-700 hover:bg-emerald-800"
-                  : "bg-red-700 hover:bg-red-800"
-              }`}
-            >
-              {saving
-                ? "Сохранение…"
-                : state.blocked
-                  ? "Возобновить OTA"
-                  : "Остановить все OTA"}
-            </button>
-          </div>
-        ) : state ? (
-          <p className="rounded-md border border-zinc-300 px-3 py-2 text-xs dark:border-zinc-700">
-            Read-only: требуется updates:write
-          </p>
-        ) : null}
-      </div>
-
-      {error ? (
-        <p className="mt-3 rounded-md bg-red-100 p-2 text-sm text-red-900 dark:bg-red-950 dark:text-red-200">
-          {error}
+            </label>
+          )}
+          <Button
+            variant={state.blocked ? "default" : "destructive"}
+            size="sm"
+            disabled={saving || loading}
+            onClick={() => void changeState(!state.blocked)}
+          >
+            {saving
+              ? t("Сохранение…")
+              : state.blocked
+                ? t("Возобновить OTA")
+                : t("Остановить все OTA")}
+          </Button>
+        </div>
+      )}
+      {error && (
+        <p
+          role="alert"
+          className="border-t bg-destructive/5 px-4 py-3 text-sm text-destructive"
+        >
+          {t(error)}
         </p>
-      ) : null}
-      {message ? (
-        <p className="mt-3 rounded-md bg-emerald-100 p-2 text-sm text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">
+      )}
+      {message && (
+        <p
+          role="status"
+          className="border-t px-4 py-3 text-sm text-emerald-700 dark:text-emerald-400"
+        >
           {message}
         </p>
-      ) : null}
-    </section>
+      )}
+    </Card>
   );
 }

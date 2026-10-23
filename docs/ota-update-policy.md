@@ -16,7 +16,8 @@ Every served update manifest includes `extra.updatePolicy`:
 
 The `guard` property is omitted when no Guard is configured. A configured
 Guard is unconditional: it is included for every client to which the existing
-runtime, channel, platform, and update selection logic serves that OTA.
+runtime, channel, platform, audience and update selection logic serves that OTA.
+A force guard never bypasses a device audience.
 Catalog membership is advisory and is not required to save or serve an action.
 
 - `Updates.checkForUpdateAsync()` returns the policy on the **candidate**
@@ -74,7 +75,8 @@ installations should apply only the canonical
 ## Guard action catalog
 
 The policy editor loads reusable action names from `ota_guard_actions`. New
-installations receive the `ota-force-store-update` action. Operators can create
+installations receive the separate `ota-force-update` and `ota-force-store-update`
+actions. Operators can create
 an action by typing it in the action combobox or through the catalog-only form,
 which remains available while viewing an immutable policy and never changes
 that policy.
@@ -87,3 +89,35 @@ delete control.
 Catalog action keys are trimmed when created, contain 1–100 characters, and
 cannot contain control characters. Viewers can list catalog entries but cannot
 create or delete them.
+
+## Generated client hook
+
+The configurator installs `useOtaUpdates(options)` and automatically connects it in the
+root layout/App, with `OtaUpdateGate` around application content. See the
+[client lifecycle guide](./ota-client-lifecycle.md) for configuration and methods.
+The hook evaluates the candidate policy from `check()`, then validates the fetched
+manifest again because the selected release may change between checking and downloading.
+
+- `ota-force-update` requires a compatible **OTA**: the gate blocks interaction, the
+  hook downloads the update and shows a restart action when ready.
+- `ota-force-store-update` requires a **new native binary**: the gate opens the platform
+  store URL; it does not download this OTA candidate. OTA cannot change runtime or add
+  native modules. Payload supports `androidUrl`, `iosUrl`, or a shared `url` fallback.
+- Unknown/custom actions remain blocked until an explicit `guardHandlers[action]`
+  returns `allow`. Catalog entries alone do not implement guard behavior.
+- `delivery: background` downloads silently and waits for a cold launch or a manual
+  reload. It does not immediately reload because `autoReload` is enabled.
+- A manual candidate is displayed for explicit download/reload unless root options
+  enable `autoUpdate`/`autoReload`. The generated root enables automatic checks only.
+
+The gate is required to block the application's UI; a hook alone only exposes state.
+Before a required candidate has been discovered, offline check failure leaves the
+running app usable. Expo may apply a previously downloaded bundle at native startup;
+JavaScript cannot revoke that native cache. These are delivery policies, not client
+authentication. Legacy clients may ignore policy fields, so deploy the configured native
+client before relying on a guard.
+
+Existing installations receive the new OTA guard catalog entry through
+`2026-10-22-device-targeting-activation.sql`, after the targeting migrations listed in
+the [operations guide](./operations-guide.md#installation-telemetry). The migration is
+idempotent and does not rewrite published policies.

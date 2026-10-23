@@ -32,6 +32,7 @@ export default defineConfig({
           { text: "npm Initializer", link: "/npm-installer" },
           { text: "Supabase", link: "/supabase-setup" },
           { text: "Expo Application", link: "/expo-app-setup" },
+          { text: "Manual Hook Integration", link: "/ota-client-lifecycle#manual-integration" },
         ],
       },
       { text: "Operations", link: "/operations-guide" },
@@ -52,12 +53,18 @@ export default defineConfig({
           { text: "Supabase Setup", link: "/supabase-setup" },
           { text: "Expo Application Setup", link: "/expo-app-setup" },
           { text: "OTA Update Policy", link: "/ota-update-policy" },
+          { text: "OTA Client Hook", link: "/ota-client-lifecycle" },
+          { text: "Manual Hook Integration", link: "/ota-client-lifecycle#manual-integration" },
+          { text: "Fresh App Verification", link: "/expo-app-setup#verify-generation-in-a-fresh-application" },
         ],
       },
       {
         text: "Operate",
         items: [
           { text: "Operations Guide", link: "/operations-guide" },
+          { text: "Setup Diagnostics", link: "/doctor" },
+          { text: "Installation Telemetry", link: "/installation-telemetry" },
+          { text: "Device targeting", link: "/device-targeting" },
           {
             text: "OTA Emergency Recovery",
             link: "/ota-emergency-recovery",

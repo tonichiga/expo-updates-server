@@ -334,6 +334,7 @@ function createFixture() {
 
   const appRoot = path.join(root, "app");
   fs.mkdirSync(appRoot, { recursive: true });
+  fs.writeFileSync(path.join(appRoot, "App.tsx"), "export default function App() { return null; }\n");
   fs.writeFileSync(
     path.join(appRoot, "package.json"),
     JSON.stringify(
@@ -403,7 +404,7 @@ function createRunner() {
   const commandRunner = (command: string, args: string[], cwd: string) => {
     calls.push({ command, args, cwd });
 
-    if (args.join(" ") === "expo install expo-updates") {
+    if (args.join(" ").startsWith("expo install expo-updates")) {
       const packagePath = path.join(cwd, "package.json");
       const packageJson = JSON.parse(fs.readFileSync(packagePath, "utf8"));
       packageJson.dependencies["expo-updates"] = "~56.0.0";
@@ -586,7 +587,7 @@ describe("configureExpoApp", () => {
     expect(calls).toEqual([
       {
         command: "npx",
-        args: ["expo", "install", "expo-updates"],
+        args: ["expo", "install", "expo-updates", "expo-application", "expo-crypto", "expo-secure-store", "@react-native-async-storage/async-storage"],
         cwd: appRoot,
       },
       {

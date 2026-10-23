@@ -1,15 +1,27 @@
 "use client";
+import { useI18n } from "@/src/client/i18n/provider";
+
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@/components/ui/table";
 
 import {
   deleteEmbeddedUpdate,
   getEmbeddedUpdates,
 } from "@/src/client/admin-api";
 import { EmbeddedUpdateItem } from "@/src/client/admin-types";
-import LogoutButton from "@/src/client/logout-button";
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 export default function EmbeddedUpdatesPage() {
+  const { t, formatLocale } = useI18n();
   const [items, setItems] = useState<EmbeddedUpdateItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -39,7 +51,7 @@ export default function EmbeddedUpdatesPage() {
 
   const handleDelete = async (embeddedUpdateId: string) => {
     const confirmed = window.confirm(
-      `Удалить запись embedded update ${embeddedUpdateId}?`,
+      t("Удалить запись embedded update {0}?", [embeddedUpdateId]),
     );
     if (!confirmed) {
       return;
@@ -51,7 +63,7 @@ export default function EmbeddedUpdatesPage() {
 
     try {
       await deleteEmbeddedUpdate(embeddedUpdateId);
-      setSuccess(`Запись удалена: ${embeddedUpdateId}`);
+      setSuccess(t("Запись удалена: {0}", [embeddedUpdateId]));
       await loadItems();
     } catch (deleteError: unknown) {
       setError(
@@ -64,29 +76,25 @@ export default function EmbeddedUpdatesPage() {
   };
 
   return (
-    <main className="min-h-screen bg-zinc-50 p-4 dark:bg-zinc-950 md:p-8">
-      <div className="mx-auto max-w-7xl space-y-4">
-        <header className="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-xl font-semibold">Embedded Updates</h1>
-            <p className="text-sm text-zinc-600 dark:text-zinc-400">
-              Записей: {items.length}
+    <div className="mx-auto max-w-[1600px] space-y-6 p-4 md:p-8">
+      <div className="space-y-6">
+        <header className="flex flex-wrap items-start justify-between gap-4">
+          <div className="space-y-1">
+            <h1 className="text-2xl font-semibold tracking-tight">
+              Embedded builds
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              {t("Встроенные версии приложения и регистрация нативных сборок.")}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <Link
-              href="/updates"
-              className="rounded-md border border-zinc-300 px-4 py-4 text-sm hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
-            >
-              OTA Updates
-            </Link>
-            <LogoutButton />
-          </div>
+          <Badge variant="secondary" className="px-3 py-1">
+            {items.length} {t(" сборок")}
+          </Badge>
         </header>
 
         {error ? (
           <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
-            {error}
+            {t(error)}
           </div>
         ) : null}
 
@@ -96,73 +104,99 @@ export default function EmbeddedUpdatesPage() {
           </div>
         ) : null}
 
-        <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+        <Card className="gap-0 overflow-hidden py-0 shadow-none">
           <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead className="bg-zinc-100 dark:bg-zinc-800">
-                <tr>
-                  <th className="px-4 py-4 text-left">Created At</th>
-                  <th className="px-4 py-4 text-left">App version</th>
-                  <th className="px-4 py-4 text-left">Platform</th>
-                  <th className="px-4 py-4 text-left">Channel</th>
-                  <th className="px-4 py-4 text-left">Embedded ID</th>
-                  <th className="px-4 py-4 text-left">Action</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table className="min-w-full text-sm">
+              <TableHeader className="bg-muted/40">
+                <TableRow>
+                  <TableHead className="px-4 py-3 text-left">
+                    Created At
+                  </TableHead>
+                  <TableHead className="px-4 py-3 text-left">
+                    App version
+                  </TableHead>
+                  <TableHead className="px-4 py-3 text-left">
+                    Platform
+                  </TableHead>
+                  <TableHead className="px-4 py-3 text-left">Channel</TableHead>
+                  <TableHead className="px-4 py-3 text-left">
+                    Embedded ID
+                  </TableHead>
+                  <TableHead className="px-4 py-3 text-left">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {loading ? (
-                  <tr>
-                    <td className="px-3 py-4 text-zinc-500" colSpan={6}>
-                      Загрузка...
-                    </td>
-                  </tr>
+                  <TableRow>
+                    <TableCell
+                      className="h-36 px-3 py-4 text-center text-muted-foreground"
+                      colSpan={6}
+                    >
+                      {t("Загрузка...")}
+                    </TableCell>
+                  </TableRow>
                 ) : null}
 
                 {!loading && items.length === 0 ? (
-                  <tr>
-                    <td className="px-3 py-4 text-zinc-500" colSpan={6}>
-                      Embedded записи не найдены
-                    </td>
-                  </tr>
+                  <TableRow>
+                    <TableCell
+                      className="h-36 px-3 py-4 text-center text-muted-foreground"
+                      colSpan={6}
+                    >
+                      {t("Embedded записи не найдены")}
+                    </TableCell>
+                  </TableRow>
                 ) : null}
 
                 {!loading
                   ? items.map((item) => (
-                      <tr
+                      <TableRow
                         key={item.embeddedUpdateId}
-                        className="border-t border-zinc-200 dark:border-zinc-800"
+                        className="border-t border-border "
                       >
-                        <td className="px-4 py-4">
-                          {new Date(item.createdAt).toLocaleString("uk-UA")}
-                        </td>
-                        <td className="px-4 py-4">
+                        <TableCell className="px-4 py-3">
+                          {new Date(item.createdAt).toLocaleString(
+                            formatLocale,
+                          )}
+                        </TableCell>
+                        <TableCell className="px-4 py-3">
                           {item.appVersion || "—"}
-                        </td>
-                        <td className="px-4 py-4">{item.platform}</td>
-                        <td className="px-4 py-4">{item.channel}</td>
-                        <td className="px-4 py-4 font-mono text-xs">
-                          {item.embeddedUpdateId}
-                        </td>
-                        <td className="px-4 py-4">
-                          <button
+                        </TableCell>
+                        <TableCell className="px-4 py-3">
+                          {item.platform}
+                        </TableCell>
+                        <TableCell className="px-4 py-3">
+                          <Badge variant="outline">{item.channel}</Badge>
+                        </TableCell>
+                        <TableCell className="px-4 py-3 font-mono text-xs">
+                          <span
+                            className="block max-w-64 truncate select-all"
+                            title={item.embeddedUpdateId}
+                          >
+                            {item.embeddedUpdateId}
+                          </span>
+                        </TableCell>
+                        <TableCell className="px-4 py-3">
+                          <Button
+                            variant="destructive"
+                            size="sm"
                             type="button"
                             onClick={() => handleDelete(item.embeddedUpdateId)}
                             disabled={deletingId === item.embeddedUpdateId}
-                            className="rounded-md border border-red-300 px-3 py-1.5 text-xs text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-950/40"
                           >
                             {deletingId === item.embeddedUpdateId
-                              ? "Удаление..."
-                              : "Удалить"}
-                          </button>
-                        </td>
-                      </tr>
+                              ? t("Удаление...")
+                              : t("Удалить")}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
                     ))
                   : null}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
-        </section>
+        </Card>
       </div>
-    </main>
+    </div>
   );
 }
