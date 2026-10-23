@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: Expo Updates Server
-  text: Own your Expo OTA delivery
-  tagline: Self-host signed updates, promote releases deliberately, roll back safely, and recover misconfigured native builds.
+  text: See what’s running.<br>Choose who updates.
+  tagline: Signed OTA updates, installation analytics, and device targeting for your Expo apps. All on your own infrastructure.
   actions:
     - theme: brand
       text: Quick Start

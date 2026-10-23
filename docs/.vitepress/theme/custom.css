@@ -23,3 +23,24 @@
   border-color: var(--vp-c-brand-1);
   transform: translateY(-2px);
 }
+
+/* Give the product preview a full-width hero instead of a small illustration. */
+.VPHome .VPHero .container { display: flex; justify-content: center; }
+.VPHome .VPHero .main { max-width: 860px; text-align: center; }
+.VPHome .VPHero .name,
+.VPHome .VPHero .text,
+.VPHome .VPHero .tagline { max-width: 860px; margin-left: auto; margin-right: auto; }
+.VPHome .VPHero .name { font-size: 18px; line-height: 1.5; letter-spacing: -.02em; margin-bottom: 18px; }
+.VPHome .VPHero .text { font-size: clamp(36px, 4.5vw, 60px); line-height: 1.08; letter-spacing: -.045em; }
+.VPHome .VPHero .tagline { max-width: 660px; font-size: 18px; line-height: 1.65; padding-top: 24px; }
+.VPHome .VPHero .actions { justify-content: center; padding-top: 28px; }
+.VPHome .VPHero { padding-top: 64px; padding-bottom: 44px; }
+@media (max-width: 767px) {
+  .VPHome .VPHero { padding-top: 40px; padding-bottom: 32px; }
+  .VPHome .VPHero .name { font-size: 15px; margin-bottom: 14px; }
+  .VPHome .VPHero .tagline { font-size: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .VPHome .VPFeature { transition: none; }
+  .VPHome .VPFeature:hover { transform: none; }
+}
