@@ -351,7 +351,7 @@ npm run configure-app
 
 Select the app directory, certificate, public URL, channel, runtime and platform.
 The CLI installs dependencies, configures native updates, generates the identity
-and telemetry client, inserts the root hook/gate, installs publisher/registration
+and telemetry client, inserts the standalone root component, installs publisher/registration
 scripts and runs prebuild. Review its summary before applying changes.
 
 For flags, supported root components and reruns, see
@@ -384,10 +384,10 @@ a server running directly with npm. See [embedded registration](./expo-app-setup
 
 Before building, choose how the app will download and apply updates.
 
-The generated root checks automatically, but defaults to manual download/restart.
-Add the [manual controls example](./ota-client-lifecycle.md#_3-add-manual-update-controls)
-to a test screen, or explicitly configure automation using the [hook options](./ota-client-lifecycle.md).
-The generator does not add test buttons to your application's UI.
+The generated `<OtaUpdates />` component checks automatically and offers download,
+restart and Later actions. To download ordinary updates automatically, set
+`autoUpdate` on the component; use `autoReload` only if automatic restarts suit the app.
+Custom screen controls are optional. See [hook options](./ota-client-lifecycle.md).
 
 From the **application directory**, with the Android toolchain installed:
 

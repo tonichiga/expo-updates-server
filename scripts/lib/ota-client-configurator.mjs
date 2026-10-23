@@ -1,69 +1,151 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { planOtaRootHook } from './ota-root-hook-patcher.mjs';
-const ENTRY = 'ota-entry.js';
-const META = 'ota-client-entry.json';
-const extensions = ['tsx', 'ts', 'jsx', 'js', 'mjs', 'cjs'];
+import fs from "node:fs";
+import path from "node:path";
+import { planOtaRootHook } from "./ota-root-hook-patcher.mjs";
+const ENTRY = "ota-entry.js";
+const META = "ota-client-entry.json";
+const extensions = ["tsx", "ts", "jsx", "js", "mjs", "cjs"];
 function hasEntry(root, entry, platform) {
-  const suffixes = platform === 'web' ? ['web', ''] : [platform, 'native', ''];
-  return suffixes.some((suffix) => extensions.some((ext) => fs.existsSync(path.join(root, `${entry}${suffix ? `.${suffix}` : ''}.${ext}`))));
+  const suffixes = platform === "web" ? ["web", ""] : [platform, "native", ""];
+  return suffixes.some((suffix) =>
+    extensions.some((ext) =>
+      fs.existsSync(
+        path.join(root, `${entry}${suffix ? `.${suffix}` : ""}.${ext}`),
+      ),
+    ),
+  );
 }
 
 // Preflight every generated file before the main configurator changes the project.
-export function planOtaClient({ appRoot, templateRoot, packageJson, manifestUrl, channel, force }) {
+export function planOtaClient({
+  appRoot,
+  templateRoot,
+  packageJson,
+  manifestUrl,
+  channel,
+  force,
+}) {
   let entry = packageJson.main;
   if (entry === ENTRY || entry === `./${ENTRY}`) {
-    const metadata = JSON.parse(fs.readFileSync(path.join(appRoot, META), 'utf8'));
+    const metadata = JSON.parse(
+      fs.readFileSync(path.join(appRoot, META), "utf8"),
+    );
     entry = metadata.originalEntry;
-    if (typeof entry !== 'string' || entry.includes('ota-entry')) throw new Error('Invalid original OTA entry metadata');
+    if (typeof entry !== "string" || entry.includes("ota-entry"))
+      throw new Error("Invalid original OTA entry metadata");
   } else if (!entry) {
-    entry = '__platform_default__';
-  } else if (typeof entry !== 'string' || entry.includes('ota-entry')) {
-    throw new Error('Invalid application main entry');
-  } else if (!entry.startsWith('.') && (fs.existsSync(path.join(appRoot, entry)) || ['android', 'ios', 'web'].some((platform) => hasEntry(appRoot, entry, platform)))) {
+    entry = "__platform_default__";
+  } else if (typeof entry !== "string" || entry.includes("ota-entry")) {
+    throw new Error("Invalid application main entry");
+  } else if (
+    !entry.startsWith(".") &&
+    (fs.existsSync(path.join(appRoot, entry)) ||
+      ["android", "ios", "web"].some((platform) =>
+        hasEntry(appRoot, entry, platform),
+      ))
+  ) {
     entry = `./${entry}`;
   }
   const heartbeatUrl = new URL(manifestUrl);
-  heartbeatUrl.pathname = heartbeatUrl.pathname.replace(/\/manifest\/?$/, '/device-heartbeat');
-  heartbeatUrl.search = '';
-  heartbeatUrl.hash = '';
-  const existingConfigPath = path.join(appRoot, 'ota-client/config.json');
-  const existingConfig = fs.existsSync(existingConfigPath) ? JSON.parse(fs.readFileSync(existingConfigPath, 'utf8')) : {};
+  heartbeatUrl.pathname = heartbeatUrl.pathname.replace(
+    /\/manifest\/?$/,
+    "/device-heartbeat",
+  );
+  heartbeatUrl.search = "";
+  heartbeatUrl.hash = "";
+  const existingConfigPath = path.join(appRoot, "ota-client/config.json");
+  const existingConfig = fs.existsSync(existingConfigPath)
+    ? JSON.parse(fs.readFileSync(existingConfigPath, "utf8"))
+    : {};
   // Preserve the namespace when a tunnel URL changes; runtime/channel are deliberately excluded.
-  const identityNamespace = existingConfig.identityNamespace || new URL(manifestUrl).origin;
+  const identityNamespace =
+    existingConfig.identityNamespace || new URL(manifestUrl).origin;
   const defaultEntries = [];
-  if (entry === '__platform_default__') {
-    for (const platform of ['android', 'ios', 'web']) {
-      const source = hasEntry(appRoot, 'index', platform) ? 'require("./index");' : "require('expo').registerRootComponent(require('./App').default);";
-      defaultEntries.push([`ota-original-entry.${platform}.js`, `// Generated default ${platform} entry.\n${source}\n`]);
+  if (entry === "__platform_default__") {
+    for (const platform of ["android", "ios", "web"]) {
+      const source = hasEntry(appRoot, "index", platform)
+        ? 'require("./index");'
+        : "require('expo').registerRootComponent(require('./App').default);";
+      defaultEntries.push([
+        `ota-original-entry.${platform}.js`,
+        `// Generated default ${platform} entry.\n${source}\n`,
+      ]);
     }
   }
-  const original = entry === '__platform_default__' ? "require('./ota-original-entry');" : entry === '__app_fallback__'
-    ? "require('expo').registerRootComponent(require('./App').default);"
-    : `require(${JSON.stringify(entry)});`;
+  const original =
+    entry === "__platform_default__"
+      ? "require('./ota-original-entry');"
+      : entry === "__app_fallback__"
+        ? "require('expo').registerRootComponent(require('./App').default);"
+        : `require(${JSON.stringify(entry)});`;
   const rootHookPlan = planOtaRootHook({ appRoot, originalEntry: entry });
   const files = [
     ...defaultEntries,
-    [ENTRY, `// Generated by configure-app. Original entry is preserved in ${META}.\nrequire('./ota-client').start();\n${original}\n`],
+    [
+      ENTRY,
+      `// Generated by configure-app. Original entry is preserved in ${META}.\nrequire('./ota-client/runtime').start();\n${original}\n`,
+    ],
     [META, `${JSON.stringify({ originalEntry: entry }, null, 2)}\n`],
-    ['ota-client/config.json', `${JSON.stringify({ channel, heartbeatUrl: heartbeatUrl.toString(), identityNamespace }, null, 2)}\n`],
-    ...['index.js', 'index.d.ts', 'runtime.js', 'controller.js', 'device-identity.js', 'model/update-controller.js', 'model/hooks/useOtaUpdates.js', 'ui/ota-update-gate.js', 'docs/update-lifecycle.md', 'README.md'].map((name) => [`ota-client/${name}`, fs.readFileSync(path.join(templateRoot, 'ota-client', name), 'utf8')]),
+    [
+      "ota-client/config.json",
+      `${JSON.stringify({ channel, heartbeatUrl: heartbeatUrl.toString(), identityNamespace }, null, 2)}\n`,
+    ],
+    ...[
+      "index.ts",
+      "types.ts",
+      "runtime.ts",
+      "controller.ts",
+      "device-identity.ts",
+      "model/update-controller.ts",
+      "model/hooks/useOtaUpdates.ts",
+      "ui/ota-updates.tsx",
+      "ui/ota-update-gate.tsx",
+      "docs/update-lifecycle.md",
+      "README.md",
+    ].map((name) => [
+      `ota-client/${name}`,
+      fs.readFileSync(path.join(templateRoot, "ota-client", name), "utf8"),
+    ]),
   ];
+  const obsolete = [
+    "index.js",
+    "index.d.ts",
+    "runtime.js",
+    "controller.js",
+    "device-identity.js",
+    "model/update-controller.js",
+    "model/hooks/useOtaUpdates.js",
+    "ui/ota-update-gate.js",
+  ]
+    .map((name) => path.join(appRoot, "ota-client", name))
+    .filter((file) => fs.existsSync(file));
+  if (obsolete.length && !force)
+    throw new Error(
+      "Refusing to replace the existing JavaScript OTA client. Review your customizations and rerun with --force to migrate to TypeScript.",
+    );
   for (const [name, content] of files) {
     const destination = path.join(appRoot, name);
-    if (fs.existsSync(destination) && fs.readFileSync(destination, 'utf8') !== content && !force) {
-      throw new Error(`Refusing to overwrite ${destination}. Re-run with --force.`);
+    if (
+      fs.existsSync(destination) &&
+      fs.readFileSync(destination, "utf8") !== content &&
+      !force
+    ) {
+      throw new Error(
+        `Refusing to overwrite ${destination}. Re-run with --force.`,
+      );
     }
   }
   return {
     warnings: rootHookPlan.warnings,
     apply() {
+      for (const file of obsolete) fs.rmSync(file);
       for (const [name, content] of [...files, ...rootHookPlan.files]) {
         const destination = path.join(appRoot, name);
         fs.mkdirSync(path.dirname(destination), { recursive: true });
         fs.writeFileSync(destination, content);
       }
     },
-    patchPackage(packageJson) { return { ...packageJson, main: ENTRY }; },
+    patchPackage(packageJson) {
+      return { ...packageJson, main: ENTRY };
+    },
   };
 }

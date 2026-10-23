@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { createHash, randomUUID } from 'node:crypto';
-import { createDeviceIdentity } from '../../templates/expo-app/ota-client/device-identity.js';
+import { createDeviceIdentity } from '../../templates/expo-app/ota-client/device-identity';
 const digest = async (v: string) => createHash('sha256').update(v).digest('hex');
 function options(platform = 'android', store = new Map<string, string>()) {
   return { platform, scope: 'com.example:https://updates.example.com', androidId: () => 'abc123', digest,
-    uuid: randomUUID, readSecure: async (k: string) => store.get(k), writeSecure: async (k: string, v: string) => { store.set(k, v); } };
+    uuid: randomUUID, readSecure: async (k: string) => store.get(k) ?? null, writeSecure: async (k: string, v: string) => { store.set(k, v); } };
 }
 describe('device identity independent of installation state', () => {
   it('recognizes Android reinstalls, isolates app/server and signing identity changes', async () => {

@@ -34,11 +34,11 @@ certificate, installs `expo-updates` and the identity/telemetry dependencies, ad
 
 It also generates `ota-client/` and starts identity/installation telemetry from
 `ota-entry.js`, preserving the original application entry. For Expo Router,
-the configurator inserts `useOtaUpdates` into `src/app/_layout` (or `app/_layout`)
-and wraps the root's rendered content with `OtaUpdateGate`. Standard `App`
+the configurator renders `<OtaUpdates />` beside navigation in `src/app/_layout`
+(or `app/_layout`). The generated TypeScript component owns the hook internally;
+it does not wrap the application or require context. Standard `App`
 entry components are supported too, including platform variants. No manual
-Installation ID, Device ID, or heartbeat wiring is needed. The initial hook
-options are `{ autoCheck: true, autoUpdate: false, autoReload: false }`;
+Installation ID, Device ID, or heartbeat wiring is needed. The component starts with automatic checks and manual download/restart prompts;
 customized options are preserved on later configurations. See the generated
 [OTA client lifecycle](./ota-client-lifecycle.md) for update modes and the hook API.
 If generation is unavailable, follow [manual hook integration](./ota-client-lifecycle.md#manual-integration).
@@ -154,7 +154,7 @@ the installation to the new running version in analytics; the next launch heartb
 should. Confirm the Installation ID stays unchanged across the OTA restart.
 
 Finally, rerun the same configurator command. Check that it does not duplicate the
-hook/gate or replace the stored original entry. Change a hook option in the root
+OTA component or replace the stored original entry. Change a component prop in the root
 and rerun to verify that the option survives. Use `--force` only when intentionally
 replacing changed generated files; it does not bypass unsupported root shapes.
 For the manual fallback test, use a separate clean copy and follow
@@ -452,7 +452,7 @@ expected URL, runtime, channel and certificate.
 
 ## 5. Check and install updates in the application
 
-Use the generated `useOtaUpdates` controller with `OtaUpdateGate` in the root
+Render the generated `<OtaUpdates />` component beside navigation in the root
 layout. `configure-app` inserts this integration automatically. If the files or root
 patch are missing, follow [manual integration](./ota-client-lifecycle.md#manual-integration),
 including the complete Router example and manual controls.
@@ -460,14 +460,10 @@ including the complete Router example and manual controls.
 The root defaults to automatic checks and manual download/restart:
 
 ```tsx
-const ota = useOtaUpdates({
-  autoCheck: true,
-  autoUpdate: false,
-  autoReload: false,
-});
+<OtaUpdates autoCheck autoUpdate={false} autoReload={false} />
 ```
 
-Screens use `useOtaUpdates()` and its `check()`, `download()` and `reload()` methods.
+Optional custom screens can use `useOtaUpdates()` and its `check()`, `download()` and `reload()` methods.
 Identity setup, telemetry and update policies share one controller. Do not replace
 these actions with direct `Updates.checkForUpdateAsync()`/`fetchUpdateAsync()` calls:
 those bypass hook orchestration. Keep native `checkAutomatically: "NEVER"`.

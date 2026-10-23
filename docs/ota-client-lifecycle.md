@@ -1,11 +1,20 @@
 # Generated OTA client lifecycle
 
-`configure-app` inserts `useOtaUpdates({ autoCheck: true, autoUpdate: false,
-autoReload: false })` in the root layout/App and wraps its content in `OtaUpdateGate`.
-All screens can call `useOtaUpdates()` to observe the same state and use `check()`,
-`download()` and `reload()`. No provider is needed. Configure automation in one root;
-additional consumers default to observation/manual actions. Multiple configured roots
-combine boolean options with OR. Guard handlers should be stable references.
+`configure-app` generates a formatted TypeScript client and renders `<OtaUpdates />`
+beside navigation in the root layout/App. The component calls `useOtaUpdates`
+internally; it does not wrap the app or provide React context. Mount it once in a
+persistent root, including loading/early-return paths.
+
+By default it checks automatically and shows **Download / Later** for an ordinary
+update, then **Restart / Later** when downloaded. `autoUpdate={false}` disables
+automatic downloading, not the prompt. A dismissed candidate stays hidden until the
+component remounts, a different candidate arrives, or its download state changes.
+Background updates remain silent; required updates cannot be dismissed.
+
+The lower-level `useOtaUpdates()` is still available for optional custom screens.
+It shares state/actions but defaults to no automation and renders no UI. Configure
+automation in one root; multiple configured consumers combine booleans with OR.
+Keep custom guard handlers stable.
 
 Identity is persisted and installed in Expo request parameters before any check/download.
 Launch/foreground heartbeats report only the **running** bundle, never a downloaded
@@ -14,7 +23,7 @@ Expo Go, web and disabled-updates builds leave automation off.
 
 | Policy/options | Behavior |
 | --- | --- |
-| manual, default options | Check exposes candidate; caller downloads and reloads |
+| manual, default options | OtaUpdates offers download/restart; the hook alone exposes state |
 | autoCheck | Check on mount and foreground, minimum interval 60 seconds |
 | autoUpdate | Also download eligible manual candidates |
 | autoReload | Reload a pending non-background bundle while app is active |
@@ -29,8 +38,8 @@ https, market and itms-apps URLs are accepted. Native upgrades still require a s
 release; OTA cannot add native modules or change the installed runtime.
 
 The built-in gate is a non-dismissable modal that preserves mounted navigation and providers.
-It is customizable with `renderBlocked`. Keep the gate mounted around
-the application; a hook alone exposes `blocked` but cannot prevent interaction with
+Customize required UI with `renderBlocked`, and optional UI with `renderAvailable`.
+Keep `OtaUpdates` mounted beside navigation; a hook alone exposes `blocked` but cannot prevent interaction with
 your own screens. Unknown guards fail closed. Required checks are online policy,
 not authentication or a tamper-proof access restriction. Offline check failure keeps
 the running app usable unless a required candidate was already discovered or the running bundle requires a store/custom guard.
@@ -54,7 +63,7 @@ No database/admin credentials are shipped: the server persists public heartbeat 
 ## Integration and customization
 
 Use the stock `npm run configure-app -- ...` command from the server project. It
-preserves the original app entry, generates the client and inserts the hook/gate in
+preserves the original app entry, generates the client and inserts the standalone component in
 supported root components. For Expo Router this is `src/app/_layout` (preferred when
 `src/app` exists) or `app/_layout`, including platform variants. For the default entry
 it is `App`, provided no custom `index` registers a different root. Synchronous function
@@ -64,13 +73,12 @@ automatic identity/telemetry setup and emits a warning to connect the lifecycle 
 The generated integration starts with:
 
 ```tsx
-const ota = useOtaUpdates({
-  autoCheck: true,
-  autoUpdate: false,
-  autoReload: false,
-});
-
-return <OtaUpdateGate controller={ota}>{/* app content */}</OtaUpdateGate>;
+return (
+  <>
+    <OtaUpdates autoCheck autoUpdate={false} autoReload={false} />
+    <AppTabs />
+  </>
+);
 ```
 
 Adjust these options in the root component. Use `useOtaUpdates()` in other screens for
@@ -78,8 +86,12 @@ manual controls and shared state. The configurator selects the appropriate impor
 no database or admin credentials belong in the application. Generated source includes
 `ota-client/docs/update-lifecycle.md` with this contract for application developers.
 
-For an already configured project, review generated-file changes and rerun the existing
-`--force` flow when replacing generated files. Native dependencies need a new binary;
+For an already configured project, review generated-file changes and rerun with
+`--force`. This replaces the legacy JavaScript files with TypeScript, removes stale
+`.js`/`.d.ts` copies that could shadow the new modules, and migrates the stock root
+hook/gate while preserving its options. Custom code that uses the old root controller
+or a custom gate must be migrated manually; the preflight stops before any writes.
+Use `.tsx` for TypeScript JSX roots. Existing `OtaUpdateGate` consumers remain supported. Native dependencies need a new binary;
 use a new runtime when older installed binaries lack those modules. Publishing remains
 the generated `npm run ota:publish` workflow. See [device targeting](./device-targeting.md)
 for selecting a smoke-test audience and [installation telemetry](./installation-telemetry.md)
@@ -94,7 +106,7 @@ it from `expo-updates`.
 
 ### 1. Prepare the client and native configuration
 
-If `ota-client/index.js`, `ota-client/index.d.ts` and `ota-client/config.json` already
+If `ota-client/index.ts`, `ota-client/types.ts` and `ota-client/config.json` already
 exist after configuration, keep them and continue with step 2. A warning about an
 unidentified custom root means the bootstrap/client were installed; an unsupported
 root error stops configuration before writes, so check which files actually exist.
@@ -138,25 +150,21 @@ A dynamic config must resolve the same channel used in `ota-client/config.json`.
 
 ### 2. Connect the root layout or App
 
-For Expo Router, add the hook to the existing `src/app/_layout.tsx`. This minimal
-example shows the integration; preserve your current navigation, providers, fonts,
-splash-screen handling and other layout code inside the gate:
+For Expo Router, render the component beside navigation in the existing
+`src/app/_layout.tsx`. Preserve your providers, fonts, splash-screen handling and
+other layout code. Keep the component outside navigator-only child collections
+such as `Stack.Screen`/`Tabs.Screen`.
 
 ```tsx
 import { Stack } from 'expo-router';
-import { OtaUpdateGate, useOtaUpdates } from '../../ota-client';
+import { OtaUpdates } from '../../ota-client';
 
 export default function RootLayout() {
-  const ota = useOtaUpdates({
-    autoCheck: true,
-    autoUpdate: false,
-    autoReload: false,
-  });
-
   return (
-    <OtaUpdateGate controller={ota}>
+    <>
+      <OtaUpdates autoCheck autoUpdate={false} autoReload={false} />
       <Stack />
-    </OtaUpdateGate>
+    </>
   );
 }
 ```
@@ -169,12 +177,9 @@ Adjust the relative import to the file location:
 | `app/_layout.tsx` | `../ota-client` |
 | `App.tsx` at the application root | `./ota-client` |
 
-For a non-Router application, call the hook in your existing function `App` and
-wrap its existing returned content with the same gate. A class component can stay
-inside a function wrapper that owns the hook. Call the hook unconditionally, before
-early returns, keep the gate on loading/early-return paths as well, and configure
-automation in one persistent root. A custom entry
-must still register that root using its existing registration mechanism.
+For a non-Router application, render the same component beside the existing app
+content. It can be a sibling of a class component too. Mount one instance, including
+loading/early-return paths. A custom entry still registers the original root.
 
 Keep an existing generated `ota-entry.js` and its `package.json.main` setting.
 When integrating entirely by hand, changing the entry is **not required**: the
@@ -185,15 +190,14 @@ initialization. For an app that needs registration before its root mounts, the
 public `start()` can also be called in its existing entry without replacing the
 original registration code.
 
-The gate is required for the default force-update UI. Using the hook without it
+`OtaUpdates` supplies the default force-update UI. Using the hook without it
 requires your own UI to enforce `blocked`. A custom gate view is supported through
 `renderBlocked`; this does not change the controller's guard decision.
 
 ### 3. Add manual update controls
 
-The root above checks automatically but leaves ordinary manual-policy updates for
-the user to download and apply. A separate screen can subscribe without enabling
-another automatic workflow. For example, `src/components/ota-controls.tsx`:
+The root already provides download/restart controls. A separate settings screen is
+optional and can subscribe without enabling another automatic workflow. For example, `src/components/ota-controls.tsx`:
 
 ```tsx
 import { useState } from 'react';

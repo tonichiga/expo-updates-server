@@ -64,7 +64,7 @@ async function inspectApplication(appRoot, serverUrl, add) {
     try { require.resolve(name); return false; } catch { return true; }
   });
   add('app.dependencies', missing.length ? 'fail' : 'pass', missing.length ? `Missing client dependencies: ${missing.join(', ')}.` : 'Client dependencies are declared and resolvable.', missing.length ? 'Run configure-app or install the documented Expo-compatible client dependencies in the app.' : undefined);
-  const clientFiles = ['index.js', 'runtime.js', 'controller.js', 'device-identity.js', 'model/update-controller.js', 'model/hooks/useOtaUpdates.js', 'ui/ota-update-gate.js'];
+  const clientFiles = ['index.ts', 'types.ts', 'runtime.ts', 'controller.ts', 'device-identity.ts', 'model/update-controller.ts', 'model/hooks/useOtaUpdates.ts', 'ui/ota-updates.tsx', 'ui/ota-update-gate.tsx'];
   const clientFilesPresent = (await Promise.all(clientFiles.map((file) => exists(path.join(appRoot, 'ota-client', file))))).every(Boolean);
   add('app.client', clientFilesPresent ? 'pass' : 'fail', clientFilesPresent ? 'Generated client implementation files are present.' : 'Generated client implementation files are incomplete.', clientFilesPresent ? undefined : 'Run configure-app or copy the complete ota-client directory using the manual integration guide.');
   const updates = expo.updates || {};
@@ -102,10 +102,10 @@ async function inspectApplication(appRoot, serverUrl, add) {
     } else {
       const changes = await Promise.all(plan.files.map(async ([file, content]) => content !== await fs.readFile(path.join(appRoot, file), 'utf8')));
       if (changes.some(Boolean)) throw new Error('root');
-      add('app.root', 'pass', 'Recognized root hook/gate wiring is present (source inspection only).');
+      add('app.root', 'pass', 'Recognized root OTA component wiring is present (source inspection only).');
     }
   } catch {
-    add('app.root', 'fail', 'Root hook/gate or bootstrap metadata is missing or unsupported.', 'Run configure-app or review manual hook integration. Doctor never applies the patch.');
+    add('app.root', 'fail', 'Root OTA component or bootstrap metadata is missing or unsupported.', 'Run configure-app or review manual component integration. Doctor never applies the patch.');
   }
   try {
     const publisher = await readDoctorEnv(path.join(appRoot, '.env.ota'));
