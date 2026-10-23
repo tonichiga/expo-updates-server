@@ -194,13 +194,17 @@ npm test
 npx tsc --noEmit
 npm run build
 # Disposable database only, after applying migrations:
-OTA_TEST_DATABASE_URL=postgresql://... node scripts/tests/device-heartbeat.mjs
+export OTA_TEST_DATABASE_URL=postgresql://...
+node scripts/tests/device-heartbeat.mjs
 # Fresh disposable database with schema.sql applied:
-OTA_TEST_DATABASE_URL=postgresql://... node scripts/tests/device-analytics.mjs
+export OTA_TEST_DATABASE_URL=postgresql://...
+node scripts/tests/device-analytics.mjs
 # Empty disposable database: upgrade path, then the analytics regressions above:
-OTA_TEST_DATABASE_URL=postgresql://... node scripts/tests/device-analytics-migrations.mjs
+export OTA_TEST_DATABASE_URL=postgresql://...
+node scripts/tests/device-analytics-migrations.mjs
 # A separate empty disposable database: fresh canonical schema path:
-OTA_TEST_DATABASE_URL=postgresql://... node scripts/tests/device-analytics-migrations.mjs --fresh
+export OTA_TEST_DATABASE_URL=postgresql://...
+node scripts/tests/device-analytics-migrations.mjs --fresh
 ```
 
 The database check covers unknown/resolved/embedded launches, duplicates, stale
