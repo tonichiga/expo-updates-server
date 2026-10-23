@@ -194,12 +194,28 @@ export function patchOtaRootHook(text, filename, appRoot) {
       fail("unsupported hook arguments");
     }
     props = "autoCheck={false}";
-    if (hook.arguments[0])
-      props += ` {...${hook.arguments[0].getText(source)}}`;
+    let replacement = "";
+    if (hook.arguments[0]) {
+      let optionsName = "otaOptions";
+      for (let i = 2; identifiers.has(optionsName); i++)
+        optionsName = `otaOptions${i}`;
+      let inputName = "providedOtaOptions";
+      for (
+        let i = 2;
+        identifiers.has(inputName) || inputName === optionsName;
+        i++
+      )
+        inputName = `providedOtaOptions${i}`;
+      let autoCheckName = "otaAutoCheck";
+      for (let i = 2; identifiers.has(autoCheckName); i++)
+        autoCheckName = `otaAutoCheck${i}`;
+      replacement = `const ${inputName} = ${hook.arguments[0].getText(source)};${newline}const { autoCheck: ${autoCheckName} = false, ...${optionsName} } = ${inputName} ?? {};${newline}`;
+      props = `{...${optionsName}} autoCheck={${autoCheckName}}`;
+    }
     edits.push({
       start: hookStatement.getStart(source),
       end: hookStatement.end,
-      content: "",
+      content: replacement,
     });
   }
   const tagName = (node) =>
@@ -217,6 +233,15 @@ export function patchOtaRootHook(text, filename, appRoot) {
     if (ts.isJsxExpression(node)) return hasComponent(node.expression);
     return false;
   };
+  const containsComponent = (node) => {
+    if (!node) return false;
+    if (
+      (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) &&
+      tagName(node) === existingName
+    )
+      return true;
+    return ts.forEachChild(node, containsComponent) || false;
+  };
   const obsolete = new Set([hookName, gateName, createName].filter(Boolean));
   const expressions = ts.isBlock(component.body)
     ? returns.map((node) => ({ node, expression: node.expression }))
@@ -231,6 +256,10 @@ export function patchOtaRootHook(text, filename, appRoot) {
         );
       continue;
     }
+    if (containsComponent(expression))
+      fail(
+        "an existing OtaUpdates is conditional or nested in a render callback; keep its placement and integrate manually",
+      );
     let child = unwrap(expression);
     if (
       child &&
@@ -305,6 +334,17 @@ export function patchOtaRootHook(text, filename, appRoot) {
       ts.forEachChild(node, inspectReferences);
     };
     inspectReferences(component.body);
+  }
+  for (const node of clientImports) {
+    if (node.moduleSpecifier.text.endsWith("/index.js")) {
+      const specifier = node.moduleSpecifier;
+      const quote = text[specifier.getStart(source)];
+      edits.push({
+        start: specifier.getStart(source),
+        end: specifier.end,
+        content: `${quote}${specifier.text.slice(0, -"/index.js".length)}${quote}`,
+      });
+    }
   }
   if (!edits.length) return text;
   if (!existingName) {
@@ -385,6 +425,7 @@ function formatRoot(text, filename, newline) {
   });
   try {
     const edits = service.getFormattingEditsForDocument(filename, {
+      ...ts.getDefaultFormatCodeSettings(newline),
       indentSize: 2,
       tabSize: 2,
       convertTabsToSpaces: true,

@@ -28,6 +28,83 @@ function assertValid(source: string, file = filename) {
   expect(result.diagnostics).toEqual([]);
 }
 describe("root OTA component patch", () => {
+  it.each([
+    "undefined",
+    "{ autoCheck: undefined }",
+    "{ autoCheck: false }",
+    "{ autoCheck: true }",
+  ])("preserves legacy defaults with type-safe options: %s", (options) => {
+    const source = `import { useOtaUpdates } from '../../ota-client';
+export default function Layout() { useOtaUpdates(${options}); return null; }`;
+    const result = patch(source);
+    expect(result).toContain("autoCheck={otaAutoCheck}");
+    expect(patch(result)).toBe(result);
+    const directory = fs.mkdtempSync(
+      path.join(os.tmpdir(), "ota-migration-types-"),
+    );
+    roots.push(directory);
+    const layout = path.join(directory, "src/app/_layout.tsx");
+    fs.mkdirSync(path.dirname(layout), { recursive: true });
+    fs.mkdirSync(path.join(directory, "ota-client"));
+    fs.writeFileSync(layout, result);
+    fs.writeFileSync(
+      path.join(directory, "ota-client/index.ts"),
+      "export function OtaUpdates(props: { autoCheck?: boolean; autoUpdate?: boolean; autoReload?: boolean }) { return null; }",
+    );
+    const program = ts.createProgram([layout], {
+      noEmit: true,
+      strict: true,
+      skipLibCheck: true,
+      jsx: ts.JsxEmit.Preserve,
+      target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.ESNext,
+      moduleResolution: ts.ModuleResolutionKind.Bundler,
+      types: [],
+    });
+    expect(
+      ts
+        .getPreEmitDiagnostics(program)
+        .map((diagnostic) =>
+          ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"),
+        ),
+    ).toEqual([]);
+  });
+  it("evaluates dynamic legacy options only once and preserves undefined autoCheck", () => {
+    const result = patch(`import { useOtaUpdates } from '../../ota-client';
+export default function Layout() { useOtaUpdates(getOptions()); return null; }`);
+    expect(result.match(/getOptions\(\)/g)).toHaveLength(1);
+    expect(result).toContain("autoCheck: otaAutoCheck = false, ...otaOptions");
+    expect(result).toContain("autoCheck={otaAutoCheck}");
+    expect(patch(result)).toBe(result);
+  });
+  it.each([
+    "ready && <OtaUpdates autoCheck={false} />",
+    "ready ? <OtaUpdates /> : null",
+    "items.map(() => <OtaUpdates />)",
+  ])(
+    "refuses to duplicate an existing conditional component: %s",
+    (expression) => {
+      expect(() =>
+        patch(`import { OtaUpdates } from '../../ota-client';
+export default () => <>{${expression}}</>;`),
+      ).toThrow("conditional or nested");
+    },
+  );
+  it("normalizes a retained legacy JS entry import before the JS file is removed", () => {
+    const result =
+      patch(`import { useOtaUpdates, OtaUpdateGate, getInstallationId } from '../../ota-client/index.js';
+import { createElement } from 'react';
+export default function Layout() {
+  const ota = useOtaUpdates({ autoCheck: true });
+  void getInstallationId();
+  return createElement(OtaUpdateGate, { controller: ota }, null);
+}`);
+    expect(result).not.toContain("index.js");
+    expect(result).toContain(
+      "import { getInstallationId } from '../../ota-client';",
+    );
+    expect(patch(result)).toBe(result);
+  });
   it("renders JSX siblings, preserves comments and is idempotent with custom props", () => {
     const source = `'use client';\n// Header\nimport { Stack } from 'expo-router';\nexport default function Layout() {\n  // Keep this check.\n  if (loading) return null;\n  return <Stack />;\n}\n`;
     const result = patch(source);
