@@ -1,5 +1,13 @@
 "use client";
 
+import { Textarea } from "@/components/ui/textarea";
+
+import { NativeSelect } from "@/components/ui/native-select";
+
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input as TextInput } from "@/components/ui/input";
+
 import {
   createGuardAction,
   deleteGuardAction,
@@ -81,9 +89,9 @@ export default function UpdatePolicyEditor({
 
   if (!policy) {
     return (
-      <section className="rounded-xl border border-zinc-200 bg-white p-4 text-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <Card className="rounded-xl border border-border bg-card p-5 text-sm  shadow-none">
         {error || "Loading update policy…"}
-      </section>
+      </Card>
     );
   }
 
@@ -193,9 +201,7 @@ export default function UpdatePolicyEditor({
         const trimmedPayload = payload.trim();
         guard = {
           action: policy.guard.action,
-          ...(trimmedPayload
-            ? { payload: JSON.parse(trimmedPayload) }
-            : {}),
+          ...(trimmedPayload ? { payload: JSON.parse(trimmedPayload) } : {}),
         };
       }
       const saved = await putUpdatePolicy(
@@ -219,11 +225,11 @@ export default function UpdatePolicyEditor({
   };
 
   return (
-    <section className="space-y-4 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+    <Card className="gap-4 p-5 shadow-none">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="font-semibold">Update policy</h2>
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-muted-foreground">
             Version {policy.policyVersion}
             {policy.publishedAt
               ? ` · published ${new Date(policy.publishedAt).toLocaleString()}`
@@ -232,7 +238,7 @@ export default function UpdatePolicyEditor({
         </div>
         <label className="text-sm">
           Delivery{" "}
-          <select
+          <NativeSelect
             value={policy.delivery}
             disabled={editingDisabled}
             onChange={(event) =>
@@ -241,16 +247,16 @@ export default function UpdatePolicyEditor({
                 delivery: event.target.value as UpdatePolicy["delivery"],
               })
             }
-            className="rounded-md border border-zinc-300 bg-transparent px-2 py-2 dark:border-zinc-700"
+            className="rounded-md border border-input bg-background px-2 py-2 "
           >
             <option value="manual">Manual</option>
             <option value="background">Background</option>
-          </select>
+          </NativeSelect>
         </label>
       </div>
 
       {readOnly ? (
-        <div className="rounded-md border border-zinc-300 bg-zinc-50 p-3 text-sm dark:border-zinc-700 dark:bg-zinc-950">
+        <div className="rounded-md border border-border bg-muted/30 p-3 text-sm ">
           Published policies are read-only. Publish a new update ID to change
           policy.
         </div>
@@ -270,23 +276,24 @@ export default function UpdatePolicyEditor({
           className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-300"
         >
           <span>Action catalog: {catalogError}</span>
-          <button
+          <Button
+            variant="outline"
+            size="sm"
             type="button"
             onClick={() => void loadGuardActions()}
-            className="underline"
           >
             Retry
-          </button>
+          </Button>
         </div>
       ) : null}
       {canWriteGuardActions ? (
         <form
           onSubmit={(event) => void createCatalogOnlyAction(event)}
-          className="flex flex-wrap items-end gap-2 rounded-md border border-zinc-200 p-3 dark:border-zinc-800"
+          className="flex flex-wrap items-end gap-2 rounded-md border border-border p-3 "
         >
-          <label className="min-w-56 flex-1 text-xs text-zinc-500">
+          <label className="min-w-56 flex-1 text-xs text-muted-foreground">
             Add action to catalog
-            <input
+            <TextInput
               value={catalogCreateValue}
               maxLength={100}
               disabled={catalogCreatePending}
@@ -295,20 +302,21 @@ export default function UpdatePolicyEditor({
                 setCatalogCreateError("");
               }}
               aria-describedby="guard-action-catalog-create-help"
-              className="mt-1 w-full rounded border border-zinc-300 bg-transparent p-2 text-sm dark:border-zinc-700"
+              className="mt-1 w-full rounded border border-input bg-background p-2 text-sm "
               placeholder="Reusable action name"
             />
           </label>
-          <button
+          <Button
+            variant="outline"
+            size="sm"
             type="submit"
             disabled={catalogCreatePending}
-            className="rounded border border-zinc-300 px-3 py-2 text-sm disabled:opacity-40 dark:border-zinc-700"
           >
             {catalogCreatePending ? "Adding…" : "Add to catalog"}
-          </button>
+          </Button>
           <p
             id="guard-action-catalog-create-help"
-            className="w-full text-xs text-zinc-500"
+            className="w-full text-xs text-muted-foreground"
           >
             Adds a reusable catalog item without changing this policy.
           </p>
@@ -318,14 +326,14 @@ export default function UpdatePolicyEditor({
               className="flex w-full items-center gap-2 text-xs text-amber-700 dark:text-amber-300"
             >
               <span>{catalogCreateError}</span>
-              <button type="submit" className="underline">
+              <Button variant="outline" size="sm" type="submit">
                 Retry
-              </button>
+              </Button>
             </div>
           ) : null}
         </form>
       ) : null}
-      <div className="space-y-2 rounded-md border border-zinc-200 p-3 dark:border-zinc-800">
+      <div className="space-y-2 rounded-md border border-border p-3 ">
         <h3 className="text-sm font-medium">Action catalog</h3>
         {guardActions.length > 0 ? (
           <ul
@@ -335,13 +343,15 @@ export default function UpdatePolicyEditor({
             {guardActions.map((item) => (
               <li
                 key={item.id}
-                className="flex items-center justify-between gap-2 rounded bg-zinc-50 px-2 py-1 text-sm dark:bg-zinc-950"
+                className="flex items-center justify-between gap-2 rounded bg-muted/30 px-2 py-1 text-sm dark:bg-muted/20"
               >
                 <span className="min-w-0 truncate" title={item.actionKey}>
                   {item.actionKey}
                 </span>
                 {canWriteGuardActions ? (
-                  <button
+                  <Button
+                    variant="destructive"
+                    size="sm"
                     type="button"
                     aria-label={`Delete ${item.actionKey} from action catalog`}
                     onClick={() =>
@@ -351,22 +361,23 @@ export default function UpdatePolicyEditor({
                         persisted: true,
                       })
                     }
-                    className="rounded px-2 py-1 text-xs text-red-600"
                   >
                     Delete
-                  </button>
+                  </Button>
                 ) : null}
               </li>
             ))}
           </ul>
         ) : (
-          <p className="text-xs text-zinc-500">No catalog actions found.</p>
+          <p className="text-xs text-muted-foreground">
+            No catalog actions found.
+          </p>
         )}
       </div>
 
-      <div className="space-y-3 rounded-lg border border-zinc-300 p-3 dark:border-zinc-700">
+      <div className="space-y-3 rounded-lg border border-input p-3 ">
         <label className="flex items-center gap-2 text-sm font-medium">
-          <input
+          <input className="size-4 rounded border-input accent-primary"
             type="checkbox"
             checked={policy.guard !== null}
             disabled={editingDisabled}
@@ -384,7 +395,7 @@ export default function UpdatePolicyEditor({
           />
           Guard enabled
         </label>
-        <p className="text-xs text-zinc-500">
+        <p className="text-xs text-muted-foreground">
           When enabled, this Guard applies unconditionally whenever this OTA is
           selected for a client.
         </p>
@@ -405,32 +416,33 @@ export default function UpdatePolicyEditor({
                   : undefined
               }
             />
-            <label className="block text-xs text-zinc-500">
+            <label className="block text-xs text-muted-foreground">
               Optional custom JSON payload
-              <textarea
+              <Textarea
                 value={payload}
                 disabled={editingDisabled}
                 onChange={(event) => setPayload(event.target.value)}
-                className="mt-1 h-24 w-full rounded border border-zinc-300 bg-transparent p-2 font-mono text-xs dark:border-zinc-700"
+                className="mt-1 h-24 w-full rounded border border-input bg-background p-2 font-mono text-xs "
                 placeholder='{"message":"Optional"}'
               />
             </label>
           </>
         ) : (
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-muted-foreground">
             No Guard will be emitted in the update manifest.
           </p>
         )}
       </div>
 
-      <button
+      <Button
+        variant="default"
+        size="sm"
         type="button"
         disabled={editingDisabled}
         onClick={() => void save()}
-        className="rounded bg-blue-600 px-4 py-2 text-sm text-white disabled:opacity-40"
       >
         Save policy
-      </button>
-    </section>
+      </Button>
+    </Card>
   );
 }

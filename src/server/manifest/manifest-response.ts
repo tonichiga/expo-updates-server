@@ -113,7 +113,7 @@ export function createMultipartResponse({
     headers: {
       "expo-protocol-version": String(protocolVersion),
       "expo-sfv-version": "0",
-      "cache-control": "private, max-age=0",
+      "cache-control": "private, no-store",
       "content-type": `multipart/mixed; boundary=${boundary}`,
     },
   });

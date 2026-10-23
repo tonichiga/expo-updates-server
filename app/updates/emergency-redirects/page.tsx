@@ -1,4 +1,20 @@
 "use client";
+import { useI18n } from "@/src/client/i18n/provider";
+
+import { NativeSelect } from "@/components/ui/native-select";
+
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@/components/ui/table";
+import { Input as TextInput } from "@/components/ui/input";
 
 import {
   createEmergencyRedirect,
@@ -11,8 +27,6 @@ import {
   EmergencyRedirectInput,
   EmergencyRedirectItem,
 } from "@/src/client/admin-types";
-import LogoutButton from "@/src/client/logout-button";
-import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 const EMPTY_FORM: EmergencyRedirectInput = {
@@ -28,6 +42,7 @@ const EMPTY_FORM: EmergencyRedirectInput = {
 };
 
 export default function EmergencyRedirectsPage() {
+  const { t } = useI18n();
   const [items, setItems] = useState<EmergencyRedirectItem[]>([]);
   const [form, setForm] = useState<EmergencyRedirectInput>(EMPTY_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -80,10 +95,10 @@ export default function EmergencyRedirectsPage() {
 
       if (editingId) {
         await updateEmergencyRedirect(editingId, payload);
-        setSuccess("Emergency redirect обновлён");
+        setSuccess(t("Emergency redirect обновлён"));
       } else {
         await createEmergencyRedirect(payload);
-        setSuccess("Emergency redirect создан");
+        setSuccess(t("Emergency redirect создан"));
       }
 
       resetForm();
@@ -119,7 +134,7 @@ export default function EmergencyRedirectsPage() {
     setSuccess("");
     try {
       await updateEmergencyRedirect(item.id, { enabled: !item.enabled });
-      setSuccess(item.enabled ? "Redirect отключён" : "Redirect включён");
+      setSuccess(item.enabled ? t("Redirect отключён") : t("Redirect включён"));
       await load();
     } catch (toggleError: unknown) {
       setError((toggleError as Error).message || "Не удалось изменить статус");
@@ -127,7 +142,7 @@ export default function EmergencyRedirectsPage() {
   };
 
   const remove = async (item: EmergencyRedirectItem) => {
-    if (!window.confirm(`Удалить emergency redirect "${item.name}"?`)) {
+    if (!window.confirm(t('Удалить emergency redirect "{0}"?', [item.name]))) {
       return;
     }
 
@@ -135,7 +150,7 @@ export default function EmergencyRedirectsPage() {
     setSuccess("");
     try {
       await deleteEmergencyRedirect(item.id);
-      setSuccess("Emergency redirect удалён");
+      setSuccess(t("Emergency redirect удалён"));
       if (editingId === item.id) {
         resetForm();
       }
@@ -146,29 +161,27 @@ export default function EmergencyRedirectsPage() {
   };
 
   return (
-    <main className="min-h-screen bg-zinc-50 p-4 dark:bg-zinc-950 md:p-8">
-      <div className="mx-auto max-w-7xl space-y-4">
-        <header className="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-xl font-semibold">Emergency Redirects</h1>
-            <p className="text-sm text-zinc-600 dark:text-zinc-400">
-              Точечное перенаправление ошибочных embedded builds
+    <div className="mx-auto max-w-[1600px] space-y-6 p-4 md:p-8">
+      <div className="space-y-6">
+        <header className="flex flex-wrap items-start justify-between gap-4">
+          <div className="space-y-1">
+            <h1 className="text-2xl font-semibold tracking-tight">
+              Emergency redirects
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              {t(
+                "Точечное перенаправление ошибочных embedded builds между каналами.",
+              )}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <Link
-              href="/updates"
-              className="rounded-md border border-zinc-300 px-4 py-3 text-sm hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
-            >
-              OTA Updates
-            </Link>
-            <LogoutButton />
-          </div>
+          <Badge variant="secondary" className="px-3 py-1">
+            {items.length} {t(" правил")}
+          </Badge>
         </header>
 
         {error ? (
           <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
-            {error}
+            {t(error)}
           </div>
         ) : null}
         {success ? (
@@ -180,26 +193,27 @@ export default function EmergencyRedirectsPage() {
         {canWrite ? (
           <form
             onSubmit={handleSubmit}
-            className="space-y-4 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900"
+            className="space-y-4 rounded-xl border border-border bg-card p-5 "
           >
             <div className="flex items-center justify-between">
               <h2 className="font-semibold">
-                {editingId ? "Редактирование правила" : "Новое правило"}
+                {editingId ? t("Редактирование правила") : t("Новое правило")}
               </h2>
               {editingId ? (
-                <button
+                <Button
+                  variant="outline"
+                  size="sm"
                   type="button"
                   onClick={resetForm}
-                  className="text-sm text-zinc-600 hover:underline dark:text-zinc-400"
                 >
-                  Отменить
-                </button>
+                  {t("Отменить")}
+                </Button>
               ) : null}
             </div>
 
             <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
               <Input
-                label="Название"
+                label={t("Название")}
                 value={form.name}
                 onChange={(value) => setForm({ ...form, name: value })}
               />
@@ -212,7 +226,7 @@ export default function EmergencyRedirectsPage() {
               />
               <label className="space-y-1 text-sm">
                 <span>Platform</span>
-                <select
+                <NativeSelect
                   value={form.platform}
                   onChange={(event) =>
                     setForm({
@@ -220,11 +234,11 @@ export default function EmergencyRedirectsPage() {
                       platform: event.target.value as "ios" | "android",
                     })
                   }
-                  className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 dark:border-zinc-700"
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 "
                 >
                   <option value="android">Android</option>
                   <option value="ios">iOS</option>
-                </select>
+                </NativeSelect>
               </label>
               <Input
                 label="Embedded update ID"
@@ -245,7 +259,7 @@ export default function EmergencyRedirectsPage() {
               />
               <label className="space-y-1 text-sm">
                 <span>Target mode</span>
-                <select
+                <NativeSelect
                   value={form.targetMode}
                   onChange={(event) =>
                     setForm({
@@ -253,11 +267,11 @@ export default function EmergencyRedirectsPage() {
                       targetMode: event.target.value as "pinned" | "follow",
                     })
                   }
-                  className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 dark:border-zinc-700"
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 "
                 >
                   <option value="pinned">Pinned update</option>
                   <option value="follow">Follow channel</option>
-                </select>
+                </NativeSelect>
               </label>
               <Input
                 label={
@@ -275,133 +289,152 @@ export default function EmergencyRedirectsPage() {
 
             <label className="flex items-center gap-2 text-sm">
               <input
+                className="size-4 rounded border-input accent-primary"
                 type="checkbox"
                 checked={form.enabled}
                 onChange={(event) =>
                   setForm({ ...form, enabled: event.target.checked })
                 }
               />
-              Включить правило сразу после сохранения
+              {t("Включить правило сразу после сохранения")}
             </label>
 
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-md bg-zinc-900 px-4 py-2 text-sm text-white disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900"
-            >
+            <Button variant="default" size="sm" type="submit" disabled={saving}>
               {saving
-                ? "Сохранение..."
+                ? t("Сохранение...")
                 : editingId
-                  ? "Сохранить изменения"
-                  : "Создать redirect"}
-            </button>
+                  ? t("Сохранить изменения")
+                  : t("Создать redirect")}
+            </Button>
           </form>
         ) : null}
 
-        <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+        <Card className="gap-0 overflow-hidden py-0 shadow-none">
           <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead className="bg-zinc-100 dark:bg-zinc-800">
-                <tr>
-                  <th className="px-4 py-3 text-left">Status</th>
-                  <th className="px-4 py-3 text-left">Name</th>
-                  <th className="px-4 py-3 text-left">Scope</th>
-                  <th className="px-4 py-3 text-left">Redirect</th>
-                  <th className="px-4 py-3 text-left">Target</th>
-                  <th className="px-4 py-3 text-left">Embedded ID</th>
-                  <th className="px-4 py-3 text-left">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table className="min-w-full text-sm">
+              <TableHeader className="bg-muted/40">
+                <TableRow>
+                  <TableHead className="px-4 py-3 text-left">Status</TableHead>
+                  <TableHead className="px-4 py-3 text-left">Name</TableHead>
+                  <TableHead className="px-4 py-3 text-left">Scope</TableHead>
+                  <TableHead className="px-4 py-3 text-left">
+                    Redirect
+                  </TableHead>
+                  <TableHead className="px-4 py-3 text-left">Target</TableHead>
+                  <TableHead className="px-4 py-3 text-left">
+                    Embedded ID
+                  </TableHead>
+                  <TableHead className="px-4 py-3 text-left">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {loading ? (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-4 text-zinc-500">
-                      Загрузка...
-                    </td>
-                  </tr>
+                  <TableRow>
+                    <TableCell
+                      colSpan={7}
+                      className="h-32 px-4 py-3 text-center text-muted-foreground"
+                    >
+                      {t("Загрузка...")}
+                    </TableCell>
+                  </TableRow>
                 ) : null}
                 {!loading && items.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-4 text-zinc-500">
-                      Emergency redirects не настроены
-                    </td>
-                  </tr>
+                  <TableRow>
+                    <TableCell
+                      colSpan={7}
+                      className="h-32 px-4 py-3 text-center text-muted-foreground"
+                    >
+                      {t("Emergency redirects не настроены")}
+                    </TableCell>
+                  </TableRow>
                 ) : null}
                 {!loading
                   ? items.map((item) => (
-                      <tr
+                      <TableRow
                         key={item.id}
-                        className="border-t border-zinc-200 dark:border-zinc-800"
+                        className="border-t border-border "
                       >
-                        <td className="px-4 py-3">
-                          <span
+                        <TableCell className="px-4 py-3">
+                          <Badge
+                            variant="secondary"
                             className={
                               item.enabled
-                                ? "text-emerald-600 dark:text-emerald-400"
-                                : "text-zinc-500"
+                                ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                                : ""
                             }
                           >
-                            {item.enabled ? "enabled" : "disabled"}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">{item.name}</td>
-                        <td className="px-4 py-3">
+                            {item.enabled ? "Enabled" : "Disabled"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="px-4 py-3">{item.name}</TableCell>
+                        <TableCell className="px-4 py-3">
                           {item.runtimeVersion} / {item.platform}
-                        </td>
-                        <td className="px-4 py-3">
+                        </TableCell>
+                        <TableCell className="px-4 py-3">
                           {item.fromChannel} → {item.toChannel}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div>{item.targetMode}</div>
+                        </TableCell>
+                        <TableCell className="px-4 py-3">
+                          <Badge variant="outline">{item.targetMode}</Badge>
                           {item.expectedUpdateId ? (
-                            <div className="font-mono text-xs text-zinc-500">
+                            <div
+                              title={item.expectedUpdateId}
+                              className="mt-1.5 max-w-36 truncate font-mono text-xs text-muted-foreground select-all"
+                            >
                               {item.expectedUpdateId}
                             </div>
                           ) : null}
-                        </td>
-                        <td className="px-4 py-3 font-mono text-xs">
-                          {item.embeddedUpdateId}
-                        </td>
-                        <td className="px-4 py-3">
+                        </TableCell>
+                        <TableCell className="px-4 py-3 font-mono text-xs">
+                          <span
+                            className="block max-w-40 truncate select-all"
+                            title={item.embeddedUpdateId}
+                          >
+                            {item.embeddedUpdateId}
+                          </span>
+                        </TableCell>
+                        <TableCell className="px-4 py-3">
                           {canWrite ? (
                             <div className="flex gap-2">
-                              <button
+                              <Button
+                                variant="outline"
+                                size="sm"
                                 type="button"
                                 onClick={() => edit(item)}
-                                className="text-blue-600 hover:underline dark:text-blue-400"
                               >
                                 Edit
-                              </button>
-                              <button
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
                                 type="button"
                                 onClick={() => void toggle(item)}
-                                className="text-amber-700 hover:underline dark:text-amber-400"
                               >
                                 {item.enabled ? "Disable" : "Enable"}
-                              </button>
-                              <button
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                size="sm"
                                 type="button"
                                 onClick={() => void remove(item)}
-                                className="text-red-600 hover:underline dark:text-red-400"
                               >
                                 Delete
-                              </button>
+                              </Button>
                             </div>
                           ) : (
-                            <span className="text-xs text-zinc-500">
+                            <span className="text-xs text-muted-foreground">
                               Read only
                             </span>
                           )}
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ))
                   : null}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
-        </section>
+        </Card>
       </div>
-    </main>
+    </div>
   );
 }
 
@@ -419,11 +452,11 @@ function Input({
   return (
     <label className="space-y-1 text-sm">
       <span>{label}</span>
-      <input
+      <TextInput
         value={value}
         required={required}
         onChange={(event) => onChange(event.target.value)}
-        className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 dark:border-zinc-700"
+        className="w-full rounded-md border border-input bg-background px-3 py-2 "
       />
     </label>
   );

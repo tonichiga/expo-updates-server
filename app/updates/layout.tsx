@@ -1,4 +1,5 @@
 import { getAdminSessionFromServerCookies } from "@/src/server/lib/admin-auth";
+import { AdminShell } from "@/components/admin/admin-shell";
 import { redirect } from "next/navigation";
 
 export default async function UpdatesLayout({
@@ -10,5 +11,9 @@ export default async function UpdatesLayout({
     redirect("/login");
   }
 
-  return <>{children}</>;
+  return (
+    <AdminShell session={{ username: session.username, role: session.role }}>
+      {children}
+    </AdminShell>
+  );
 }

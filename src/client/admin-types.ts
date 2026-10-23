@@ -11,6 +11,7 @@ export type UpdateItem = {
   updateId: string;
   createdAt: string;
   status: "active" | "disabled";
+  audienceMode: "all" | "devices";
   isLatest: boolean;
   isRollbackActive: boolean;
   autoDeliveryEnabled: boolean;

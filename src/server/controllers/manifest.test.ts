@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
+import { createServedManifestId } from "../manifest/manifest-identity";
 
 type Row = Record<string, unknown>;
 
@@ -9,6 +10,10 @@ const database = vi.hoisted(() => ({
   embeddedUpdates: [] as Row[],
   servedManifests: [] as Row[],
   emergencyRedirects: [] as Row[],
+  mappingError: null as string | null,
+  mappingReadError: null as string | null,
+  mappingWriteBarrier: null as Promise<void> | null,
+  mappingWriteStarted: false,
 }));
 const distributionControl = vi.hoisted(() => ({
   blocked: false,
@@ -53,13 +58,29 @@ vi.mock("../lib/supabase.js", () => {
     }
 
     upsert(row: Row) {
-      if (this.table === "ota_served_manifest_log") {
-        database.servedManifests.push(row);
-      }
-      return Promise.resolve({ data: row, error: null });
+      return {
+        execute: async () => {
+          if (this.table === "ota_served_manifest_log") {
+            database.mappingWriteStarted = true;
+            await database.mappingWriteBarrier;
+            if (database.mappingError) {
+              return { data: null, error: { message: database.mappingError } };
+            }
+            const existing = database.servedManifests.find(
+              (item) => item.served_manifest_id === row.served_manifest_id,
+            );
+            if (existing) Object.assign(existing, row);
+            else database.servedManifests.push(row);
+          }
+          return { data: row, error: null };
+        },
+      };
     }
 
     maybeSingle() {
+      if (this.table === "ota_served_manifest_log" && database.mappingReadError) {
+        return Promise.resolve({ data: null, error: { message: database.mappingReadError } });
+      }
       const rowsByTable: Record<string, Row[]> = {
         ota_update_channels: database.channels,
         ota_updates: database.updates,
@@ -78,6 +99,13 @@ vi.mock("../lib/supabase.js", () => {
 
   return {
     supabase: {
+      rpc: async (name: string, args: Record<string, string | null>) => {
+        if (name !== "ota_latest_eligible_update") throw new Error(name);
+        const rows = database.updates.filter((r) => r.runtime_version === args.p_runtime && r.channel === args.p_channel && r.platform === args.p_platform && r.is_active &&
+          (r.audience_mode === 'all' || (r.audience_mode === 'devices' && ((r.audience_installation_ids as string[] || []).includes(args.p_installation || '') || (r.audience_device_ids as string[] || []).includes(args.p_device || '')))));
+        rows.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+        return { data: rows.slice(0, 1), error: null };
+      },
       from(table: string) {
         return new Query(table);
       },
@@ -101,6 +129,7 @@ function makeUpdate(overrides: Row = {}): Row {
     created_at_path: "2026-08-28T08-00-00.000Z",
     storage_base_path: "1.0.0/android/production/update",
     is_active: true,
+    audience_mode: "all",
     delivery_mode: "manual",
     guard_action: null,
     guard_payload: null,
@@ -153,6 +182,19 @@ async function requestManifest(request: NextRequest) {
   return manifestController(request);
 }
 
+function seedCurrentUpdate() {
+  database.channels.push({
+    latest_update_id: selectedUpdateId,
+    active_update_id: null,
+    served_manifest_id: servedManifestId,
+    served_manifest_changed_at: "2026-08-28T09:00:00.000Z",
+    runtime_version: "1.0.0",
+    channel: "production",
+    platform: "android",
+  });
+  database.updates.push(makeUpdate());
+}
+
 describe("GET /api/manifest", () => {
   beforeEach(() => {
     vi.resetModules();
@@ -161,9 +203,165 @@ describe("GET /api/manifest", () => {
     database.embeddedUpdates = [];
     database.servedManifests = [];
     database.emergencyRedirects = [];
+    database.mappingError = null;
+    database.mappingReadError = null;
+    database.mappingWriteBarrier = null;
+    database.mappingWriteStarted = false;
     distributionControl.blocked = false;
     distributionControl.error = null;
   });
+
+  it("does not reuse a fallback manifest ID when its draft target becomes active", async () => {
+    database.channels.push({
+      latest_update_id: selectedUpdateId,
+      active_update_id: null,
+      served_manifest_id: servedManifestId,
+      served_manifest_changed_at: "2026-08-28T09:00:00.000Z",
+      runtime_version: "1.0.0",
+      channel: "production",
+      platform: "android",
+    });
+    const draft = makeUpdate({ is_active: false });
+    const stable = makeUpdate({
+      update_id: previousUpdateId,
+      created_at: "2026-08-27T08:00:00.000Z",
+    });
+    database.updates.push(draft, stable);
+    // Warm the old implementation's table-detection cache with a known ID.
+    database.servedManifests.push({
+      served_manifest_id: previousServedManifestId,
+      update_id: previousUpdateId,
+    });
+    await requestManifest(makeRequest({
+      "expo-current-update-id": previousServedManifestId,
+    }));
+
+    const first = await requestManifest(makeRequest());
+    const fallbackId = (await first.text()).match(/"id":"([^"]+)"/)?.[1];
+    expect(fallbackId).toBeTruthy();
+    expect(database.servedManifests.find(
+      (row) => row.served_manifest_id === fallbackId,
+    )?.update_id).toBe(previousUpdateId);
+
+    // Even a stale channel snapshot must not give two artifacts the same ID.
+    draft.is_active = true;
+    stable.is_active = false;
+    const second = await requestManifest(makeRequest({
+      "expo-current-update-id": fallbackId!,
+    }));
+    const body = await second.text();
+    expect(body).toContain('"launchAsset"');
+    expect(body).not.toContain(`"id":"${fallbackId}"`);
+    expect(database.servedManifests.find(
+      (row) => row.served_manifest_id === fallbackId,
+    )?.update_id).toBe(previousUpdateId);
+  });
+
+  it("serves the same identity on cold workers and concurrent repeated requests", async () => {
+    seedCurrentUpdate();
+    const first = await (await requestManifest(makeRequest())).text();
+    const id = first.match(/"id":"([^"]+)"/)?.[1];
+    expect(id).toBeTruthy();
+    vi.resetModules();
+    const responses = await Promise.all([
+      requestManifest(makeRequest()),
+      requestManifest(makeRequest()),
+    ]);
+    for (const response of responses) {
+      expect(await response.text()).toContain(`"id":"${id}"`);
+    }
+    expect(database.servedManifests).toHaveLength(1);
+  });
+
+  it("waits for the mapping write before completing a manifest response", async () => {
+    seedCurrentUpdate();
+    let release!: () => void;
+    database.mappingWriteBarrier = new Promise<void>((resolve) => { release = resolve; });
+    let completed = false;
+    const pending = requestManifest(makeRequest()).then((response) => {
+      completed = true;
+      return response;
+    });
+    try {
+      await vi.waitFor(() => expect(database.mappingWriteStarted).toBe(true));
+      expect(completed).toBe(false);
+      expect(database.servedManifests).toHaveLength(0);
+    } finally {
+      release();
+    }
+    expect((await pending).status).toBe(200);
+    expect(database.servedManifests).toHaveLength(1);
+  });
+
+  it.each([
+    'relation "ota_served_manifest_log" does not exist',
+    "database unavailable",
+    "OTA_MANIFEST_IDENTITY_CONFLICT",
+  ])("does not deliver a manifest if the mapping cannot be recorded: %s", async (error) => {
+    seedCurrentUpdate();
+    database.mappingError = error;
+    const response = await requestManifest(makeRequest());
+    expect(response.status).toBe(500);
+    expect(await response.text()).not.toContain('"launchAsset"');
+    expect(database.servedManifests).toHaveLength(0);
+    // A recovered database must be usable without restarting the worker.
+    database.mappingError = null;
+    expect((await requestManifest(makeRequest())).status).toBe(200);
+  });
+
+  it("fails the request on a mapping lookup error and recovers on the next request", async () => {
+    seedCurrentUpdate();
+    database.mappingReadError = "database unavailable";
+    const request = () => makeRequest({ "expo-current-update-id": previousServedManifestId });
+    const response = await requestManifest(request());
+    expect(response.status).toBe(500);
+    expect(await response.text()).not.toContain('"launchAsset"');
+    expect(database.mappingWriteStarted).toBe(false);
+    database.mappingReadError = null;
+    expect((await requestManifest(request())).status).toBe(200);
+  });
+
+  it("uses the newer activation epoch timestamp for the newly activated artifact", async () => {
+    seedCurrentUpdate();
+    const draft = database.updates[0];
+    draft.is_active = false;
+    const stable = makeUpdate({
+      update_id: previousUpdateId,
+      created_at: "2026-08-27T08:00:00.000Z",
+    });
+    database.updates.push(stable);
+    const fallback = await (await requestManifest(makeRequest())).text();
+    const fallbackId = fallback.match(/"id":"([^"]+)"/)?.[1];
+    const fallbackDate = fallback.match(/"createdAt":"([^"]+)"/)?.[1];
+    expect(fallbackId).toBeTruthy();
+    expect(fallbackDate).toBeTruthy();
+    draft.is_active = true;
+    stable.is_active = false;
+    // The SQL integration script separately exercises the activation trigger.
+    database.channels[0].served_manifest_id = previousServedManifestId;
+    database.channels[0].served_manifest_changed_at = "2026-08-28T09:00:00.001Z";
+    const activated = await (await requestManifest(makeRequest({
+      "expo-current-update-id": fallbackId!,
+    }))).text();
+    const activatedDate = activated.match(/"createdAt":"([^"]+)"/)?.[1];
+    expect(activated).toContain('"launchAsset"');
+    expect(Date.parse(activatedDate!)).toBeGreaterThan(Date.parse(fallbackDate!));
+  });
+
+  it.each([selectedUpdateId, previousServedManifestId])(
+    "does not redownload an artifact already running under legacy ID %s",
+    async (id) => {
+      seedCurrentUpdate();
+      database.servedManifests.push({
+        served_manifest_id: previousServedManifestId,
+        update_id: selectedUpdateId,
+      });
+      const response = await requestManifest(makeRequest({ "expo-current-update-id": id }));
+      expect(response.status).toBe(200);
+      expect(await response.text()).toContain('"type":"noUpdateAvailable"');
+      expect(database.mappingWriteStarted).toBe(false);
+    },
+  );
 
   it("returns signed noUpdateAvailable before redirect or update selection when globally blocked", async () => {
     distributionControl.blocked = true;
@@ -265,8 +463,8 @@ describe("GET /api/manifest", () => {
     const body = await response.text();
 
     expect(response.status).toBe(200);
-    expect(response.headers.get("cache-control")).toBe("private, max-age=0");
-    expect(body).toContain(`"id":"${servedManifestId}"`);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(body).toContain(`"id":"${createServedManifestId(servedManifestId, selectedUpdateId)}"`);
     expect(body).toContain('"createdAt":"2026-08-28T09:00:00.000Z"');
     expect(body).toContain('"runtimeVersion":"1.0.0"');
     expect(body).toContain(
@@ -661,7 +859,7 @@ describe("GET /api/manifest", () => {
     const body = await response.text();
 
     expect(response.status).toBe(200);
-    expect(body).toContain(`"id":"${previousUpdateId}"`);
+    expect(body).toContain(`"id":"${createServedManifestId(servedManifestId, previousUpdateId)}"`);
     expect(body).toContain(`updateId=${previousUpdateId}`);
     expect(body).toContain('"launchAsset"');
   });
@@ -713,6 +911,7 @@ describe("GET /api/manifest", () => {
     expect(response.status).toBe(200);
     expect(body).toContain(`updateId=${recoveryUpdateId}`);
     expect(body).toContain("channel=production");
+    expect(body).toContain('"metadata":{"channel":"production"}');
   });
 
   it("applies an emergency redirect stored in the database", async () => {
@@ -763,6 +962,7 @@ describe("GET /api/manifest", () => {
     expect(response.status).toBe(200);
     expect(body).toContain(`updateId=${recoveryUpdateId}`);
     expect(body).toContain("channel=production");
+    expect(body).toContain('"metadata":{"channel":"production"}');
   });
 
   it("returns no update when a pinned redirect target does not match", async () => {
@@ -811,4 +1011,47 @@ describe("GET /api/manifest", () => {
     expect(body).toContain('{"type":"noUpdateAvailable"}');
     expect(body).not.toContain('"launchAsset"');
   });
+  it("serves a targeted release only to its device; anonymous and other devices receive public fallback", async () => {
+    seedCurrentUpdate();
+    Object.assign(database.updates[0], { audience_mode: 'devices', audience_device_ids: ['a'.repeat(64)], delivery_mode: 'background', guard_action: 'force-update' });
+    database.updates.push(makeUpdate({ update_id: previousUpdateId, created_at: '2026-08-27T08:00:00Z' }));
+    for (const extra of ['', 'device_id="' + 'b'.repeat(64) + '"', 'device_id=invalid']) {
+      const response = await requestManifest(makeRequest({ 'expo-extra-params': extra }));
+      expect(await response.text()).toContain(createServedManifestId(servedManifestId, previousUpdateId));
+      expect(response.headers.get('cache-control')).toContain('no-store');
+    }
+    const response = await requestManifest(makeRequest({ 'expo-extra-params': 'device_id="' + 'a'.repeat(64) + '"' }));
+    expect(await response.text()).toContain(createServedManifestId(servedManifestId, selectedUpdateId));
+  });
+  it("fails closed for a private-only release and accepts a matching installation", async () => {
+    seedCurrentUpdate();
+    Object.assign(database.updates[0], { audience_mode: 'devices', audience_installation_ids: [previousUpdateId] });
+    expect(await (await requestManifest(makeRequest())).text()).toContain('noUpdateAvailable');
+    expect(await (await requestManifest(makeRequest({ 'expo-extra-params': `installation_id="${previousUpdateId}"` }))).text()).toContain('"launchAsset"');
+  });
+  it("does not serve a cross-runtime pointed artifact even to a matching target", async () => {
+    seedCurrentUpdate(); database.updates[0].runtime_version = 'another-runtime';
+    expect(await (await requestManifest(makeRequest())).text()).toContain('noUpdateAvailable');
+  });
+  it("keeps an explicit public rollback ahead of newer targeted releases", async () => {
+    seedCurrentUpdate();
+    database.channels[0].active_update_id = previousUpdateId;
+    database.updates.push(makeUpdate({ update_id: previousUpdateId, created_at: '2026-08-27T08:00:00Z' }));
+    Object.assign(database.updates[0], { audience_mode: 'devices', audience_device_ids: ['a'.repeat(64)] });
+    const body = await (await requestManifest(makeRequest({ 'expo-extra-params': 'device_id="' + 'a'.repeat(64) + '"' }))).text();
+    expect(body).toContain(createServedManifestId(servedManifestId, previousUpdateId));
+  });
+
+  it("does not grant rollback downgrade privileges to a device outside its audience", async () => {
+    seedCurrentUpdate();
+    database.channels[0].active_update_id = previousUpdateId;
+    database.updates.push(makeUpdate({ update_id: previousUpdateId, created_at: '2026-08-27T08:00:00Z', audience_mode: 'devices', audience_device_ids: ['a'.repeat(64)] }));
+    const current = '55555555-5555-4555-8555-555555555555';
+    database.updates.push(makeUpdate({ update_id: current, created_at: '2026-08-29T08:00:00Z', is_active: false }));
+    const outside = await requestManifest(makeRequest({ 'expo-current-update-id': current }));
+    expect(await outside.text()).toContain('noUpdateAvailable');
+    const selected = await requestManifest(makeRequest({ 'expo-current-update-id': current, 'expo-extra-params': 'device_id="' + 'a'.repeat(64) + '"' }));
+    expect(await selected.text()).toContain(createServedManifestId(servedManifestId, previousUpdateId));
+  });
+
 });

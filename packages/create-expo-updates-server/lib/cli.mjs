@@ -676,15 +676,13 @@ export function formatSuccess(
     : [`cd -- ${shellQuote(targetArgument)}`];
   const dockerSteps = [
     ...locationStep,
-    "cp .env.docker.example .env",
-    "docker compose up -d --build",
-    "docker compose exec app npm run create-admin",
+    "npm ci",
+    "Follow docs/getting-started.md: prepare settings and signing keys before starting Docker.",
   ];
   const npmSteps = [
     ...locationStep,
     "npm ci",
-    "cp .env.example .env.local",
-    "npm run dev",
+    "Follow docs/operations-guide.md: configure database, storage and signing keys before startup.",
   ];
   const numbered = (steps) =>
     steps
@@ -694,7 +692,7 @@ export function formatSuccess(
       )
       .join("\n");
 
-  return `${style("✓ Expo Updates Server is ready", "1;32", color)}
+  return `${style("✓ Expo Updates Server project files created", "1;32", color)}
 ${section("Project:")} ${target}
 
 ${section("Next steps (Docker):")}

@@ -199,7 +199,7 @@ class TableQuery {
     this.operation = "select";
     this.selectedColumns = "*";
     this.filters = [];
-    this.orderBy = null;
+    this.orderBy = [];
     this.limitValue = null;
     this.updatePayload = null;
     this.upsertPayload = null;
@@ -233,11 +233,11 @@ class TableQuery {
   }
 
   order(column, options = {}) {
-    this.orderBy = {
+    this.orderBy.push({
       column,
       ascending: options.ascending !== false,
       nullsFirst: options.nullsFirst === true,
-    };
+    });
     return this;
   }
 
@@ -351,13 +351,13 @@ class TableQuery {
   }
 
   buildOrderClause() {
-    if (!this.orderBy) {
-      return "";
-    }
-
-    const direction = this.orderBy.ascending ? "ASC" : "DESC";
-    const nulls = this.orderBy.nullsFirst ? "NULLS FIRST" : "NULLS LAST";
-    return ` ORDER BY ${this.orderBy.column} ${direction} ${nulls}`;
+    if (!this.orderBy.length) return "";
+    const terms = this.orderBy.map(({ column, ascending, nullsFirst }) => {
+      const direction = ascending ? "ASC" : "DESC";
+      const nulls = nullsFirst ? "NULLS FIRST" : "NULLS LAST";
+      return `${column} ${direction} ${nulls}`;
+    });
+    return ` ORDER BY ${terms.join(", ")}`;
   }
 
   buildLimitClause(index) {

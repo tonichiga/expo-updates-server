@@ -376,7 +376,7 @@ test("formats successful output with deterministic plain and colored modes", asy
   assert.equal(plain.code, 0);
   const plainText = plain.stdout.join("\n");
   assert.doesNotMatch(plainText, /\u001B\[/);
-  assert.match(plainText, /^✓ Expo Updates Server is ready/);
+  assert.match(plainText, /^✓ Expo Updates Server project files created/);
   assert.match(plainText, /Next steps \(Docker\):\n  1\. cd --/);
   assert.match(plainText, /Next steps \(npm\):\n  1\. cd --/);
 
@@ -385,7 +385,7 @@ test("formats successful output with deterministic plain and colored modes", asy
   const coloredText = colored.stdout.join("\n");
   assert.match(
     coloredText,
-    /\u001B\[1;32m✓ Expo Updates Server is ready\u001B\[0m/,
+    /\u001B\[1;32m✓ Expo Updates Server project files created\u001B\[0m/,
   );
   assert.match(
     coloredText,

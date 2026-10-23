@@ -117,6 +117,17 @@ describe("common database abstraction", () => {
     );
   });
 
+  it("preserves primary ordering when a tie-breaker is chained", async () => {
+    const { supabase } = await import("./supabase.js");
+    await supabase.from("ota_updates").select("update_id")
+      .order("created_at", { ascending: false })
+      .order("update_id", { ascending: true, nullsFirst: true }).limit(1).execute();
+    expect(poolQuery).toHaveBeenCalledWith(
+      "SELECT update_id FROM ota_updates ORDER BY created_at DESC NULLS LAST, update_id ASC NULLS FIRST LIMIT $1",
+      [1],
+    );
+  });
+
   it("serializes wrapped JSONB payloads but preserves PostgreSQL arrays", async () => {
     const payload = { message: "Ready" };
     const { jsonb, supabase } = await import("./supabase.js");

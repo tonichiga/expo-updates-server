@@ -24,20 +24,18 @@ For a named target, successful plain-text output looks like this (interactive
 terminals add color):
 
 ```text
-✓ Expo Updates Server is ready
+✓ Expo Updates Server project files created
 Project: /path/to/my-server
 
 Next steps (Docker):
   1. cd -- 'my-server'
-  2. cp .env.docker.example .env
-  3. docker compose up -d --build
-  4. docker compose exec app npm run create-admin
+  2. npm ci
+  3. Follow docs/getting-started.md: prepare settings and signing keys before starting Docker.
 
 Next steps (npm):
   1. cd -- 'my-server'
   2. npm ci
-  3. cp .env.example .env.local
-  4. npm run dev
+  3. Follow docs/operations-guide.md: configure database, storage and signing keys before startup.
 ```
 
 With `.`, the redundant `cd` step is omitted. Color is disabled when output is
@@ -93,33 +91,20 @@ It deliberately does not install dependencies, initialize a Git repository,
 write `.env` files, or generate signing keys and other secrets. There is no
 `--force` option.
 
-## Start with Docker
+## Start the generated project
 
-Review the example first, choose strong passwords, and then start the stack:
+Follow the bundled [Quick Start](./getting-started.md) in order: environment,
+signing keys, Docker startup, administrator, reachable phone URL, app configuration,
+native build and first OTA. Node/npm and `npm ci` are needed on the host for
+`configure-app`, even if the server runs in Docker.
 
-```bash
-cp .env.docker.example .env
-docker compose up -d --build
-docker compose exec app npm run create-admin
-```
+For hosted infrastructure use [Supabase setup](./supabase-setup.md) and the
+[operations guide](./operations-guide.md). Configure the database, storage and
+signing key before starting the server with npm.
 
-Follow the [quick start](/getting-started) to generate the required signing
-key pair and connect an Expo application.
-
-## Start with npm
-
-Install exactly the dependencies in the bundled lockfile:
-
-```bash
-npm ci
-cp .env.example .env.local
-npm run dev
-```
-
-Configure PostgreSQL and S3-compatible storage (or Supabase), signing keys,
-and all required environment values before using the server in production.
-See [Supabase setup](/supabase-setup), [Expo application
-setup](/expo-app-setup), and the [operations guide](/operations-guide).
+The package contains the template at its recorded source commit. An unpublished
+feature in a checkout is not available through `npx ...@latest`; maintainers should
+follow the [release workflow](https://github.com/tonichiga/expo-updates-server/blob/main/docs/publishing-npm-installer.md).
 
 ## Reproducibility and source
 

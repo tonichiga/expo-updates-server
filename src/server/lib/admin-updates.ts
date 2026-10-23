@@ -9,86 +9,6 @@ import {
 import { getManifestAppVersion } from "../manifest/manifest-values";
 import { assertOtaDistributionAllowed } from "./distribution-control";
 
-let hasServedManifestLogTable: boolean | null = null;
-
-function isMissingServedManifestLogTableError(error: unknown): boolean {
-  if (!error || typeof error !== "object") {
-    return false;
-  }
-
-  const message =
-    "message" in error && typeof error.message === "string"
-      ? error.message.toLowerCase()
-      : "";
-
-  return (
-    message.includes("ota_served_manifest_log") &&
-    message.includes("does not exist")
-  );
-}
-
-/**
- * Records served_manifest_id → update_id mapping so manifest controller can
- * resolve what real update a device is running from its currentUpdateId.
- * Fire-and-forget: errors are logged but never thrown.
- */
-function logServedManifestMapping({
-  servedManifestId,
-  updateId,
-  runtimeVersion,
-  channel,
-  platform,
-  reason,
-}: {
-  servedManifestId: string;
-  updateId: string;
-  runtimeVersion: string;
-  channel: string;
-  platform: string;
-  reason: string;
-}): void {
-  if (hasServedManifestLogTable === false) {
-    return;
-  }
-
-  supabase
-    .from("ota_served_manifest_log")
-    .upsert(
-      {
-        served_manifest_id: servedManifestId,
-        update_id: updateId,
-        runtime_version: runtimeVersion,
-        channel,
-        platform,
-        reason,
-      },
-      { onConflict: "served_manifest_id" },
-    )
-    .then(({ error }) => {
-      if (isMissingServedManifestLogTableError(error)) {
-        hasServedManifestLogTable = false;
-        return;
-      }
-
-      if (!error && hasServedManifestLogTable === null) {
-        hasServedManifestLogTable = true;
-      }
-
-      if (
-        error &&
-        !error.message?.includes("duplicate") &&
-        !error.message?.includes("unique")
-      ) {
-        console.warn(
-          `[admin-updates] Failed to log served manifest mapping: ${error.message}`,
-        );
-      }
-    })
-    .catch(() => {
-      /* ignore */
-    });
-}
-
 type UpdateStatus = "active" | "disabled";
 
 type UpdateMetaState = {
@@ -110,6 +30,7 @@ export type OtaUpdateRow = {
   storage_bucket: string;
   storage_base_path: string;
   is_active: boolean;
+  audience_mode?: "all" | "devices";
   updated_at: string | null;
   disabled_at: string | null;
   assets_count: number;
@@ -159,6 +80,7 @@ export type UpdateRecord = {
   channelLatestPath: string;
   createdAt: string | null;
   status: UpdateStatus;
+  audienceMode: "all" | "devices";
   isLatest: boolean;
   isRollbackActive: boolean;
   autoDeliveryEnabled: boolean;
@@ -282,6 +204,7 @@ async function getNewestUpdateByScope(
     .eq("channel", scope.channel)
     .eq("platform", scope.platform)
     .order("created_at", { ascending: false })
+    .order("update_id", { ascending: false })
     .limit(1)
     .maybeSingle();
 
@@ -326,14 +249,14 @@ export function mapRowToRecord(
     channelLatestPath: `${row.runtime_version}/${row.platform}/channels/${row.channel}/latest.json`,
     createdAt: row.created_at,
     status,
+    audienceMode: row.audience_mode === "devices" ? "devices" : "all",
     isLatest,
     isRollbackActive,
     autoDeliveryEnabled: !rollbackActiveAtScope,
     isIgnoredByRollback,
     launchAssetPath: row.launch_asset_path,
     assetsCount: row.assets_count,
-    deliveryMode:
-      row.delivery_mode === "background" ? "background" : "manual",
+    deliveryMode: row.delivery_mode === "background" ? "background" : "manual",
     hasGuard:
       typeof row.guard_action === "string" && row.guard_action.length > 0,
     policyVersion:
@@ -382,9 +305,7 @@ function rowToPolicy(row: OtaUpdateRow): UpdatePolicyRecord {
     guard: row.guard_action
       ? {
           action: row.guard_action,
-          ...(row.guard_payload !== null
-            ? { payload: row.guard_payload }
-            : {}),
+          ...(row.guard_payload !== null ? { payload: row.guard_payload } : {}),
         }
       : null,
   });
@@ -579,6 +500,22 @@ async function upsertChannelRow(
   scope: Scope,
   payload: Partial<OtaChannelRow>,
 ): Promise<OtaChannelRow> {
+  // INSERT ... ON CONFLICT runs INSERT guards before checking the conflict.
+  // Update an existing scope directly so incident deactivation cleanup can be
+  // validated against OLD pointers while the global switch is blocked.
+  const existing = await supabase
+    .from("ota_update_channels")
+    .update(payload)
+    .eq("runtime_version", scope.runtimeVersion)
+    .eq("channel", scope.channel)
+    .eq("platform", scope.platform)
+    .select("*")
+    .maybeSingle();
+  if (existing.error) {
+    throw new Error(`Failed to update ota_update_channels row: ${existing.error.message}`);
+  }
+  if (existing.data) return existing.data as OtaChannelRow;
+
   const { data, error } = await supabase
     .from("ota_update_channels")
     .upsert(
@@ -669,6 +606,7 @@ async function getUpdateRowsByScope(scope: Scope): Promise<OtaUpdateRow[]> {
     .eq("channel", scope.channel)
     .eq("platform", scope.platform)
     .order("created_at", { ascending: false })
+    .order("update_id", { ascending: false })
     .execute();
 
   if (error) {
@@ -804,6 +742,7 @@ export async function getUpdatesPage(options: ListOptions) {
     .from("ota_updates")
     .select("*")
     .order("created_at", { ascending: false })
+    .order("update_id", { ascending: false })
     .execute();
 
   if (error) {
@@ -908,6 +847,11 @@ export async function deleteUpdateByKey(
   const updateId = extractUpdateIdFromKey(key);
   const row = await getUpdateRowById(updateId);
   const scope = makeScopeFromRow(row);
+
+  // Repair serving pointers before FK cleanup erases the retired target. This
+  // also keeps deletion available during a global stop with a public fallback,
+  // and stops new manifests referencing assets that are about to be removed.
+  await setUpdateDisabledByKey(updateId, true);
 
   let removedFiles = 0;
   const bucket = row.storage_bucket || SUPABASE_BUCKET;
@@ -1138,25 +1082,7 @@ export async function rollbackToUpdateByKey(
     );
   }
 
-  const { error: deactivateOthersError } = await supabase
-    .from("ota_updates")
-    .update({
-      is_active: false,
-      updated_at: now,
-      disabled_at: now,
-    })
-    .eq("runtime_version", scope.runtimeVersion)
-    .eq("channel", scope.channel)
-    .eq("platform", scope.platform)
-    .neq("update_id", updateId)
-    .eq("is_active", true)
-    .execute();
-
-  if (deactivateOthersError) {
-    throw new Error(
-      `Failed to deactivate other active updates in scope: ${deactivateOthersError.message}`,
-    );
-  }
+  // The database atomically applies audience-aware peer deactivation.
 
   const { error: activationError } = await supabase
     .from("ota_updates")
@@ -1203,19 +1129,6 @@ export async function rollbackToUpdateByKey(
     active_changed_at: now,
   });
 
-  // Pre-populate the mapping so the first device request after rollback
-  // can immediately resolve served_manifest_id → update_id without a cold miss.
-  if (channelRow.served_manifest_id) {
-    logServedManifestMapping({
-      servedManifestId: channelRow.served_manifest_id,
-      updateId: refreshed.update_id,
-      runtimeVersion: scope.runtimeVersion,
-      channel: scope.channel,
-      platform: scope.platform,
-      reason: "rollback",
-    });
-  }
-
   return {
     ...buildLatestPayload(refreshed, options?.reason || "rollback"),
     activeChangedAt: channelRow.active_changed_at,
@@ -1251,25 +1164,7 @@ export async function promoteLatestByKey(key: string) {
 
   const promoteNow = new Date().toISOString();
 
-  const { error: deactivateOthersError } = await supabase
-    .from("ota_updates")
-    .update({
-      is_active: false,
-      updated_at: promoteNow,
-      disabled_at: promoteNow,
-    })
-    .eq("runtime_version", scope.runtimeVersion)
-    .eq("channel", scope.channel)
-    .eq("platform", scope.platform)
-    .neq("update_id", latestUpdateId)
-    .eq("is_active", true)
-    .execute();
-
-  if (deactivateOthersError) {
-    throw new Error(
-      `Failed to deactivate active updates during promote: ${deactivateOthersError.message}`,
-    );
-  }
+  // Keep audience selection and peer deactivation in the activation statement.
 
   const { error: activateLatestError } = await supabase
     .from("ota_updates")
@@ -1296,19 +1191,6 @@ export async function promoteLatestByKey(key: string) {
     active_update_id: null,
     active_changed_at: promoteNow,
   });
-
-  // Pre-populate the mapping so the first device request after promote
-  // can immediately resolve served_manifest_id → update_id without a cold miss.
-  if (updatedChannel.served_manifest_id && updatedChannel.latest_update_id) {
-    logServedManifestMapping({
-      servedManifestId: updatedChannel.served_manifest_id,
-      updateId: updatedChannel.latest_update_id,
-      runtimeVersion: scope.runtimeVersion,
-      channel: scope.channel,
-      platform: scope.platform,
-      reason: "promote",
-    });
-  }
 
   return {
     promoted: true,
@@ -1347,25 +1229,7 @@ export async function setUpdateDisabledByKey(key: string, disabled: boolean) {
       );
     }
 
-    const { error: deactivateOthersError } = await supabase
-      .from("ota_updates")
-      .update({
-        is_active: false,
-        updated_at: now,
-        disabled_at: now,
-      })
-      .eq("runtime_version", scope.runtimeVersion)
-      .eq("channel", scope.channel)
-      .eq("platform", scope.platform)
-      .neq("update_id", updateId)
-      .eq("is_active", true)
-      .execute();
-
-    if (deactivateOthersError) {
-      throw new Error(
-        `Failed to deactivate other active updates in scope: ${deactivateOthersError.message}`,
-      );
-    }
+    // Peer deactivation is performed atomically by the database trigger.
   }
 
   const { error } = await supabase

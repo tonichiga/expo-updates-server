@@ -51,6 +51,10 @@ portable application schema.
 
 ## 3. Configure the server
 
+Generate a [signing key pair](./expo-app-setup.md#_2-create-the-code-signing-certificate)
+before starting the server. Use its actual server-readable private-key path below
+and retain the matching public certificate for the application.
+
 The recommended Supabase adapter configuration is:
 
 ```env

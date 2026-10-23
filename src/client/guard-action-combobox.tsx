@@ -1,16 +1,13 @@
 "use client";
 
+import { Input } from "@/components/ui/input";
+
 import {
   filterGuardActionOptions,
   GuardActionOption,
   normalizeCreatableGuardAction,
 } from "./guard-action-options";
-import {
-  KeyboardEvent,
-  useId,
-  useRef,
-  useState,
-} from "react";
+import { KeyboardEvent, useId, useRef, useState } from "react";
 
 type Props = {
   value: string;
@@ -141,7 +138,7 @@ export default function GuardActionCombobox({
         }
       }}
     >
-      <input
+      <Input
         value={inputValue}
         maxLength={100}
         readOnly={selectionDisabled}
@@ -152,9 +149,7 @@ export default function GuardActionCombobox({
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={popupId}
-        aria-describedby={
-          inputError || mutationError ? errorId : undefined
-        }
+        aria-describedby={inputError || mutationError ? errorId : undefined}
         onFocus={() => setOpen(true)}
         onChange={(event) => {
           setDraftValue(event.target.value);
@@ -163,7 +158,7 @@ export default function GuardActionCombobox({
           setActiveIndex(-1);
         }}
         onKeyDown={handleKeyDown}
-        className="w-full rounded border border-zinc-300 bg-transparent p-2 text-sm dark:border-zinc-700"
+        className="w-full"
         placeholder="Action (required)"
       />
       {open ? (
@@ -171,24 +166,20 @@ export default function GuardActionCombobox({
           id={popupId}
           role="dialog"
           aria-label="Guard action catalog"
-          className="absolute z-20 mt-1 max-h-60 w-full overflow-auto rounded-md border border-zinc-300 bg-white p-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
+          className="absolute z-20 mt-1 max-h-60 w-full overflow-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-md"
         >
           {filteredOptions.map((option, index) => (
             <div
               key={`${option.id || "policy"}:${option.actionKey}`}
               className={`flex items-center rounded ${
-                activeIndex === index
-                  ? "bg-blue-50 dark:bg-blue-950"
-                  : ""
+                activeIndex === index ? "bg-accent" : ""
               }`}
             >
               <button
                 type="button"
                 tabIndex={-1}
                 disabled={selectionDisabled}
-                aria-current={
-                  option.actionKey === value ? "true" : undefined
-                }
+                aria-current={option.actionKey === value ? "true" : undefined}
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => chooseOption(option)}
                 className="min-w-0 flex-1 truncate px-3 py-2 text-left text-sm disabled:cursor-default"
@@ -206,7 +197,7 @@ export default function GuardActionCombobox({
                     event.stopPropagation();
                     void onDelete(option);
                   }}
-                  className="m-1 rounded p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
+                  className="m-1 rounded p-2 text-destructive hover:bg-destructive/10"
                 >
                   <svg
                     viewBox="0 0 24 24"
@@ -228,17 +219,15 @@ export default function GuardActionCombobox({
               type="button"
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => void create()}
-              className={`w-full rounded px-3 py-2 text-left text-sm font-medium text-blue-700 dark:text-blue-300 ${
-                activeIndex === filteredOptions.length
-                  ? "bg-blue-50 dark:bg-blue-950"
-                  : ""
+              className={`w-full rounded px-3 py-2 text-left text-sm font-medium text-primary ${
+                activeIndex === filteredOptions.length ? "bg-accent" : ""
               }`}
             >
               Create “{creatableValue}”
             </button>
           ) : null}
           {filteredOptions.length === 0 && !showCreate ? (
-            <p className="px-3 py-2 text-sm text-zinc-500">
+            <p className="px-3 py-2 text-sm text-muted-foreground">
               No matching actions
             </p>
           ) : null}
