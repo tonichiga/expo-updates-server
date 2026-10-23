@@ -94,7 +94,7 @@ function onKeydown(event) {
 .showcase-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 0 0 18px; }
 .showcase-tab { display: flex; justify-content: center; align-items: center; gap: 10px; min-height: 48px; padding: 10px 12px; border: 1px solid var(--vp-c-divider); border-radius: 10px; background: var(--vp-c-bg-soft); color: var(--vp-c-text-2); font-size: 13px; font-weight: 600; cursor: pointer; transition: border-color .15s, background .15s; }
 .showcase-tab:hover { border-color: var(--vp-c-brand-1); color: var(--vp-c-text-1); }
-.showcase-tab[aria-selected="true"] { color: var(--vp-c-brand-1); border-color: var(--vp-c-brand-1); background: var(--vp-c-brand-soft); }
+.showcase-tab[aria-selected="true"] { color: var(--vp-c-brand-2); border-color: var(--vp-c-brand-1); background: var(--vp-c-brand-soft); }
 .tab-number { font-size: 11px; font-weight: 500; opacity: .75; font-variant-numeric: tabular-nums; }
 .showcase-frame { overflow: hidden; border: 1px solid #353b49; border-radius: 16px; background: #11151d; box-shadow: 0 28px 80px -30px rgb(29 24 87 / 35%); }
 .showcase-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px 10px 20px; border-bottom: 1px solid #303643; color: #dce1eb; font-size: 12px; background: #191e28; }
