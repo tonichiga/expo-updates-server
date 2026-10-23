@@ -210,7 +210,7 @@ describe('doctor read-only contract', () => {
     expect(valid.checks.filter((item) => item.status === 'fail')).toEqual([]);
     expect(check(valid, 'app.root').status).toBe('pass');
     expect(await fs.readFile(path.join(app, 'App.tsx'), 'utf8')).toBe(source);
-    await fs.unlink(path.join(app, 'ota-client/runtime.js'));
+    await fs.unlink(path.join(app, 'ota-client/runtime.ts'));
     expect(check(await offline(cwd, { app }), 'app.client').status).toBe('fail');
     config.expo.updates.requestHeaders['expo-channel-name'] = 'Test'; config.expo.runtimeVersion = ' v1 ';
     await fs.writeFile(path.join(app, 'app.json'), JSON.stringify(config));

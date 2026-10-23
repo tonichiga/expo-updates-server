@@ -1,5 +1,6 @@
+import type { OtaCheckResult, OtaFetchResult, OtaOptions } from '../../templates/expo-app/ota-client/types';
 import { describe, expect, it, vi } from 'vitest';
-import { createUpdateController } from '../../templates/expo-app/ota-client/model/update-controller.js';
+import { createUpdateController } from '../../templates/expo-app/ota-client/model/update-controller';
 
 function manifest(id = 'update-a', delivery = 'manual', action?: string) {
   return { id, extra: { updatePolicy: { schemaVersion: 1, policyVersion: 1, delivery,
@@ -10,14 +11,14 @@ function fixture() {
   const deps = {
     enabled: true, start: vi.fn(),
     identity: vi.fn(async () => ({ installationId: 'installation', deviceId: 'device' })),
-    check: vi.fn(async (): Promise<unknown> => ({ isAvailable: true, manifest: manifest() })),
-    fetch: vi.fn(async (): Promise<unknown> => ({ isNew: true, manifest: manifest() })),
+    check: vi.fn(async (): Promise<OtaCheckResult> => ({ isAvailable: true, manifest: manifest() })),
+    fetch: vi.fn(async (): Promise<OtaFetchResult> => ({ isNew: true, manifest: manifest() })),
     reload: vi.fn(async () => undefined), openStore: vi.fn(async () => undefined),
     isActive: vi.fn(() => true), now: () => clock,
   };
   const client = createUpdateController(deps);
   const owner = Symbol('root');
-  const configure = (value: Record<string, unknown> = {}) => client.configure(owner, value);
+  const configure = (value: OtaOptions = {}) => client.configure(owner, value);
   return { deps, client, configure, owner, advance: () => { clock += 60000; } };
 }
 function deferred<T>() {
@@ -108,7 +109,7 @@ describe('OTA lifecycle policy and operations', () => {
     f.deps.check.mockResolvedValue({ isAvailable: true, manifest: manifest('custom', 'manual', 'login') });
     await f.client.check();
     expect(f.client.getSnapshot()).toMatchObject({ blocked: true }); expect(f.deps.fetch).not.toHaveBeenCalled();
-    const decision = deferred<string>();
+    const decision = deferred<"allow" | "block">();
     f.configure({ guardHandlers: { login: () => decision.promise } });
     const checking = f.client.retry();
     await vi.waitFor(() => expect(f.deps.check).toHaveBeenCalledTimes(2));
@@ -139,7 +140,7 @@ describe('OTA lifecycle policy and operations', () => {
     await f.client.retry(); expect(f.deps.identity).toHaveBeenCalledTimes(2); expect(f.deps.check).toHaveBeenCalledOnce();
   });
   it('single-flights identical operations and rejects conflicting operations', async () => {
-    const f = fixture(); const response = deferred<unknown>(); f.deps.check.mockReturnValue(response.promise);
+    const f = fixture(); const response = deferred<OtaCheckResult>(); f.deps.check.mockReturnValue(response.promise);
     const first = f.client.check(); const second = f.client.check();
     expect(first).toBe(second);
     await expect(f.client.download()).rejects.toThrow('in progress');
@@ -180,13 +181,13 @@ describe('OTA lifecycle policy and operations', () => {
   it('re-evaluates a pending guard on retry after application conditions change', async () => {
     const f = fixture();
     await f.client.syncPending({ type: 'new', manifest: manifest('cached', 'manual', 'login') });
-    f.configure({ guardHandlers: { login: async () => 'allow' } });
+    f.configure({ guardHandlers: { login: async () => 'allow' as const } });
     await f.client.retry();
     expect(f.client.getSnapshot()).toMatchObject({ candidate: { manifest: { id: 'cached' } }, pending: true, blocked: false });
   });
   it('ignores an old native pending snapshot queued while a newer download completes', async () => {
     const f = fixture(); await f.client.check();
-    const fetched = deferred<unknown>(); f.deps.fetch.mockReturnValue(fetched.promise);
+    const fetched = deferred<OtaFetchResult>(); f.deps.fetch.mockReturnValue(fetched.promise);
     const downloading = f.client.download();
     await vi.waitFor(() => expect(f.deps.fetch).toHaveBeenCalledOnce());
     const syncing = f.client.syncPending({ type: 'new', manifest: manifest('old') });
@@ -222,7 +223,7 @@ describe('OTA lifecycle policy and operations', () => {
     const f = fixture(); f.deps.check.mockResolvedValue({ isAvailable: false });
     const client = createUpdateController({ ...f.deps, runningCandidate: () => ({ type: 'new', manifest: manifest('running', 'manual', 'login') }) });
     await client.initialize(); expect(client.getSnapshot()).toMatchObject({ blocked: true, blockReason: 'login' });
-    const handler = vi.fn(async () => 'allow');
+    const handler = vi.fn(async () => 'allow' as const);
     client.configure(f.owner, { guardHandlers: { login: handler } });
     await client.check();
     expect(handler).toHaveBeenCalledWith(expect.objectContaining({ action: 'login', manifest: expect.objectContaining({ id: 'running' }) }));

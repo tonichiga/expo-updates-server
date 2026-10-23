@@ -7,7 +7,7 @@ required native modules to an older binary via OTA. Keep these native dependenci
 in the same runtime compatibility boundary as the rest of your application.
 
 `ota-entry.js` starts telemetry without waiting, then synchronously loads the original
-entry saved in `ota-client-entry.json`. The configurator also patches the root layout with the update hook and gate. Development,
+entry saved in `ota-client-entry.json`. The configurator also patches the root layout with the standalone OtaUpdates component. Development,
 Expo Go, web and disabled-updates builds do not report. Original OTA check policy
 remains under the application/configurator's control.
 
@@ -49,7 +49,9 @@ SecureStore; do not deliver this client to older binaries lacking the native dep
 ## Update hook
 
 `useOtaUpdates` shares identity, state and lifecycle actions across the application.
-The configurator inserts it and `OtaUpdateGate` in the root layout automatically.
+The configurator renders `<OtaUpdates />` beside navigation. It calls the hook
+internally, shows optional download/restart prompts, and blocks required updates.
+The generated implementation uses TypeScript and JSX, with no context wrapper.
 See [Update lifecycle](./docs/update-lifecycle.md) for manual/automatic/background
 updates, force OTA versus store upgrades, custom guards and option defaults.
 
@@ -57,3 +59,15 @@ For a custom root that could not be patched, see the complete
 [manual integration guide](https://tonichiga.github.io/expo-updates-server/ota-client-lifecycle#manual-integration)
 (or `docs/ota-client-lifecycle.md` in the server repository). It covers both an
 already generated client and copying/configuring the client without the generator.
+
+## Type checking
+
+Run `npx tsc --noEmit` in the Expo application. The server itself does not depend
+on React Native. Maintainers can check the template against an application's
+installed Expo dependencies without changing that application:
+
+```bash
+node scripts/tests/ota-client-types.mjs /path/to/expo-app
+```
+
+Run that command from the server repository.

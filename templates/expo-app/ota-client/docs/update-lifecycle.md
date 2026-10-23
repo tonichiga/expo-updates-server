@@ -1,11 +1,20 @@
 # Update lifecycle
 
-`configure-app` inserts `useOtaUpdates({ autoCheck: true, autoUpdate: false,
-autoReload: false })` in the root layout/App and wraps its content in `OtaUpdateGate`.
-All screens can call `useOtaUpdates()` to observe the same state and use `check()`,
-`download()` and `reload()`. No provider is needed. Configure automation in one root;
-additional consumers default to observation/manual actions. Multiple configured roots
-combine boolean options with OR. Guard handlers should be stable references.
+`configure-app` generates a formatted TypeScript client and renders `<OtaUpdates />`
+beside navigation in the root layout/App. The component calls `useOtaUpdates`
+internally; it does not wrap the app or provide React context. Mount it once in a
+persistent root, including loading/early-return paths.
+
+By default it checks automatically and shows **Download / Later** for an ordinary
+update, then **Restart / Later** when downloaded. `autoUpdate={false}` disables
+automatic downloading, not the prompt. A dismissed candidate stays hidden until the
+component remounts, a different candidate arrives, or its download state changes.
+Background updates remain silent; required updates cannot be dismissed.
+
+The lower-level `useOtaUpdates()` is still available for optional custom screens.
+It shares state/actions but defaults to no automation and renders no UI. Configure
+automation in one root; multiple configured consumers combine booleans with OR.
+Keep custom guard handlers stable.
 
 Identity is persisted and installed in Expo request parameters before any check/download.
 Launch/foreground heartbeats report only the **running** bundle, never a downloaded
@@ -14,7 +23,7 @@ Expo Go, web and disabled-updates builds leave automation off.
 
 | Policy/options | Behavior |
 | --- | --- |
-| manual, default options | Check exposes candidate; caller downloads and reloads |
+| manual, default options | OtaUpdates offers download/restart; the hook alone exposes state |
 | autoCheck | Check on mount and foreground, minimum interval 60 seconds |
 | autoUpdate | Also download eligible manual candidates |
 | autoReload | Reload a pending non-background bundle while app is active |
@@ -29,8 +38,8 @@ https, market and itms-apps URLs are accepted. Native upgrades still require a s
 release; OTA cannot add native modules or change the installed runtime.
 
 The built-in gate is a non-dismissable modal that preserves mounted navigation and providers.
-It is customizable with `renderBlocked`. Keep the gate mounted around
-the application; a hook alone exposes `blocked` but cannot prevent interaction with
+Customize required UI with `renderBlocked`, and optional UI with `renderAvailable`.
+Keep `OtaUpdates` mounted beside navigation; a hook alone exposes `blocked` but cannot prevent interaction with
 your own screens. Unknown guards fail closed. Required checks are online policy,
 not authentication or a tamper-proof access restriction. Offline check failure keeps
 the running app usable unless a required candidate was already discovered or the running bundle requires a store/custom guard.

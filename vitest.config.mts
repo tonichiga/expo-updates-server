@@ -11,6 +11,9 @@ export default defineConfig({
     },
   },
   test: {
+    alias: {
+      'react-native': path.join(rootDir, 'scripts/tests/fixtures/react-native-ui.tsx'),
+    },
     environment: "node",
     exclude: [
       ...configDefaults.exclude,

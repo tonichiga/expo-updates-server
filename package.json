@@ -61,6 +61,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "jsdom": "^27.0.1",
     "tailwindcss": "^4",
     "vitepress": "^1.6.4",
     "vitest": "^4.1.11"
