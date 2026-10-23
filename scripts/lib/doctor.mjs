@@ -164,9 +164,9 @@ export async function runDoctor(rawOptions = {}, dependencies = {}) {
     let configured = { ...env };
     if (options.mode === 'docker') {
       configured = { ...env, DATABASE_PROVIDER: 'pg',
-        DATABASE_URL: `postgresql://${encodeURIComponent(env.POSTGRES_USER || 'expo_updates')}:${encodeURIComponent(env.POSTGRES_PASSWORD || '')}@127.0.0.1:${env.POSTGRES_PORT || '5432'}/${encodeURIComponent(env.POSTGRES_DB || 'expo_updates')}`,
         R2_ENDPOINT: `http://127.0.0.1:${env.MINIO_API_PORT || '9000'}`, R2_ACCESS_KEY_ID: env.MINIO_ROOT_USER || 'expo_updates', R2_SECRET_ACCESS_KEY: env.MINIO_ROOT_PASSWORD,
         OTA_PUBLIC_BASE_URL: env.OTA_PUBLIC_BASE_URL || 'http://localhost:3000', CODE_SIGNING_PRIVATE_KEY_PATH: path.join(cwd, 'secrets/code-signing-private-key.pem') };
+      configured.DATABASE_URL = `postgresql://${encodeURIComponent(env.POSTGRES_USER || 'expo_updates')}:${encodeURIComponent(env.POSTGRES_PASSWORD || '')}@127.0.0.1:${env.POSTGRES_PORT || '5432'}/${encodeURIComponent(env.POSTGRES_DB || 'expo_updates')}`;
       add('docker.offline', 'skip', 'Container permissions, actual Compose overrides and connectivity are not checked offline.');
       if (!present(env.POSTGRES_PASSWORD) || !present(env.MINIO_ROOT_PASSWORD)) add('docker.credentials', 'fail', 'Docker database/storage passwords are missing or placeholders.', 'Set separate strong POSTGRES_PASSWORD and MINIO_ROOT_PASSWORD values.');
     } else if (configured.CODE_SIGNING_PRIVATE_KEY_PATH) configured.CODE_SIGNING_PRIVATE_KEY_PATH = path.resolve(cwd, configured.CODE_SIGNING_PRIVATE_KEY_PATH);
