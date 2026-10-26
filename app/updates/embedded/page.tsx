@@ -1,4 +1,5 @@
 "use client";
+import type { TranslationMessage } from "@/src/client/i18n/messages";
 import { useI18n } from "@/src/client/i18n/provider";
 
 import { Button } from "@/components/ui/button";
@@ -26,7 +27,7 @@ export default function EmbeddedUpdatesPage() {
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [success, setSuccess] = useState<TranslationMessage>("");
 
   const loadItems = useCallback(async () => {
     setLoading(true);
@@ -63,7 +64,10 @@ export default function EmbeddedUpdatesPage() {
 
     try {
       await deleteEmbeddedUpdate(embeddedUpdateId);
-      setSuccess(t("Запись удалена: {0}", [embeddedUpdateId]));
+      setSuccess({
+        key: "Запись удалена: {0}",
+        values: [embeddedUpdateId],
+      });
       await loadItems();
     } catch (deleteError: unknown) {
       setError(
@@ -81,14 +85,16 @@ export default function EmbeddedUpdatesPage() {
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-1">
             <h1 className="text-2xl font-semibold tracking-tight">
-              Embedded builds
+              {t("Embedded builds")}
             </h1>
             <p className="text-sm text-muted-foreground">
-              {t("Встроенные версии приложения и регистрация нативных сборок.")}
+              {t(
+                "Встроенные версии приложения и регистрация нативных сборок.",
+              )}
             </p>
           </div>
           <Badge variant="secondary" className="px-3 py-1">
-            {items.length} {t(" сборок")}
+            {t("Builds: {0}", [items.length])}
           </Badge>
         </header>
 
@@ -100,7 +106,7 @@ export default function EmbeddedUpdatesPage() {
 
         {success ? (
           <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300">
-            {success}
+            {t(success)}
           </div>
         ) : null}
 
@@ -110,19 +116,23 @@ export default function EmbeddedUpdatesPage() {
               <TableHeader className="bg-muted/40">
                 <TableRow>
                   <TableHead className="px-4 py-3 text-left">
-                    Created At
+                    {t("Created At")}
                   </TableHead>
                   <TableHead className="px-4 py-3 text-left">
-                    App version
+                    {t("App version")}
                   </TableHead>
                   <TableHead className="px-4 py-3 text-left">
-                    Platform
+                    {t("Platform")}
                   </TableHead>
-                  <TableHead className="px-4 py-3 text-left">Channel</TableHead>
                   <TableHead className="px-4 py-3 text-left">
-                    Embedded ID
+                    {t("Channel")}
                   </TableHead>
-                  <TableHead className="px-4 py-3 text-left">Action</TableHead>
+                  <TableHead className="px-4 py-3 text-left">
+                    {t("Embedded ID")}
+                  </TableHead>
+                  <TableHead className="px-4 py-3 text-left">
+                    {t("Action")}
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -181,7 +191,9 @@ export default function EmbeddedUpdatesPage() {
                             variant="destructive"
                             size="sm"
                             type="button"
-                            onClick={() => handleDelete(item.embeddedUpdateId)}
+                            onClick={() =>
+                              handleDelete(item.embeddedUpdateId)
+                            }
                             disabled={deletingId === item.embeddedUpdateId}
                           >
                             {deletingId === item.embeddedUpdateId

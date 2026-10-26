@@ -51,3 +51,7 @@
   --vp-c-brand-3: #6551d8;
   --vp-home-hero-name-background: linear-gradient(120deg, #b4a8ff, #65d4da);
 }
+
+:root:lang(uk) {
+  --vp-code-copy-copied-text-content: 'Скопійовано';
+}

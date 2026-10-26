@@ -47,7 +47,9 @@ export function DeviceName({
       });
       if (!r.ok)
         throw new Error((await r.json()).error || "Не удалось сохранить");
-      setStatus(t("Имя сохранено — устройство можно выбрать в аудитории OTA."));
+      setStatus(
+        "Имя сохранено — устройство можно выбрать в аудитории OTA.",
+      );
     } catch (e) {
       setStatus((e as Error).message);
     } finally {

@@ -1,93 +1,72 @@
-# Аварийное восстановление OTA
+# OTA emergency recovery {#аварииное-восстановление-ota}
 
-## Глобальная аварийная остановка
+## Global emergency stop {#глобальная-аварииная-остановка}
 
-Если необходимо немедленно прекратить **любую** OTA-раздачу, используйте
-глобальный переключатель `ACTIVE/BLOCKED` на `/updates`. Он имеет приоритет над
-всеми emergency redirects: manifest вернёт `noUpdateAvailable`, а уже выданные
-ссылки `/api/assets` перестанут отдавать bytes и ответят `503 no-store`.
+To immediately stop **all** OTA distribution, use the global `ACTIVE/BLOCKED` switch on `/updates`. It takes priority over every emergency redirect: manifests return `noUpdateAvailable`, and previously issued `/api/assets` links stop serving bytes and return `503 no-store`.
 
-Укажите причину/номер инцидента, подтвердите включение и проверьте manifest и
-asset URL. После исправления проверьте pointers каналов, подтвердите выключение
-блокировки и повторите проверки для iOS и Android.
+Enter a reason or incident number, confirm the stop, and check the manifest and asset URLs. After fixing the issue, check channel pointers, confirm that distribution can resume, and repeat the checks for iOS and Android.
 
-RPC переключателя и DB-триггеры mutations используют одну transaction advisory
-lock. Поэтому конкурентная activation/channel mutation либо завершится до
-включения `BLOCKED`, либо дождётся его и будет отклонена PostgreSQL с SQLSTATE
-`P0OTA` и сообщением `OTA_DISTRIBUTION_BLOCKED`. Deactivation, inactive draft
-insert и безопасные metadata edits остаются доступны. Не отключайте guard
-triggers во время инцидента.
+The switch RPC and database mutation triggers share a transaction advisory lock. A concurrent activation or channel mutation therefore either completes before `BLOCKED` is enabled, or waits and is rejected by PostgreSQL with SQLSTATE `P0OTA` and message `OTA_DISTRIBUTION_BLOCKED`. Deactivation, inactive draft insertion and safe metadata edits remain available. Do not disable guard triggers during an incident.
 
-Новые manifest используют gated server-proxy URL `/api/assets`. Уже выданные
-старыми версиями сервера immutable storage/CDN URL отозвать этим switch
-невозможно; это ограничение legacy URL должно учитываться в incident response.
+New manifests use gated server-proxy URLs at `/api/assets`. The switch cannot revoke immutable storage/CDN URLs issued by older server versions; account for this legacy URL limitation in incident response.
 
-Emergency redirect используется, когда опубликованный binary build запрашивает
-неправильный нативный Expo channel. JavaScript OTA не может изменить channel,
-записанный в Android Manifest или iOS Expo.plist, поэтому сервер точечно
-перенаправляет affected build.
+An emergency redirect is needed when a published native binary requests the wrong Expo channel. JavaScript OTA cannot change the channel recorded in Android Manifest or iOS Expo.plist, so the server redirects only the affected build.
 
-Правило применяется только при точном совпадении:
+The rule applies only when all of these match exactly:
 
 - `expo-embedded-update-id`;
 - runtime version;
 - platform;
-- исходного channel.
+- source channel.
 
-Нельзя перенаправлять весь runtime: development и production builds могут
-использовать одинаковую runtime version.
+Never redirect an entire runtime: development and production builds can share the same runtime version.
 
-## Подготовка БД
+## Prepare the database {#подготовка-бд}
 
 ```bash
 psql "$DATABASE_URL" -f docs/migrations/schema.sql
 ```
 
-Если раньше правила хранились в
-`config/ota-emergency-channel-redirects.json`, импортируйте их до deploy:
+If rules were previously stored in `config/ota-emergency-channel-redirects.json`, import them before deployment:
 
 ```bash
 npm run emergency:import
 ```
 
-После успешного импорта JSON больше не используется сервером.
+After a successful import, the server no longer uses the JSON file.
 
-## Управление
+## Management {#управление}
 
-Откройте:
+Open:
 
 ```text
 /updates/emergency-redirects
 ```
 
-Роли `admin` и `operator` могут:
+The `admin` and `operator` roles can:
 
-- создавать и редактировать правила;
-- включать и отключать redirect;
-- переключать `pinned` и `follow`;
-- удалять правила.
+- create and edit rules;
+- enable and disable redirects;
+- switch between `pinned` and `follow`;
+- delete rules.
 
-Роль `viewer` имеет read-only доступ.
+The `viewer` role has read-only access.
 
-## Режимы
+## Modes {#режимы}
 
-### Pinned
+### Pinned {#pinned}
 
-Сервер разрешает только `expectedUpdateId`. Если target channel указывает на
-другой update, устройство получает `noUpdateAvailable`.
+The server permits only `expectedUpdateId`. If the target channel points to another update, the device receives `noUpdateAvailable`.
 
-Используйте `pinned` во время первичного восстановления, чтобы affected build
-получил только проверенный recovery OTA.
+Use `pinned` during initial recovery so the affected build receives only the verified recovery OTA.
 
-### Follow
+### Follow {#follow}
 
-Сервер использует актуальный active/latest update целевого channel. После
-успешной установки recovery OTA правило можно переключить в `follow`, чтобы
-старый binary продолжил получать обычные обновления.
+The server uses the current active/latest update of the target channel. After the recovery OTA is successfully installed, switch the rule to `follow` so the old binary continues receiving regular updates.
 
-## Пример инцидента
+## Example incident {#пример-инцидента}
 
-Android build может быть опубликован с:
+An Android build may be published with:
 
 ```text
 runtime: 1.1.20
@@ -95,14 +74,13 @@ native channel: development
 expected environment: production
 ```
 
-Экран приложения при этом способен показывать `production`, если читает
-JavaScript-конфигурацию. Expo Updates всё равно отправит:
+The application screen may still show `production` if it reads JavaScript configuration. Expo Updates will nevertheless send:
 
 ```text
 expo-channel-name: development
 ```
 
-Для affected embedded update создайте правило:
+Create a rule for the affected embedded update:
 
 ```text
 platform: android
@@ -113,9 +91,9 @@ targetMode: pinned
 expectedUpdateId: <verified-recovery-update-id>
 ```
 
-После подтверждения recovery переключите правило в `follow`.
+After confirming recovery, switch the rule to `follow`.
 
-## Проверка
+## Verification {#проверка}
 
 ```bash
 curl -fsS \
@@ -127,5 +105,4 @@ curl -fsS \
   -H 'expo-embedded-update-id: <affected-embedded-update-id>'
 ```
 
-Проверьте, что multipart manifest содержит ожидаемый update и asset URLs
-целевого channel.
+Check that the multipart manifest contains the expected update and the target channel's asset URLs.

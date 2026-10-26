@@ -1,4 +1,6 @@
 "use client";
+import type { TranslationMessage } from "@/src/client/i18n/messages";
+import { useI18n } from "@/src/client/i18n/provider";
 
 import { Textarea } from "@/components/ui/textarea";
 
@@ -43,10 +45,11 @@ export default function UpdatePolicyEditor({
   encodedKey: string;
   onSaved: () => Promise<void>;
 }) {
+  const { t, formatLocale } = useI18n();
   const [policy, setPolicy] = useState<UpdatePolicy | null>(null);
   const [payload, setPayload] = useState("");
   const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState<TranslationMessage>("");
   const [saving, setSaving] = useState(false);
   const [guardActions, setGuardActions] = useState<GuardActionItem[]>([]);
   const [canWriteGuardActions, setCanWriteGuardActions] = useState(false);
@@ -90,7 +93,7 @@ export default function UpdatePolicyEditor({
   if (!policy) {
     return (
       <Card className="rounded-xl border border-border bg-card p-5 text-sm  shadow-none">
-        {error || "Loading update policy…"}
+        {t(error || "Loading update policy…")}
       </Card>
     );
   }
@@ -169,7 +172,10 @@ export default function UpdatePolicyEditor({
     if (
       !option.id ||
       !window.confirm(
-        `Delete "${option.actionKey}" from the action catalog? Existing policies are unaffected.`,
+        t(
+          'Delete "{0}" from the action catalog? Existing policies are unaffected.',
+          [option.actionKey],
+        ),
       )
     ) {
       return;
@@ -201,7 +207,9 @@ export default function UpdatePolicyEditor({
         const trimmedPayload = payload.trim();
         guard = {
           action: policy.guard.action,
-          ...(trimmedPayload ? { payload: JSON.parse(trimmedPayload) } : {}),
+          ...(trimmedPayload
+            ? { payload: JSON.parse(trimmedPayload) }
+            : {}),
         };
       }
       const saved = await putUpdatePolicy(
@@ -211,7 +219,10 @@ export default function UpdatePolicyEditor({
       );
       setPolicy(saved);
       setPayload(payloadText(saved.guard));
-      setMessage(`Policy saved as version ${saved.policyVersion}.`);
+      setMessage({
+        key: "Policy saved as version {0}.",
+        values: [saved.policyVersion],
+      });
       await onSaved();
     } catch (saveError: unknown) {
       setError(
@@ -228,16 +239,18 @@ export default function UpdatePolicyEditor({
     <Card className="gap-4 p-5 shadow-none">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="font-semibold">Update policy</h2>
+          <h2 className="font-semibold">{t("Update policy")}</h2>
           <p className="text-xs text-muted-foreground">
-            Version {policy.policyVersion}
+            {t("Version {0}", [policy.policyVersion])}
             {policy.publishedAt
-              ? ` · published ${new Date(policy.publishedAt).toLocaleString()}`
-              : " · draft"}
+              ? t(" · published {0}", [
+                  new Date(policy.publishedAt).toLocaleString(formatLocale),
+                ])
+              : t(" · draft")}
           </p>
         </div>
         <label className="text-sm">
-          Delivery{" "}
+          {t("Delivery")}{" "}
           <NativeSelect
             value={policy.delivery}
             disabled={editingDisabled}
@@ -249,40 +262,46 @@ export default function UpdatePolicyEditor({
             }
             className="rounded-md border border-input bg-background px-2 py-2 "
           >
-            <option value="manual">Manual</option>
-            <option value="background">Background</option>
+            <option value="manual">{t("Manual")}</option>
+            <option value="background">{t("Background")}</option>
           </NativeSelect>
         </label>
       </div>
 
       {readOnly ? (
         <div className="rounded-md border border-border bg-muted/30 p-3 text-sm ">
-          Published policies are read-only. Publish a new update ID to change
-          policy.
+          {t(
+            "Published policies are read-only. Publish a new update ID to change policy.",
+          )}
         </div>
       ) : null}
       {policy.guard && policy.delivery === "manual" ? (
         <div className="rounded-md border border-blue-300 bg-blue-50 p-3 text-sm text-blue-900 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-200">
-          <strong>Note:</strong> a Guard is usually paired with Background
-          delivery so the candidate can fetch silently. Activation is still
-          allowed.
+          <strong>{t("Note:")}</strong>{" "}
+          {t(
+            "a Guard is usually paired with Background delivery so the candidate can fetch silently. Activation is still allowed.",
+          )}
         </div>
       ) : null}
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
-      {message ? <p className="text-sm text-emerald-600">{message}</p> : null}
+      {error ? <p className="text-sm text-red-600">{t(error)}</p> : null}
+      {message ? (
+        <p className="text-sm text-emerald-600">{t(message)}</p>
+      ) : null}
       {catalogError ? (
         <div
           role="status"
           className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-300"
         >
-          <span>Action catalog: {catalogError}</span>
+          <span>
+            {t("Action catalog:")} {t(catalogError)}
+          </span>
           <Button
             variant="outline"
             size="sm"
             type="button"
             onClick={() => void loadGuardActions()}
           >
-            Retry
+            {t("Retry")}
           </Button>
         </div>
       ) : null}
@@ -292,7 +311,7 @@ export default function UpdatePolicyEditor({
           className="flex flex-wrap items-end gap-2 rounded-md border border-border p-3 "
         >
           <label className="min-w-56 flex-1 text-xs text-muted-foreground">
-            Add action to catalog
+            {t("Add action to catalog")}
             <TextInput
               value={catalogCreateValue}
               maxLength={100}
@@ -303,7 +322,7 @@ export default function UpdatePolicyEditor({
               }}
               aria-describedby="guard-action-catalog-create-help"
               className="mt-1 w-full rounded border border-input bg-background p-2 text-sm "
-              placeholder="Reusable action name"
+              placeholder={t("Reusable action name")}
             />
           </label>
           <Button
@@ -312,32 +331,34 @@ export default function UpdatePolicyEditor({
             type="submit"
             disabled={catalogCreatePending}
           >
-            {catalogCreatePending ? "Adding…" : "Add to catalog"}
+            {catalogCreatePending ? t("Adding…") : t("Add to catalog")}
           </Button>
           <p
             id="guard-action-catalog-create-help"
             className="w-full text-xs text-muted-foreground"
           >
-            Adds a reusable catalog item without changing this policy.
+            {t(
+              "Adds a reusable catalog item without changing this policy.",
+            )}
           </p>
           {catalogCreateError ? (
             <div
               role="status"
               className="flex w-full items-center gap-2 text-xs text-amber-700 dark:text-amber-300"
             >
-              <span>{catalogCreateError}</span>
+              <span>{t(catalogCreateError)}</span>
               <Button variant="outline" size="sm" type="submit">
-                Retry
+                {t("Retry")}
               </Button>
             </div>
           ) : null}
         </form>
       ) : null}
       <div className="space-y-2 rounded-md border border-border p-3 ">
-        <h3 className="text-sm font-medium">Action catalog</h3>
+        <h3 className="text-sm font-medium">{t("Action catalog")}</h3>
         {guardActions.length > 0 ? (
           <ul
-            aria-label="Guard action catalog entries"
+            aria-label={t("Guard action catalog entries")}
             className="max-h-40 space-y-1 overflow-auto"
           >
             {guardActions.map((item) => (
@@ -353,7 +374,9 @@ export default function UpdatePolicyEditor({
                     variant="destructive"
                     size="sm"
                     type="button"
-                    aria-label={`Delete ${item.actionKey} from action catalog`}
+                    aria-label={t("Delete {0} from action catalog", [
+                      item.actionKey,
+                    ])}
                     onClick={() =>
                       void removeGuardAction({
                         id: item.id,
@@ -362,7 +385,7 @@ export default function UpdatePolicyEditor({
                       })
                     }
                   >
-                    Delete
+                    {t("Delete")}
                   </Button>
                 ) : null}
               </li>
@@ -370,14 +393,15 @@ export default function UpdatePolicyEditor({
           </ul>
         ) : (
           <p className="text-xs text-muted-foreground">
-            No catalog actions found.
+            {t("No catalog actions found.")}
           </p>
         )}
       </div>
 
       <div className="space-y-3 rounded-lg border border-input p-3 ">
         <label className="flex items-center gap-2 text-sm font-medium">
-          <input className="size-4 rounded border-input accent-primary"
+          <input
+            className="size-4 rounded border-input accent-primary"
             type="checkbox"
             checked={policy.guard !== null}
             disabled={editingDisabled}
@@ -393,11 +417,12 @@ export default function UpdatePolicyEditor({
               if (!event.target.checked) setPayload("");
             }}
           />
-          Guard enabled
+          {t("Guard enabled")}
         </label>
         <p className="text-xs text-muted-foreground">
-          When enabled, this Guard applies unconditionally whenever this OTA is
-          selected for a client.
+          {t(
+            "When enabled, this Guard applies unconditionally whenever this OTA is selected for a client.",
+          )}
         </p>
         {policy.guard ? (
           <>
@@ -417,7 +442,7 @@ export default function UpdatePolicyEditor({
               }
             />
             <label className="block text-xs text-muted-foreground">
-              Optional custom JSON payload
+              {t("Optional custom JSON payload")}
               <Textarea
                 value={payload}
                 disabled={editingDisabled}
@@ -429,7 +454,7 @@ export default function UpdatePolicyEditor({
           </>
         ) : (
           <p className="text-sm text-muted-foreground">
-            No Guard will be emitted in the update manifest.
+            {t("No Guard will be emitted in the update manifest.")}
           </p>
         )}
       </div>
@@ -441,7 +466,7 @@ export default function UpdatePolicyEditor({
         disabled={editingDisabled}
         onClick={() => void save()}
       >
-        Save policy
+        {t("Save policy")}
       </Button>
     </Card>
   );

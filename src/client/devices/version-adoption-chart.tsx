@@ -25,7 +25,7 @@ function useKindLabels() {
   const { t } = useI18n();
   return {
     ota: "OTA",
-    embedded: "Embedded",
+    embedded: t("Embedded"),
     unknown: t("Не определён"),
   };
 }
@@ -52,8 +52,12 @@ function ScopeChart({ scope }: { scope: VersionScope }) {
       <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <GitBranch className="size-4 shrink-0 text-muted-foreground" />
-          <span className="text-xs text-muted-foreground">{t("Канал")}</span>
-          <h4 className="break-all text-sm font-semibold">{scope.channel}</h4>
+          <span className="text-xs text-muted-foreground">
+            {t("Канал")}
+          </span>
+          <h4 className="break-all text-sm font-semibold">
+            {scope.channel}
+          </h4>
           <Badge variant="outline">
             {scope.platform === "ios" ? "iOS" : "Android"}
           </Badge>
@@ -93,11 +97,13 @@ function ScopeChart({ scope }: { scope: VersionScope }) {
                   title={version.updateId || undefined}
                 >
                   {kindLabels[version.kind]}
-                  {version.updateId ? ` ${version.updateId.slice(0, 8)}` : ""}
+                  {version.updateId
+                    ? ` ${version.updateId.slice(0, 8)}`
+                    : ""}
                 </Badge>
               </div>
               <p className="mt-1 break-words text-xs leading-5 text-muted-foreground">
-                Native: {version.nativeBuilds.join(", ")}
+                {t("Native:")} {version.nativeBuilds.join(", ")}
               </p>
               {version.updateId && (
                 <details className="mt-1 text-xs text-muted-foreground">
@@ -151,7 +157,8 @@ function ScopeChart({ scope }: { scope: VersionScope }) {
           <p className="text-xs text-muted-foreground">
             {t("Показано ")}
             {visible.length} {t(" из ")}
-            {scope.versions.length} {t(" версий. Доли учитывают весь блок.")}
+            {scope.versions.length}{" "}
+            {t(" версий. Доли учитывают весь блок.")}
           </p>
           <Button
             variant="outline"
@@ -169,7 +176,11 @@ function ScopeChart({ scope }: { scope: VersionScope }) {
     </section>
   );
 }
-export function VersionAdoptionChart({ report }: { report: DevicesReport }) {
+export function VersionAdoptionChart({
+  report,
+}: {
+  report: DevicesReport;
+}) {
   const kindLabels = useKindLabels();
   const { number } = useFormatters();
   const { t } = useI18n();
@@ -210,7 +221,8 @@ export function VersionAdoptionChart({ report }: { report: DevicesReport }) {
                   <i
                     className="size-2 rounded-full"
                     style={{
-                      background: kindColors[kind as keyof typeof kindColors],
+                      background:
+                        kindColors[kind as keyof typeof kindColors],
                     }}
                   />
                   {label}
@@ -221,13 +233,13 @@ export function VersionAdoptionChart({ report }: { report: DevicesReport }) {
               {runtimes.map((runtime) => (
                 <section
                   key={runtime.runtime}
-                  aria-label={`Runtime ${runtime.runtime}`}
+                  aria-label={t("Runtime {0}", [runtime.runtime])}
                 >
                   <header className="mb-3 flex flex-wrap items-center justify-between gap-3">
                     <h3 className="flex min-w-0 items-center gap-2 text-sm">
                       <Layers className="size-4 shrink-0 text-muted-foreground" />
                       <span className="shrink-0 text-muted-foreground">
-                        Runtime
+                        {t("Runtime")}
                       </span>
                       <span className="break-all font-semibold">
                         {runtime.runtime}

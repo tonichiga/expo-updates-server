@@ -18,7 +18,7 @@ Reruns preserve the original entry. Changed generated files require the existing
 scripts remain intact. Introducing these native modules requires rebuilding the binary
 and using a compatible runtime. An OTA alone cannot add a missing native module.
 
-Open `/updates/devices` (the **Установки** link in the admin panel). It shows:
+Open `/updates/devices` (the **Installations** link in the admin panel). It shows:
 
 - Installation IDs, platform/channel, runtime, native version/build, actual launch
   ID and resolved artifact, emergency launch flag, and last server receipt.
@@ -222,11 +222,11 @@ migration runner requires an empty disposable database owned by its connection
 role and leaves its schema installed for inspection. Analytics tests temporarily
 adjust collection metadata and exercise cleanup; never run them on a live database.
 
-## Версии на графике
+## Versions in the chart {#версии-на-графике}
 
-График разделён на runtime, канал и платформу. Доля каждой OTA считается внутри этого блока, а не от всех каналов сразу. `appVersion` извлекается из опубликованного manifest (`extra.expoClient.version`, затем `expoClient.version`); message остаётся комментарием и не используется как название версии. Рядом показан OTA ID, чтобы различать публикации с одинаковым `appVersion`. Если метаданные OTA недоступны, интерфейс явно показывает «Версия не указана», не подменяя её native-версией.
+The chart groups versions by runtime, channel and platform. Each OTA's share is calculated within that group, not across all channels. `appVersion` comes from the published manifest (`extra.expoClient.version`, then `expoClient.version`); the message remains a comment and is not used as a version name. The OTA ID distinguishes releases with the same `appVersion`. When OTA metadata is unavailable, the interface explicitly shows “Version not specified” instead of substituting the native version.
 
-Одна OTA на нескольких native-сборках объединяется в одну полосу; исходные строки остаются в таблице «Все версии». Для существующей базы после миграции аналитики примените `docs/migrations/2026-10-22-device-version-metadata.sql`. Новая база получает изменение из `schema.sql`. Миграция не меняет установленные версии и политику доставки.
+One OTA running on multiple native builds appears as one bar; the original rows remain in the All versions table. For an existing database, apply `docs/migrations/2026-10-22-device-version-metadata.sql` after the analytics migration. New databases receive the change through `schema.sql`. The migration does not change installed versions or delivery policies.
 
 ## Device targeting
 

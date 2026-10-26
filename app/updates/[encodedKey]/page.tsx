@@ -1,5 +1,7 @@
 "use client";
+import type { TranslationMessage } from "@/src/client/i18n/messages";
 import { useI18n } from "@/src/client/i18n/provider";
+import { useFormatters } from "@/src/client/i18n/use-formatters";
 
 import { Textarea } from "@/components/ui/textarea";
 
@@ -39,6 +41,7 @@ function prettyJson(value: unknown): string {
 
 export default function UpdateDetailsPage() {
   const { t } = useI18n();
+  const { fullDate } = useFormatters();
   const params = useParams<{ encodedKey: string }>();
   const router = useRouter();
   const encodedKey = params.encodedKey;
@@ -47,7 +50,7 @@ export default function UpdateDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [success, setSuccess] = useState<TranslationMessage>("");
   const [selectedFile, setSelectedFile] =
     useState<EditableFile>("update-info.json");
   const [editorValue, setEditorValue] = useState("{}");
@@ -82,7 +85,9 @@ export default function UpdateDetailsPage() {
 
     const currentServedUpdateId = activeUpdateId || latestUpdateId;
     const isNewestInScope = Boolean(
-      detail?.updateId && newestUpdateId && detail.updateId === newestUpdateId,
+      detail?.updateId &&
+      newestUpdateId &&
+      detail.updateId === newestUpdateId,
     );
 
     return {
@@ -108,7 +113,8 @@ export default function UpdateDetailsPage() {
     detail.updateId !== channelState.currentServedUpdateId,
   );
   const canToggleDisabled = Boolean(
-    detail && !(channelState.rollbackActive && channelState.isNewestInScope),
+    detail &&
+    !(channelState.rollbackActive && channelState.isNewestInScope),
   );
   const canDirectActivate = Boolean(
     detail &&
@@ -178,7 +184,9 @@ export default function UpdateDetailsPage() {
         const response = await getUpdate(encodedKey);
         setDetail(response);
       } catch (loadError: unknown) {
-        setError((loadError as Error).message || "Не удалось загрузить детали");
+        setError(
+          (loadError as Error).message || "Не удалось загрузить детали",
+        );
       } finally {
         setLoading(false);
       }
@@ -208,7 +216,7 @@ export default function UpdateDetailsPage() {
     try {
       await updateJsonFile(encodedKey, selectedFile, parsed);
       await reload();
-      setSuccess(t("Файл {0} обновлён", [selectedFile]));
+      setSuccess({ key: "Файл {0} обновлён", values: [selectedFile] });
     } catch (saveError: unknown) {
       setError((saveError as Error).message || "Ошибка сохранения");
     } finally {
@@ -232,7 +240,7 @@ export default function UpdateDetailsPage() {
     try {
       await rollbackUpdate(encodedKey);
       await reload();
-      setSuccess(t("Rollback активирован"));
+      setSuccess("Rollback активирован");
     } catch (rollbackError: unknown) {
       setError((rollbackError as Error).message || "Rollback не выполнен");
     } finally {
@@ -254,7 +262,7 @@ export default function UpdateDetailsPage() {
     try {
       await promoteUpdate(encodedKey);
       await reload();
-      setSuccess(t("Promote выполнен: распространение возвращено к latest"));
+      setSuccess("Promote выполнен: распространение возвращено к latest");
     } catch (promoteError: unknown) {
       setError((promoteError as Error).message || "Promote не выполнен");
     } finally {
@@ -274,11 +282,11 @@ export default function UpdateDetailsPage() {
       const disabled = detail.status !== "disabled";
       await setUpdateDisabled(encodedKey, disabled);
       await reload();
-      setSuccess(
-        disabled ? t("Апдейт деактивирован") : t("Апдейт активирован"),
-      );
+      setSuccess(disabled ? "Апдейт деактивирован" : "Апдейт активирован");
     } catch (toggleError: unknown) {
-      setError((toggleError as Error).message || "Не удалось изменить статус");
+      setError(
+        (toggleError as Error).message || "Не удалось изменить статус",
+      );
     } finally {
       setSaving(false);
     }
@@ -290,7 +298,9 @@ export default function UpdateDetailsPage() {
       return;
     }
 
-    const confirmed = window.confirm(t("Удалить апдейт полностью из bucket?"));
+    const confirmed = window.confirm(
+      t("Удалить апдейт полностью из bucket?"),
+    );
     if (!confirmed) {
       return;
     }
@@ -303,7 +313,9 @@ export default function UpdateDetailsPage() {
       await deleteUpdate(encodedKey);
       router.replace("/updates");
     } catch (deleteError: unknown) {
-      setError((deleteError as Error).message || "Не удалось удалить апдейт");
+      setError(
+        (deleteError as Error).message || "Не удалось удалить апдейт",
+      );
       setSaving(false);
     }
   };
@@ -340,7 +352,7 @@ export default function UpdateDetailsPage() {
 
         {success ? (
           <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300">
-            {success}
+            {t(success)}
           </div>
         ) : null}
 
@@ -383,41 +395,51 @@ export default function UpdateDetailsPage() {
             ) : null}
 
             <Card className="grid gap-4 rounded-xl border border-border bg-card p-5  md:grid-cols-2 lg:grid-cols-4 shadow-none">
-              <Info label="Runtime" value={detail.runtimeVersion} />
-              <Info label="Platform" value={detail.platform} />
-              <Info label="Channel" value={detail.channel} />
-              <Info label="Stage" value={detail.stage} />
+              <Info label={t("Runtime")} value={detail.runtimeVersion} />
+              <Info label={t("Platform")} value={detail.platform} />
+              <Info label={t("Channel")} value={detail.channel} />
+              <Info label={t("Stage")} value={detail.stage} />
               <Info
-                label="Created"
-                value={detail.createdAt || detail.createdAtPath}
+                label={t("Created")}
+                value={
+                  detail.createdAt
+                    ? fullDate(detail.createdAt)
+                    : detail.createdAtPath
+                }
               />
-              <Info label="Status" value={detail.status} />
+              <Info label={t("Status")} value={t(detail.status)} />
               <Info
-                label="Latest"
+                label={t("Latest")}
                 value={detail.isLatest ? t("Да") : t("Нет")}
               />
               <Info
-                label="Rollback"
+                label={t("Rollback")}
                 value={detail.isRollbackActive ? t("Активен") : t("Нет")}
               />
               <Info
                 label={t("Доставка")}
                 value={
                   detail.isIgnoredByRollback
-                    ? "Ignored by rollback"
+                    ? t("Ignored by rollback")
                     : detail.deliveryMode === "background"
-                      ? "Background"
-                      : "Manual"
+                      ? t("Background")
+                      : t("Manual")
                 }
               />
-              <Info label="Guard" value={detail.hasGuard ? "Yes" : "None"} />
               <Info
-                label="Policy"
-                value={`v${detail.policyVersion} · ${detail.policyEditable ? "draft" : "published"}`}
+                label={t("Guard")}
+                value={detail.hasGuard ? t("Yes") : t("None")}
               />
-              <Info label="Assets" value={String(detail.assetsCount)} />
               <Info
-                label="Update ID"
+                label={t("Policy")}
+                value={`v${detail.policyVersion} · ${detail.policyEditable ? t("draft") : t("published")}`}
+              />
+              <Info
+                label={t("Assets")}
+                value={String(detail.assetsCount)}
+              />
+              <Info
+                label={t("Update ID")}
                 value={detail.updateId}
                 className="md:col-span-2 lg:col-span-2"
               />
@@ -454,7 +476,7 @@ export default function UpdateDetailsPage() {
                     onClick={handleRollback}
                     disabled={saving}
                   >
-                    Rollback
+                    {t("Rollback")}
                   </Button>
                 ) : null}
                 {canPromote ? (
@@ -465,7 +487,7 @@ export default function UpdateDetailsPage() {
                     onClick={handlePromote}
                     disabled={saving}
                   >
-                    Promote
+                    {t("Promote")}
                   </Button>
                 ) : null}
                 {showToggleDisabledButton ? (

@@ -24,7 +24,7 @@ or generate credentials/signing keys. It contains the template from its publishe
 version, not unpublished changes on GitHub or in a local checkout.
 
 Continue with the **[Quick Start](docs/getting-started.md)**
-([Русский](docs/getting-started.ru.md)). It covers one complete path:
+([Русский](docs/ru/getting-started.md) · [Українська](docs/uk/getting-started.md)). It covers one complete path:
 
 1. Prepare Docker, server settings and a signing key pair.
 2. Start the server and create an administrator.

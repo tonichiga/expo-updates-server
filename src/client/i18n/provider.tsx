@@ -10,13 +10,14 @@ import {
 import {
   createTranslator,
   defaultLocale,
+  formatLocales,
   LOCALE_COOKIE,
   type Locale,
 } from "./messages";
 
 const defaultValue = {
   locale: defaultLocale,
-  formatLocale: "en-US",
+  formatLocale: formatLocales[defaultLocale],
   t: createTranslator(defaultLocale),
   setLocale: (_locale: Locale) => {
     void _locale;
@@ -35,7 +36,7 @@ export function LocaleProvider({
   const value = useMemo(
     () => ({
       locale,
-      formatLocale: locale === "ru" ? "ru-RU" : "en-US",
+      formatLocale: formatLocales[locale],
       t: createTranslator(locale),
       setLocale(next: Locale) {
         document.cookie = `${LOCALE_COOKIE}=${next}; Path=/; Max-Age=31536000; SameSite=Lax`;
@@ -46,7 +47,9 @@ export function LocaleProvider({
     [locale],
   );
   return (
-    <LocaleContext.Provider value={value}>{children}</LocaleContext.Provider>
+    <LocaleContext.Provider value={value}>
+      {children}
+    </LocaleContext.Provider>
   );
 }
 

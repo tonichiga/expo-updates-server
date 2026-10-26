@@ -11,14 +11,13 @@ have to match. A force-update guard does not bypass the audience.
    is required. Existing generated files can be refreshed with `--force` (review local edits).
 2. Rebuild the native app after adding `expo-secure-store`; use a new runtime so older
    binaries cannot download JavaScript importing a missing native module.
-3. Open the app. In **Установки → installation details**, copy its Device ID or name it
-   **Мой телефон**. Older clients still report Installation ID and can be targeted by it.
+3. Open the app. In **Installations → installation details**, copy its Device ID or name it
+   **My phone**. Older clients still report Installation ID and can be targeted by it.
 4. Publish with the generated `npm run ota:publish -- --platform android --message "Smoke"`.
-   Publishing creates a draft. In its detail page select **Аудитория обновления → Только
-   выбранные устройства / установки**, choose your phone, and **save before activation**.
+   Publishing creates a draft. In its detail page select **Update audience → Selected devices / installations only**, choose your phone, and **save before activation**.
 5. Activate the draft. Your device gets it; other compatible devices get the previous
    eligible public update, or no update if one does not exist.
-6. After testing, set the audience to **Все совместимые устройства** and save. The same
+6. After testing, set the audience to **All compatible devices** and save. The same
    artifact is now eligible for everyone. No second publish is needed.
 
 Changing an active audience affects future checks immediately. It does not uninstall or

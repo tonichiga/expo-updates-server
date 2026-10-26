@@ -10,7 +10,7 @@ describe("Guard action combobox semantics", () => {
   it("uses a named dialog popup instead of interactive listbox options", () => {
     expect(source).toContain('aria-haspopup="dialog"');
     expect(source).toContain('role="dialog"');
-    expect(source).toContain('aria-label="Guard action catalog"');
+    expect(source).toContain('aria-label={t("Guard action catalog")}');
     expect(source).not.toMatch(/role="(?:listbox|option)"/);
   });
 

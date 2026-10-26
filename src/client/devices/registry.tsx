@@ -4,7 +4,13 @@ import { useI18n } from "@/src/client/i18n/provider";
 
 import { DeviceName } from "./device-name";
 import { useRef, useState } from "react";
-import { Copy, Check, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import {
+  Copy,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Search,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -14,7 +20,12 @@ import {
   CardDescription,
   CardContent,
 } from "@/components/ui/card";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from "@/components/ui/tabs";
 import {
   Table,
   TableHeader,
@@ -85,7 +96,7 @@ export function Registry({
   const { t } = useI18n();
   const opener = useRef<HTMLButtonElement | null>(null);
   const kindNames = useKindNames();
-  const { number, fullDate } = useFormatters();
+  const { number, fullDate, calendarDate } = useFormatters();
   const [selected, setSelected] = useState<DeviceInstallation | null>(null);
   return (
     <>
@@ -142,7 +153,7 @@ export function Registry({
                         </Button>
                         <p className="mt-1 text-xs text-muted-foreground">
                           {t("С ")}
-                          {fullDate(d.first_seen_at).split(",")[0]}
+                          {calendarDate(d.first_seen_at)}
                         </p>
                       </TableCell>
                       <TableCell>
@@ -171,14 +182,16 @@ export function Registry({
                           {d.runtime_version}
                         </p>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          Native {d.native_version || "—"} (
+                          {t("Native")} {d.native_version || "—"} (
                           {d.native_build || "—"})
                         </p>
                       </TableCell>
                       <TableCell>
                         <Badge
                           variant={
-                            d.launch_kind === "ota" ? "default" : "secondary"
+                            d.launch_kind === "ota"
+                              ? "default"
+                              : "secondary"
                           }
                         >
                           {kindNames[d.launch_kind]}
@@ -188,7 +201,7 @@ export function Registry({
                             variant="destructive"
                             className="mt-1 block w-fit"
                           >
-                            Emergency
+                            {t("Emergency")}
                           </Badge>
                         )}
                       </TableCell>
@@ -243,9 +256,12 @@ export function Registry({
                     size="sm"
                     variant="outline"
                     disabled={
-                      loading || report.offset + report.pageSize >= report.total
+                      loading ||
+                      report.offset + report.pageSize >= report.total
                     }
-                    onClick={() => paginate(report.offset + report.pageSize)}
+                    onClick={() =>
+                      paginate(report.offset + report.pageSize)
+                    }
                   >
                     {t("Далее")}
                     <ChevronRight />
@@ -259,12 +275,14 @@ export function Registry({
                   <TableRow>
                     <TableHead>{t("Версия / ID")}</TableHead>
                     <TableHead>{t("Платформа / канал")}</TableHead>
-                    <TableHead>Runtime / native</TableHead>
+                    <TableHead>{t("Runtime / native")}</TableHead>
                     <TableHead>{t("Запуск")}</TableHead>
                     <TableHead className="text-right">
                       {t("Установки")}
                     </TableHead>
-                    <TableHead className="text-right">{t("Доля")}</TableHead>
+                    <TableHead className="text-right">
+                      {t("Доля")}
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -295,7 +313,8 @@ export function Registry({
                       <TableCell>
                         {v.runtime_version}
                         <p className="text-xs text-muted-foreground">
-                          {v.native_version || "—"} ({v.native_build || "—"})
+                          {v.native_version || "—"} ({v.native_build || "—"}
+                          )
                         </p>
                       </TableCell>
                       <TableCell>
@@ -353,21 +372,21 @@ export function Registry({
           {selected && (
             <dl className="space-y-5 px-6 pb-8">
               {[
-                ["Installation ID", selected.installation_id],
-                ["Device ID", selected.device_id || "—"],
+                [t("Installation ID"), selected.installation_id],
+                [t("Device ID"), selected.device_id || "—"],
                 [t("Платформа"), selected.platform],
                 [t("Канал"), selected.channel],
-                ["Runtime", selected.runtime_version],
+                [t("Runtime"), selected.runtime_version],
                 [
-                  "Native version / build",
+                  t("Native version / build"),
                   `${selected.native_version || "—"} (${selected.native_build || "—"})`,
                 ],
                 [t("Тип запуска"), kindNames[selected.launch_kind]],
                 [t("Название обновления"), selected.update_label || "—"],
-                ["OTA artifact ID", selected.resolved_update_id || "—"],
-                ["Launch update ID", selected.reported_update_id || "—"],
+                [t("OTA artifact ID"), selected.resolved_update_id || "—"],
+                [t("Launch update ID"), selected.reported_update_id || "—"],
                 [
-                  "Emergency launch",
+                  t("Emergency launch"),
                   selected.emergency_launch ? t("Да") : t("Нет"),
                 ],
                 [t("Первый heartbeat"), fullDate(selected.first_seen_at)],

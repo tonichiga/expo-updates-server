@@ -4,8 +4,8 @@ import { useI18n } from "@/src/client/i18n/provider";
 import { resolveLocale } from "@/src/client/i18n/messages";
 
 export function LanguageSwitcher() {
-  const { locale, setLocale } = useI18n();
-  const label = locale === "en" ? "Interface language" : "Язык интерфейса";
+  const { locale, setLocale, t } = useI18n();
+  const label = t("Interface language");
   return (
     <select
       aria-label={label}
@@ -19,6 +19,9 @@ export function LanguageSwitcher() {
       </option>
       <option value="ru" lang="ru">
         Русский
+      </option>
+      <option value="uk" lang="uk">
+        Українська
       </option>
     </select>
   );
