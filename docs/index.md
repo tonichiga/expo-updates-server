@@ -39,7 +39,7 @@ features:
 
 ## From project files to the first OTA
 
-Start with the [Quick Start](/getting-started) ([Русский](/getting-started.ru)).
+Start with the [Quick Start](/getting-started).
 It covers project creation, Docker, signing keys, administrator setup, connecting
 an Expo app, installing a native release and publishing the first OTA.
 

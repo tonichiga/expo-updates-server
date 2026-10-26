@@ -101,7 +101,9 @@ export function AdminShell({
     }
   }
   return (
-    <SidebarProvider style={{ "--sidebar-width": "14rem" } as CSSProperties}>
+    <SidebarProvider
+      style={{ "--sidebar-width": "14rem" } as CSSProperties}
+    >
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:bg-card focus:p-3"
@@ -120,7 +122,7 @@ export function AdminShell({
             <span>
               OTA Console
               <span className="block text-[10px] font-medium uppercase tracking-[.18em] text-muted-foreground">
-                Release workspace
+                {t("Release workspace")}
               </span>
             </span>
           </Link>
@@ -142,7 +144,9 @@ export function AdminShell({
               <p className="truncate text-sm font-medium text-foreground">
                 {session.username}
               </p>
-              <p className="text-xs text-muted-foreground">{session.role}</p>
+              <p className="text-xs text-muted-foreground">
+                {t(session.role)}
+              </p>
             </div>
           </div>
           {error && (
@@ -164,8 +168,10 @@ export function AdminShell({
       <SidebarInset className="min-w-0 bg-background">
         <header className="flex h-16 shrink-0 items-center justify-between gap-4 border-b bg-card/80 px-4 md:px-8">
           <div className="flex items-center gap-3">
-            <SidebarTrigger aria-label={t("Открыть или скрыть навигацию")} />
-            <span className="text-sm text-muted-foreground">
+            <SidebarTrigger
+              aria-label={t("Открыть или скрыть навигацию")}
+            />
+            <span className="hidden text-sm text-muted-foreground sm:inline">
               {t("Управление обновлениями")}
             </span>
           </div>

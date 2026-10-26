@@ -16,6 +16,7 @@
     "lint": "eslint",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
+    "docs:test": "node --test docs/.vitepress/i18n.check.mjs",
     "docs:preview": "vitepress preview docs",
     "emergency:import": "node scripts/import-emergency-redirects.mjs",
     "docker:sync-db-password": "sh scripts/sync-docker-database-password.sh",

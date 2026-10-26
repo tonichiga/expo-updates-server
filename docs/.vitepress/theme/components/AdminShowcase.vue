@@ -1,8 +1,9 @@
 <script setup>
-import { ref } from 'vue'
-import { withBase } from 'vitepress'
+import { computed, ref } from 'vue'
+import { useData, withBase } from 'vitepress'
+import { showcaseLocales } from '../showcase-locales.mjs'
 
-const slides = [
+const baseSlides = [
   {
     key: 'versions', label: 'Version adoption', eyebrow: '01 / Understand adoption',
     title: 'Know which versions still need support.',
@@ -32,14 +33,19 @@ const slides = [
     alt: 'Update audience editor with two simulated QA phones selected and background delivery options below.',
   },
 ]
+const { lang } = useData()
+const copy = computed(() => showcaseLocales[lang.value] || showcaseLocales.en)
+const slides = computed(() => baseSlides.map((slide, index) => ({
+  ...slide, ...copy.value.slides?.[index],
+})))
 const active = ref(0)
 const tabs = ref([])
 function select(index, focus = false) {
-  active.value = (index + slides.length) % slides.length
+  active.value = (index + slides.value.length) % slides.value.length
   if (focus) tabs.value[active.value]?.focus()
 }
 function onKeydown(event) {
-  const keys = { ArrowRight: active.value + 1, ArrowLeft: active.value - 1, Home: 0, End: slides.length - 1 }
+  const keys = { ArrowRight: active.value + 1, ArrowLeft: active.value - 1, Home: 0, End: slides.value.length - 1 }
   if (!(event.key in keys)) return
   event.preventDefault()
   select(keys[event.key], true)
@@ -47,8 +53,8 @@ function onKeydown(event) {
 </script>
 
 <template>
-  <section class="admin-showcase" aria-label="Admin panel preview">
-    <div class="showcase-tabs" role="tablist" aria-label="Explore the admin panel" @keydown="onKeydown">
+  <section class="admin-showcase" :aria-label="copy.preview">
+    <div class="showcase-tabs" role="tablist" :aria-label="copy.explore" @keydown="onKeydown">
       <button v-for="(slide, index) in slides" :key="slide.key" :ref="el => tabs[index] = el"
         :id="`preview-tab-${slide.key}`" class="showcase-tab" role="tab" type="button"
         :aria-selected="active === index" :aria-controls="`preview-panel-${slide.key}`"
@@ -61,11 +67,11 @@ function onKeydown(event) {
       <div class="showcase-toolbar">
         <div class="showcase-location"><span class="preview-dot" aria-hidden="true"></span><span>OTA Console</span><span class="preview-path">{{ slides[active].path }}</span></div>
         <div class="showcase-controls">
-          <span class="demo-label">Demo data</span>
-          <button type="button" aria-label="Previous admin screenshot" @click="select(active - 1)">
+          <span class="demo-label">{{ copy.demo }}</span>
+          <button type="button" :aria-label="copy.previous" @click="select(active - 1)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m14 6-6 6 6 6" /></svg>
           </button>
-          <button type="button" aria-label="Next admin screenshot" @click="select(active + 1)">
+          <button type="button" :aria-label="copy.next" @click="select(active + 1)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m10 6 6 6-6 6" /></svg>
           </button>
         </div>
@@ -73,10 +79,10 @@ function onKeydown(event) {
       <figure v-for="(slide, index) in slides" v-show="active === index" :key="slide.key"
         :id="`preview-panel-${slide.key}`" class="showcase-panel" role="tabpanel" :aria-labelledby="`preview-tab-${slide.key}`">
         <a :href="withBase(`/screenshots/${slide.file}`)" target="_blank" rel="noopener"
-          :aria-label="`Open full-size screenshot: ${slide.label}`">
+          :aria-label="`${copy.open}: ${slide.label}`">
           <img :src="withBase(`/screenshots/${slide.file}`)" :alt="slide.alt" width="2520" height="1800"
             :loading="index === 0 ? 'eager' : 'lazy'" :fetchpriority="index === 0 ? 'high' : 'auto'" />
-          <span class="expand-hint" aria-hidden="true">View full size ↗</span>
+          <span class="expand-hint" aria-hidden="true">{{ copy.fullSize }}</span>
         </a>
       </figure>
     </div>
@@ -85,7 +91,7 @@ function onKeydown(event) {
       <div><p class="showcase-eyebrow">{{ slides[active].eyebrow }}</p><h2>{{ slides[active].title }}</h2></div>
       <p class="showcase-description">{{ slides[active].description }}</p>
     </div>
-    <p class="showcase-note">Real admin interface. Illustrative versions, devices and activity.</p>
+    <p class="showcase-note">{{ copy.note }}</p>
   </section>
 </template>
 

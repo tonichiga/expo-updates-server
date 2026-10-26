@@ -15,7 +15,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -32,7 +37,7 @@ export function useKindNames() {
   const { t } = useI18n();
   return {
     ota: "OTA",
-    embedded: "Embedded",
+    embedded: t("Embedded"),
     unknown: t("Не определён"),
   };
 }
@@ -43,7 +48,7 @@ export function Analytics({ report }: { report: DevicesReport }) {
   const kinds = [
     { label: "OTA", value: s.otaInstallations, color: "var(--chart-1)" },
     {
-      label: "Embedded",
+      label: t("Embedded"),
       value: s.embeddedInstallations,
       color: "var(--chart-2)",
     },
@@ -211,7 +216,9 @@ export function Analytics({ report }: { report: DevicesReport }) {
                   {report.activity.map((day) => (
                     <TableRow key={day.date}>
                       <TableCell>{date(day.date)}</TableCell>
-                      <TableCell>{day.activeInstallations ?? "—"}</TableCell>
+                      <TableCell>
+                        {day.activeInstallations ?? "—"}
+                      </TableCell>
                       <TableCell>{day.newInstallations ?? "—"}</TableCell>
                       <TableCell>
                         {day.coverage === "complete"
@@ -238,7 +245,9 @@ export function Analytics({ report }: { report: DevicesReport }) {
             <div
               className="flex h-3 overflow-hidden rounded-full bg-muted"
               role="img"
-              aria-label={kinds.map((k) => `${k.label}: ${k.value}`).join(", ")}
+              aria-label={kinds
+                .map((k) => `${k.label}: ${k.value}`)
+                .join(", ")}
             >
               {kinds.map((k) => (
                 <div
@@ -291,8 +300,12 @@ export function Analytics({ report }: { report: DevicesReport }) {
         <CardContent>
           <Tabs defaultValue="adoption">
             <TabsList className="mb-4">
-              <TabsTrigger value="adoption">{t("Текущие версии")}</TabsTrigger>
-              <TabsTrigger value="retention">{t("Возвращаемость")}</TabsTrigger>
+              <TabsTrigger value="adoption">
+                {t("Текущие версии")}
+              </TabsTrigger>
+              <TabsTrigger value="retention">
+                {t("Возвращаемость")}
+              </TabsTrigger>
             </TabsList>
             <TabsContent value="adoption">
               <p className="mb-3 text-xs text-muted-foreground">
@@ -306,7 +319,7 @@ export function Analytics({ report }: { report: DevicesReport }) {
                     <TableHead>{t("Неделя · UTC")}</TableHead>
                     <TableHead>{t("Установки")}</TableHead>
                     <TableHead>OTA</TableHead>
-                    <TableHead>Embedded</TableHead>
+                    <TableHead>{t("Embedded")}</TableHead>
                     <TableHead>{t("Не определён")}</TableHead>
                   </TableRow>
                 </TableHeader>

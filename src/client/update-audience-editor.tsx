@@ -1,4 +1,5 @@
 "use client";
+import type { TranslationMessage } from "@/src/client/i18n/messages";
 import { useI18n } from "@/src/client/i18n/provider";
 
 import { useEffect, useState } from "react";
@@ -48,7 +49,7 @@ export default function UpdateAudienceEditor({
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [success, setSuccess] = useState<TranslationMessage>("");
   const [revision, setRevision] = useState(0);
   const url = `/api/admin/updates/${encodedKey}/audience`;
   useEffect(() => {
@@ -111,9 +112,7 @@ export default function UpdateAudienceEditor({
       }).then(json);
       setAudience(saved);
       setSuccess(
-        t(
-          "Аудитория сохранена. Для черновика отдельно включите распространение.",
-        ),
+        "Аудитория сохранена. Для черновика отдельно включите распространение.",
       );
     } catch (e) {
       setError((e as Error).message);
@@ -139,7 +138,7 @@ export default function UpdateAudienceEditor({
         )}
         {success && (
           <p role="status" className="text-sm text-muted-foreground">
-            {success}
+            {t(success)}
           </p>
         )}
         {audience && (
@@ -154,7 +153,9 @@ export default function UpdateAudienceEditor({
                 }}
                 disabled={busy}
               >
-                <option value="all">{t("Все совместимые устройства")}</option>
+                <option value="all">
+                  {t("Все совместимые устройства")}
+                </option>
                 <option value="devices">
                   {t("Только выбранные устройства / установки")}
                 </option>
@@ -181,8 +182,12 @@ export default function UpdateAudienceEditor({
                     const selected = d.device_id
                       ? selectedDevices
                       : selectedInstallations;
-                    const set = d.device_id ? setDeviceIds : setInstallationIds;
-                    const kind = d.device_id ? t("Устройство") : t("Установка");
+                    const set = d.device_id
+                      ? setDeviceIds
+                      : setInstallationIds;
+                    const kind = d.device_id
+                      ? t("Устройство")
+                      : t("Установка");
                     return (
                       <label
                         key={id}
@@ -231,16 +236,18 @@ export default function UpdateAudienceEditor({
                     <label className="space-y-2 text-sm">
                       <span>{t("Device ID (по одному в строке)")}</span>
                       <Textarea
-                        aria-label="Device IDs"
+                        aria-label={t("Device IDs")}
                         value={deviceIds}
                         disabled={busy}
                         onChange={(e) => setDeviceIds(e.target.value)}
                       />
                     </label>
                     <label className="space-y-2 text-sm">
-                      <span>{t("Installation ID (по одному в строке)")}</span>
+                      <span>
+                        {t("Installation ID (по одному в строке)")}
+                      </span>
                       <Textarea
-                        aria-label="Installation IDs"
+                        aria-label={t("Installation IDs")}
                         value={installationIds}
                         disabled={busy}
                         onChange={(e) => setInstallationIds(e.target.value)}

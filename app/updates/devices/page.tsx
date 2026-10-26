@@ -57,7 +57,9 @@ export default function DevicesPage() {
         </div>
         <Button variant="outline" disabled={loading} onClick={refresh}>
           <RefreshCw
-            className={loading ? "animate-spin motion-reduce:animate-none" : ""}
+            className={
+              loading ? "animate-spin motion-reduce:animate-none" : ""
+            }
           />
           {loading ? t("Обновление…") : t("Обновить")}
         </Button>
@@ -116,7 +118,7 @@ export default function DevicesPage() {
               ]}
             />
             <Filter
-              label="Runtime"
+              label={t("Runtime")}
               id="runtime"
               value={filters.runtime}
               onChange={(v) => update("runtime", v)}
@@ -133,7 +135,9 @@ export default function DevicesPage() {
               items={[["", t("Все типы")], ...Object.entries(kindNames)]}
             />
             <div className="grid gap-2">
-              <Label htmlFor="installation-search">Installation ID</Label>
+              <Label htmlFor="installation-search">
+                {t("Installation ID")}
+              </Label>
               <Input
                 id="installation-search"
                 placeholder={t("ID или часть ID")}
@@ -167,10 +171,12 @@ export default function DevicesPage() {
               <span className="ml-auto text-xs text-muted-foreground">
                 {report && !loading
                   ? t("Данные на {0}", [
-                      new Date(report.coverage.generatedAt).toLocaleTimeString(
-                        formatLocale,
-                        { hour: "2-digit", minute: "2-digit" },
-                      ),
+                      new Date(
+                        report.coverage.generatedAt,
+                      ).toLocaleTimeString(formatLocale, {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      }),
                     ])
                   : ""}
               </span>

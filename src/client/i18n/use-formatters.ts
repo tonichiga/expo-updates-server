@@ -14,6 +14,11 @@ export function useFormatters() {
           month: "short",
           timeZone: "UTC",
         }).format(new Date(value)),
+      calendarDate: (value: string) =>
+        new Intl.DateTimeFormat(formatLocale, {
+          dateStyle: "medium",
+          timeZone: "UTC",
+        }).format(new Date(value)),
       fullDate: (value: string | null) =>
         value
           ? new Intl.DateTimeFormat(formatLocale, {

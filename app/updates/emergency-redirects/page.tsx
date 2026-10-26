@@ -1,4 +1,5 @@
 "use client";
+import type { TranslationMessage } from "@/src/client/i18n/messages";
 import { useI18n } from "@/src/client/i18n/provider";
 
 import { NativeSelect } from "@/components/ui/native-select";
@@ -50,7 +51,7 @@ export default function EmergencyRedirectsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [success, setSuccess] = useState<TranslationMessage>("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -95,10 +96,10 @@ export default function EmergencyRedirectsPage() {
 
       if (editingId) {
         await updateEmergencyRedirect(editingId, payload);
-        setSuccess(t("Emergency redirect обновлён"));
+        setSuccess("Emergency redirect обновлён");
       } else {
         await createEmergencyRedirect(payload);
-        setSuccess(t("Emergency redirect создан"));
+        setSuccess("Emergency redirect создан");
       }
 
       resetForm();
@@ -134,15 +135,19 @@ export default function EmergencyRedirectsPage() {
     setSuccess("");
     try {
       await updateEmergencyRedirect(item.id, { enabled: !item.enabled });
-      setSuccess(item.enabled ? t("Redirect отключён") : t("Redirect включён"));
+      setSuccess(item.enabled ? "Redirect отключён" : "Redirect включён");
       await load();
     } catch (toggleError: unknown) {
-      setError((toggleError as Error).message || "Не удалось изменить статус");
+      setError(
+        (toggleError as Error).message || "Не удалось изменить статус",
+      );
     }
   };
 
   const remove = async (item: EmergencyRedirectItem) => {
-    if (!window.confirm(t('Удалить emergency redirect "{0}"?', [item.name]))) {
+    if (
+      !window.confirm(t('Удалить emergency redirect "{0}"?', [item.name]))
+    ) {
       return;
     }
 
@@ -150,13 +155,15 @@ export default function EmergencyRedirectsPage() {
     setSuccess("");
     try {
       await deleteEmergencyRedirect(item.id);
-      setSuccess(t("Emergency redirect удалён"));
+      setSuccess("Emergency redirect удалён");
       if (editingId === item.id) {
         resetForm();
       }
       await load();
     } catch (deleteError: unknown) {
-      setError((deleteError as Error).message || "Не удалось удалить redirect");
+      setError(
+        (deleteError as Error).message || "Не удалось удалить redirect",
+      );
     }
   };
 
@@ -166,7 +173,7 @@ export default function EmergencyRedirectsPage() {
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-1">
             <h1 className="text-2xl font-semibold tracking-tight">
-              Emergency redirects
+              {t("Emergency redirects")}
             </h1>
             <p className="text-sm text-muted-foreground">
               {t(
@@ -175,7 +182,7 @@ export default function EmergencyRedirectsPage() {
             </p>
           </div>
           <Badge variant="secondary" className="px-3 py-1">
-            {items.length} {t(" правил")}
+            {t("Rules: {0}", [items.length])}
           </Badge>
         </header>
 
@@ -186,7 +193,7 @@ export default function EmergencyRedirectsPage() {
         ) : null}
         {success ? (
           <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300">
-            {success}
+            {t(success)}
           </div>
         ) : null}
 
@@ -197,7 +204,9 @@ export default function EmergencyRedirectsPage() {
           >
             <div className="flex items-center justify-between">
               <h2 className="font-semibold">
-                {editingId ? t("Редактирование правила") : t("Новое правило")}
+                {editingId
+                  ? t("Редактирование правила")
+                  : t("Новое правило")}
               </h2>
               {editingId ? (
                 <Button
@@ -218,14 +227,14 @@ export default function EmergencyRedirectsPage() {
                 onChange={(value) => setForm({ ...form, name: value })}
               />
               <Input
-                label="Runtime version"
+                label={t("Runtime version")}
                 value={form.runtimeVersion}
                 onChange={(value) =>
                   setForm({ ...form, runtimeVersion: value })
                 }
               />
               <label className="space-y-1 text-sm">
-                <span>Platform</span>
+                <span>{t("Platform")}</span>
                 <NativeSelect
                   value={form.platform}
                   onChange={(event) =>
@@ -241,24 +250,26 @@ export default function EmergencyRedirectsPage() {
                 </NativeSelect>
               </label>
               <Input
-                label="Embedded update ID"
+                label={t("Embedded update ID")}
                 value={form.embeddedUpdateId}
                 onChange={(value) =>
                   setForm({ ...form, embeddedUpdateId: value })
                 }
               />
               <Input
-                label="From channel"
+                label={t("From channel")}
                 value={form.fromChannel}
-                onChange={(value) => setForm({ ...form, fromChannel: value })}
+                onChange={(value) =>
+                  setForm({ ...form, fromChannel: value })
+                }
               />
               <Input
-                label="To channel"
+                label={t("To channel")}
                 value={form.toChannel}
                 onChange={(value) => setForm({ ...form, toChannel: value })}
               />
               <label className="space-y-1 text-sm">
-                <span>Target mode</span>
+                <span>{t("Target mode")}</span>
                 <NativeSelect
                   value={form.targetMode}
                   onChange={(event) =>
@@ -269,15 +280,15 @@ export default function EmergencyRedirectsPage() {
                   }
                   className="w-full rounded-md border border-input bg-background px-3 py-2 "
                 >
-                  <option value="pinned">Pinned update</option>
-                  <option value="follow">Follow channel</option>
+                  <option value="pinned">{t("Pinned update")}</option>
+                  <option value="follow">{t("Follow channel")}</option>
                 </NativeSelect>
               </label>
               <Input
                 label={
                   form.targetMode === "pinned"
-                    ? "Expected update ID"
-                    : "Expected update ID (optional)"
+                    ? t("Expected update ID")
+                    : t("Expected update ID (optional)")
                 }
                 value={form.expectedUpdateId || ""}
                 required={form.targetMode === "pinned"}
@@ -299,7 +310,12 @@ export default function EmergencyRedirectsPage() {
               {t("Включить правило сразу после сохранения")}
             </label>
 
-            <Button variant="default" size="sm" type="submit" disabled={saving}>
+            <Button
+              variant="default"
+              size="sm"
+              type="submit"
+              disabled={saving}
+            >
               {saving
                 ? t("Сохранение...")
                 : editingId
@@ -314,17 +330,27 @@ export default function EmergencyRedirectsPage() {
             <Table className="min-w-full text-sm">
               <TableHeader className="bg-muted/40">
                 <TableRow>
-                  <TableHead className="px-4 py-3 text-left">Status</TableHead>
-                  <TableHead className="px-4 py-3 text-left">Name</TableHead>
-                  <TableHead className="px-4 py-3 text-left">Scope</TableHead>
                   <TableHead className="px-4 py-3 text-left">
-                    Redirect
+                    {t("Status")}
                   </TableHead>
-                  <TableHead className="px-4 py-3 text-left">Target</TableHead>
                   <TableHead className="px-4 py-3 text-left">
-                    Embedded ID
+                    {t("Name")}
                   </TableHead>
-                  <TableHead className="px-4 py-3 text-left">Actions</TableHead>
+                  <TableHead className="px-4 py-3 text-left">
+                    {t("Scope")}
+                  </TableHead>
+                  <TableHead className="px-4 py-3 text-left">
+                    {t("Redirect")}
+                  </TableHead>
+                  <TableHead className="px-4 py-3 text-left">
+                    {t("Target")}
+                  </TableHead>
+                  <TableHead className="px-4 py-3 text-left">
+                    {t("Embedded ID")}
+                  </TableHead>
+                  <TableHead className="px-4 py-3 text-left">
+                    {t("Actions")}
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -363,10 +389,12 @@ export default function EmergencyRedirectsPage() {
                                 : ""
                             }
                           >
-                            {item.enabled ? "Enabled" : "Disabled"}
+                            {item.enabled ? t("Enabled") : t("Disabled")}
                           </Badge>
                         </TableCell>
-                        <TableCell className="px-4 py-3">{item.name}</TableCell>
+                        <TableCell className="px-4 py-3">
+                          {item.name}
+                        </TableCell>
                         <TableCell className="px-4 py-3">
                           {item.runtimeVersion} / {item.platform}
                         </TableCell>
@@ -374,7 +402,11 @@ export default function EmergencyRedirectsPage() {
                           {item.fromChannel} → {item.toChannel}
                         </TableCell>
                         <TableCell className="px-4 py-3">
-                          <Badge variant="outline">{item.targetMode}</Badge>
+                          <Badge variant="outline">
+                            {item.targetMode === "pinned"
+                              ? t("Pinned update")
+                              : t("Follow channel")}
+                          </Badge>
                           {item.expectedUpdateId ? (
                             <div
                               title={item.expectedUpdateId}
@@ -401,7 +433,7 @@ export default function EmergencyRedirectsPage() {
                                 type="button"
                                 onClick={() => edit(item)}
                               >
-                                Edit
+                                {t("Edit")}
                               </Button>
                               <Button
                                 variant="outline"
@@ -409,7 +441,7 @@ export default function EmergencyRedirectsPage() {
                                 type="button"
                                 onClick={() => void toggle(item)}
                               >
-                                {item.enabled ? "Disable" : "Enable"}
+                                {item.enabled ? t("Disable") : t("Enable")}
                               </Button>
                               <Button
                                 variant="destructive"
@@ -417,12 +449,12 @@ export default function EmergencyRedirectsPage() {
                                 type="button"
                                 onClick={() => void remove(item)}
                               >
-                                Delete
+                                {t("Delete")}
                               </Button>
                             </div>
                           ) : (
                             <span className="text-xs text-muted-foreground">
-                              Read only
+                              {t("Read only")}
                             </span>
                           )}
                         </TableCell>

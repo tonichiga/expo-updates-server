@@ -65,7 +65,9 @@ export default function UpdatesPage() {
 
   const hasRollbackActive = items.some((item) => item.isRollbackActive);
   const hasIgnoredUpdates = items.some((item) => item.isIgnoredByRollback);
-  const lockedScopes = rollbackScopes.filter((scope) => scope.rollbackActive);
+  const lockedScopes = rollbackScopes.filter(
+    (scope) => scope.rollbackActive,
+  );
 
   const loadUpdates = useCallback(async () => {
     setLoading(true);
@@ -83,7 +85,9 @@ export default function UpdatesPage() {
       setTotalPages(response.totalPages);
       setTotal(response.total);
     } catch (loadError: unknown) {
-      setError((loadError as Error).message || "Не удалось загрузить список");
+      setError(
+        (loadError as Error).message || "Не удалось загрузить список",
+      );
     } finally {
       setLoading(false);
     }
@@ -97,7 +101,9 @@ export default function UpdatesPage() {
     <div className="mx-auto max-w-[1600px] space-y-6 p-4 md:p-8">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">OTA Updates</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {t("OTA Updates")}
+          </h1>
           <p className="text-sm text-muted-foreground">
             {t("Публикации, версии и управление доставкой обновлений.")}
           </p>
@@ -138,7 +144,7 @@ export default function UpdatesPage() {
       )}
       {lockedScopes.length > 0 && (
         <p className="text-xs text-muted-foreground">
-          Rollback lock:{" "}
+          {t("Rollback lock:")}{" "}
           {lockedScopes
             .map(
               (scope) =>
@@ -187,7 +193,7 @@ export default function UpdatesPage() {
               }
             >
               <ArrowDownUp />
-              {order === "asc" ? "ASC" : "DESC"}
+              {order === "asc" ? t("Ascending") : t("Descending")}
             </Button>
           </div>
         </div>
@@ -195,12 +201,14 @@ export default function UpdatesPage() {
           <TableHeader>
             <TableRow className="bg-muted/40 hover:bg-muted/40">
               <TableHead className="pl-5">{t("Обновление")}</TableHead>
-              <TableHead>Runtime / App</TableHead>
+              <TableHead>{t("Runtime / App")}</TableHead>
               <TableHead>{t("Платформа / канал")}</TableHead>
               <TableHead>{t("Состояние")}</TableHead>
               <TableHead>{t("Доставка")}</TableHead>
-              <TableHead>Assets</TableHead>
-              <TableHead className="pr-5 text-right">{t("Создано")}</TableHead>
+              <TableHead>{t("Assets")}</TableHead>
+              <TableHead className="pr-5 text-right">
+                {t("Создано")}
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -221,7 +229,9 @@ export default function UpdatesPage() {
                   <Package className="mx-auto mb-3 size-8 text-muted-foreground/50" />
                   <p className="font-medium">{t("Обновлений пока нет")}</p>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    {t("Опубликуйте OTA, чтобы управлять его доставкой здесь.")}
+                    {t(
+                      "Опубликуйте OTA, чтобы управлять его доставкой здесь.",
+                    )}
                   </p>
                 </TableCell>
               </TableRow>
@@ -253,7 +263,7 @@ export default function UpdatesPage() {
                   <TableCell>
                     <p className="font-medium">{item.runtimeVersion}</p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      App {item.appVersion || "—"}
+                      {t("App")} {item.appVersion || "—"}
                     </p>
                   </TableCell>
                   <TableCell>
@@ -276,9 +286,11 @@ export default function UpdatesPage() {
                             : ""
                         }
                       >
-                        {item.status}
+                        {t(item.status)}
                       </Badge>
-                      {item.isLatest && <Badge variant="outline">Latest</Badge>}
+                      {item.isLatest && (
+                        <Badge variant="outline">{t("Latest")}</Badge>
+                      )}
                       {item.audienceMode === "devices" && (
                         <Badge variant="outline">
                           {t("Выбранные устройства")}
@@ -293,29 +305,30 @@ export default function UpdatesPage() {
                     <div className="flex flex-wrap gap-1.5">
                       <Badge variant="outline">
                         {item.deliveryMode === "background"
-                          ? "Background"
-                          : "Manual"}
+                          ? t("Background")
+                          : t("Manual")}
                       </Badge>
                       {item.hasGuard && (
-                        <Badge variant="secondary">Guard</Badge>
+                        <Badge variant="secondary">{t("Guard")}</Badge>
                       )}
                     </div>
                     <p
                       className={`mt-1.5 text-xs ${item.isRollbackActive ? "text-amber-600" : "text-muted-foreground"}`}
                     >
                       {item.isRollbackActive
-                        ? "Rollback"
+                        ? t("Rollback")
                         : item.isIgnoredByRollback
-                          ? "Ignored by rollback"
-                          : "Scope open"}
+                          ? t("Ignored by rollback")
+                          : t("Scope open")}
                     </p>
                   </TableCell>
                   <TableCell className="tabular-nums text-muted-foreground">
                     {item.assetsCount}
                   </TableCell>
                   <TableCell className="pr-5 text-right text-xs tabular-nums text-muted-foreground">
-                    {new Date(item.createdAt).toLocaleString(formatLocale) ||
-                      item.createdAtPath}
+                    {new Date(item.createdAt).toLocaleString(
+                      formatLocale,
+                    ) || item.createdAtPath}
                   </TableCell>
                 </TableRow>
               ))}

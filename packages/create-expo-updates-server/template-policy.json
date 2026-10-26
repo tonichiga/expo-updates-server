@@ -40,7 +40,9 @@
     "docs/admin-ui.md",
     "docs/device-targeting.md",
     "docs/ota-client-lifecycle.md",
-    "docs/doctor.md"
+    "docs/doctor.md",
+    "docs/ru/**",
+    "docs/uk/**"
   ],
   "deny": [
     ".git/**",

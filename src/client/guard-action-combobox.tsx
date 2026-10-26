@@ -1,4 +1,5 @@
 "use client";
+import { useI18n } from "@/src/client/i18n/provider";
 
 import { Input } from "@/components/ui/input";
 
@@ -32,6 +33,7 @@ export default function GuardActionCombobox({
   onDelete,
   onRetry,
 }: Props) {
+  const { t } = useI18n();
   const generatedId = useId();
   const popupId = `${generatedId}-popup`;
   const errorId = `${generatedId}-error`;
@@ -144,7 +146,7 @@ export default function GuardActionCombobox({
         readOnly={selectionDisabled}
         aria-disabled={selectionDisabled}
         role="combobox"
-        aria-label="Rule action"
+        aria-label={t("Rule action")}
         aria-autocomplete="list"
         aria-haspopup="dialog"
         aria-expanded={open}
@@ -159,13 +161,13 @@ export default function GuardActionCombobox({
         }}
         onKeyDown={handleKeyDown}
         className="w-full"
-        placeholder="Action (required)"
+        placeholder={t("Action (required)")}
       />
       {open ? (
         <div
           id={popupId}
           role="dialog"
-          aria-label="Guard action catalog"
+          aria-label={t("Guard action catalog")}
           className="absolute z-20 mt-1 max-h-60 w-full overflow-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-md"
         >
           {filteredOptions.map((option, index) => (
@@ -179,7 +181,9 @@ export default function GuardActionCombobox({
                 type="button"
                 tabIndex={-1}
                 disabled={selectionDisabled}
-                aria-current={option.actionKey === value ? "true" : undefined}
+                aria-current={
+                  option.actionKey === value ? "true" : undefined
+                }
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => chooseOption(option)}
                 className="min-w-0 flex-1 truncate px-3 py-2 text-left text-sm disabled:cursor-default"
@@ -190,8 +194,10 @@ export default function GuardActionCombobox({
               {option.persisted && canMutateCatalog ? (
                 <button
                   type="button"
-                  aria-label={`Delete ${option.actionKey} from action catalog`}
-                  title="Delete from catalog"
+                  aria-label={t("Delete {0} from action catalog", [
+                    option.actionKey,
+                  ])}
+                  title={t("Delete from catalog")}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={(event) => {
                     event.stopPropagation();
@@ -223,12 +229,12 @@ export default function GuardActionCombobox({
                 activeIndex === filteredOptions.length ? "bg-accent" : ""
               }`}
             >
-              Create “{creatableValue}”
+              {t("Create “{0}”", [creatableValue])}
             </button>
           ) : null}
           {filteredOptions.length === 0 && !showCreate ? (
             <p className="px-3 py-2 text-sm text-muted-foreground">
-              No matching actions
+              {t("No matching actions")}
             </p>
           ) : null}
         </div>
@@ -239,14 +245,14 @@ export default function GuardActionCombobox({
           role="status"
           className="mt-1 flex items-center gap-2 text-xs text-amber-700 dark:text-amber-300"
         >
-          <span>{inputError || mutationError}</span>
+          <span>{t(inputError || mutationError || "")}</span>
           {mutationError && onRetry ? (
             <button
               type="button"
               onClick={() => void onRetry()}
               className="underline"
             >
-              Retry
+              {t("Retry")}
             </button>
           ) : null}
         </div>

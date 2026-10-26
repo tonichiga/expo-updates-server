@@ -399,7 +399,7 @@ already sending heartbeats can populate analytics without a native rebuild, but 
 Device ID and hook lifecycle need the updated client. See
 [client lifecycle](./ota-client-lifecycle.md) and [device targeting](./device-targeting.md).
 
-The **Установки** page (`/updates/devices`) shows current launch adoption, daily
+The **Installations** page (`/updates/devices`) shows current launch adoption, daily
 activity, and cohorts. Daily history begins at migration time; pre-upgrade
 history is unavailable. Retention has an independent 90-day window and uses
 fully observed later days. Existing installations remain visible in current

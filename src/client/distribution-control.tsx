@@ -1,4 +1,5 @@
 "use client";
+import type { TranslationMessage } from "@/src/client/i18n/messages";
 import { useI18n } from "@/src/client/i18n/provider";
 
 import { Textarea } from "@/components/ui/textarea";
@@ -6,7 +7,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { ShieldCheck, ShieldAlert, ChevronDown, RefreshCw } from "lucide-react";
+import {
+  ShieldCheck,
+  ShieldAlert,
+  ChevronDown,
+  RefreshCw,
+} from "lucide-react";
 
 import {
   AdminApiError,
@@ -17,8 +23,9 @@ import type { DistributionControlResponse } from "./admin-types";
 import { useCallback, useEffect, useState } from "react";
 
 export function useDistributionControlState() {
-  const { t } = useI18n();
-  const [state, setState] = useState<DistributionControlResponse | null>(null);
+  const [state, setState] = useState<DistributionControlResponse | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -46,11 +53,14 @@ export function useDistributionControlState() {
     return () => window.clearTimeout(timeoutId);
   }, [refresh]);
 
-  return { state, setState, loading, error: t(error), setError, refresh };
+  return { state, setState, loading, error, setError, refresh };
 }
 
-function formatChangedBy(state: DistributionControlResponse): string {
-  const role = state.changedBy.role ? ` (${state.changedBy.role})` : "";
+function formatChangedBy(
+  state: DistributionControlResponse,
+  t: ReturnType<typeof useI18n>["t"],
+): string {
+  const role = state.changedBy.role ? ` (${t(state.changedBy.role)})` : "";
   return `${state.changedBy.label}${role}`;
 }
 
@@ -89,11 +99,13 @@ export function DistributionControlBanner({
 
   return (
     <section className="rounded-lg border border-destructive/25 bg-destructive/5 p-4 text-destructive">
-      <p className="font-semibold">{t("Распространение OTA остановлено")}</p>
+      <p className="font-semibold">
+        {t("Распространение OTA остановлено")}
+      </p>
       <p className="mt-1 text-sm">{state.reason}</p>
       <p className="mt-2 text-xs">
         {new Date(state.changedAt).toLocaleString(formatLocale)} ·{" "}
-        {formatChangedBy(state)}
+        {formatChangedBy(state, t)}
       </p>
     </section>
   );
@@ -105,7 +117,7 @@ export default function DistributionControl() {
     useDistributionControlState();
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState<TranslationMessage>("");
   const [expanded, setExpanded] = useState(false);
 
   const changeState = async (blocked: boolean) => {
@@ -143,8 +155,8 @@ export default function DistributionControl() {
       setReason("");
       setMessage(
         blocked
-          ? t("OTA-распространение остановлено.")
-          : t("OTA-распространение возобновлено."),
+          ? "OTA-распространение остановлено."
+          : "OTA-распространение возобновлено.",
       );
     } catch (saveError: unknown) {
       if (saveError instanceof AdminApiError && saveError.status === 409) {
@@ -222,7 +234,7 @@ export default function DistributionControl() {
             />
           </Button>
         ) : state ? (
-          <Badge variant="outline">Read only · updates:write</Badge>
+          <Badge variant="outline">{t("Read only · updates:write")}</Badge>
         ) : null}
       </div>
       {expanded && state?.canWrite && (
@@ -233,7 +245,8 @@ export default function DistributionControl() {
           <p className="text-xs text-muted-foreground">
             {t("Изменено: ")}
             {new Date(state.changedAt).toLocaleString(formatLocale)} ·{" "}
-            {formatChangedBy(state)} · version {state.version}
+            {formatChangedBy(state, t)}{" "}
+            {t(" · version {0}", [state.version])}
           </p>
           {!state.blocked && (
             <label className="block space-y-2 text-sm font-medium">
@@ -277,7 +290,7 @@ export default function DistributionControl() {
           role="status"
           className="border-t px-4 py-3 text-sm text-emerald-700 dark:text-emerald-400"
         >
-          {message}
+          {t(message)}
         </p>
       )}
     </Card>
