@@ -87,11 +87,11 @@ try {
     "server",
     "/data",
   );
-  const databaseUrl =
+  const DATABASE_URL =
     "postgresql://postgres:" + password + "@127.0.0.1:" + pgPort + "/postgres";
   const endpoint = "http://127.0.0.1:" + storagePort;
   db = new Pool({
-    connectionString: databaseUrl,
+    connectionString: DATABASE_URL,
     connectionTimeoutMillis: 1500,
   });
   storage = new S3Client({
@@ -159,6 +159,8 @@ try {
   await new Promise((resolve) => reservation.close(resolve));
   const origin = "http://127.0.0.1:" + port;
   const log = openSync(path.join(scratch, "server.log"), "w");
+  const R2_SECRET_ACCESS_KEY = password;
+  const CODE_SIGNING_PRIVATE_KEY = privateKey.export({ type: "pkcs8", format: "pem" });
   server = spawn(
     process.execPath,
     [
@@ -179,18 +181,15 @@ try {
         TMPDIR: tmpdir(),
         NEXT_TELEMETRY_DISABLED: "1",
         DATABASE_PROVIDER: "pg",
-        DATABASE_URL: databaseUrl,
+        DATABASE_URL,
         R2_ENDPOINT: endpoint,
         R2_REGION: "us-east-1",
         R2_ACCESS_KEY_ID: "e2e-local",
-        R2_SECRET_ACCESS_KEY: password,
+        R2_SECRET_ACCESS_KEY,
         OTA_STORAGE_BUCKET: "ota-fixtures",
         S3_FORCE_PATH_STYLE: "true",
         OTA_PUBLIC_BASE_URL: origin,
-        CODE_SIGNING_PRIVATE_KEY: privateKey.export({
-          type: "pkcs8",
-          format: "pem",
-        }),
+        CODE_SIGNING_PRIVATE_KEY,
       },
     },
   );
@@ -202,7 +201,7 @@ try {
   await exerciseDelivery(fixture);
   await exerciseClientLifecycle(fixture);
   await exerciseConsole(fixture);
-  await checkRegistrarToken(origin, databaseUrl, scratchApp);
+  await checkRegistrarToken(origin, DATABASE_URL, scratchApp);
   console.log(
     "PASS signed OTA HTTP and browser workflows" +
       (legacy ? " after legacy upgrade" : " on fresh schema"),

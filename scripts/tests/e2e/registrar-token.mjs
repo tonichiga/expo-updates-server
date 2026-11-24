@@ -4,7 +4,7 @@ import { once } from "node:events";
 import { fileURLToPath } from "node:url";
 
 // Exercise the interactive CLI used before registering embedded builds in CI.
-export async function checkRegistrarToken(origin, databaseUrl, cwd) {
+export async function checkRegistrarToken(origin, DATABASE_URL, cwd) {
   const cli = fileURLToPath(
     new URL("../../create-access-token.mjs", import.meta.url),
   );
@@ -13,7 +13,7 @@ export async function checkRegistrarToken(origin, databaseUrl, cwd) {
     env: {
       PATH: process.env.PATH,
       DATABASE_PROVIDER: "pg",
-      DATABASE_URL: databaseUrl,
+      DATABASE_URL,
     },
   });
   let output = "";
