@@ -1042,6 +1042,23 @@ describe("GET /api/manifest", () => {
     expect(body).toContain(createServedManifestId(servedManifestId, previousUpdateId));
   });
 
+  it.each([
+    ["a still-active OTA", { is_active: true }],
+    ["a disabled OTA on another channel", { channel: "beta" }],
+    ["a disabled OTA on another runtime", { runtime_version: "2.0.0" }],
+  ])("preserves the installed version floor for %s", async (_label, overrides) => {
+    seedCurrentUpdate();
+    database.updates.push(makeUpdate({
+      update_id: previousUpdateId,
+      is_active: false,
+      created_at: "2026-08-29T08:00:00Z",
+      manifest: { expoClient: { version: "3.0.0" } },
+      ...overrides,
+    }));
+    const response = await requestManifest(makeRequest({ "expo-current-update-id": previousUpdateId }));
+    expect(await response.text()).toContain('{"type":"noUpdateAvailable"}');
+  });
+
   it("does not grant rollback downgrade privileges to a device outside its audience", async () => {
     seedCurrentUpdate();
     database.channels[0].active_update_id = previousUpdateId;

@@ -13,6 +13,16 @@ export function debugString(value: string | null | undefined): string {
   return normalizeId(value) || "none";
 }
 
+export function getAppVersionFromFields(
+  preferred: unknown,
+  legacy: unknown,
+): string | null {
+  for (const value of [preferred, legacy]) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
 export function getManifestAppVersion(manifest: unknown): string | null {
   if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) {
     return null;
@@ -25,20 +35,18 @@ export function getManifestAppVersion(manifest: unknown): string | null {
     !Array.isArray(manifestRecord.extra)
       ? (manifestRecord.extra as Record<string, unknown>)
       : null;
-  for (const expoClient of [extra?.expoClient, manifestRecord.expoClient]) {
-    if (
-      expoClient &&
+  function version(expoClient: unknown) {
+    return expoClient &&
       typeof expoClient === "object" &&
-      !Array.isArray(expoClient)
-    ) {
-      const version = (expoClient as Record<string, unknown>).version;
-      if (typeof version === "string" && version.trim()) {
-        return version.trim();
-      }
-    }
+      !Array.isArray(expoClient) &&
+      "version" in expoClient
+      ? expoClient.version
+      : null;
   }
-
-  return null;
+  return getAppVersionFromFields(
+    version(extra?.expoClient),
+    version(manifestRecord.expoClient),
+  );
 }
 
 type ParsedAppVersion = {
@@ -49,7 +57,7 @@ type ParsedAppVersion = {
 function parseAppVersion(value: string): ParsedAppVersion | null {
   const normalized = value.trim();
   const match =
-    /^(0|[1-9]\d*(?:\.(?:0|[1-9]\d*))*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.exec(
+    /^((?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*))*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.exec(
       normalized,
     );
   if (!match) {

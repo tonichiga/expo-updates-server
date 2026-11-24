@@ -1,4 +1,6 @@
 "use client";
+import { Switch } from "@/components/ui/switch";
+import { useConfirmAction } from "@/components/admin/confirm-action";
 import type { TranslationMessage } from "@/src/client/i18n/messages";
 import { useI18n } from "@/src/client/i18n/provider";
 
@@ -43,9 +45,11 @@ const EMPTY_FORM: EmergencyRedirectInput = {
 };
 
 export default function EmergencyRedirectsPage() {
+  const confirmAction = useConfirmAction();
   const { t } = useI18n();
   const [items, setItems] = useState<EmergencyRedirectItem[]>([]);
   const [form, setForm] = useState<EmergencyRedirectInput>(EMPTY_FORM);
+  const [showEditor, setShowEditor] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [canWrite, setCanWrite] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -80,6 +84,7 @@ export default function EmergencyRedirectsPage() {
   const resetForm = () => {
     setEditingId(null);
     setForm(EMPTY_FORM);
+    setShowEditor(false);
   };
 
   const handleSubmit = async (event: FormEvent) => {
@@ -116,6 +121,7 @@ export default function EmergencyRedirectsPage() {
 
   const edit = (item: EmergencyRedirectItem) => {
     setEditingId(item.id);
+    setShowEditor(true);
     setForm({
       name: item.name,
       enabled: item.enabled,
@@ -138,15 +144,17 @@ export default function EmergencyRedirectsPage() {
       setSuccess(item.enabled ? "Redirect отключён" : "Redirect включён");
       await load();
     } catch (toggleError: unknown) {
-      setError(
-        (toggleError as Error).message || "Не удалось изменить статус",
-      );
+      setError((toggleError as Error).message || "Не удалось изменить статус");
     }
   };
 
   const remove = async (item: EmergencyRedirectItem) => {
     if (
-      !window.confirm(t('Удалить emergency redirect "{0}"?', [item.name]))
+      !(await confirmAction(
+        t("Удалить"),
+        t('Удалить emergency redirect "{0}"?', [item.name]),
+        true,
+      ))
     ) {
       return;
     }
@@ -161,9 +169,7 @@ export default function EmergencyRedirectsPage() {
       }
       await load();
     } catch (deleteError: unknown) {
-      setError(
-        (deleteError as Error).message || "Не удалось удалить redirect",
-      );
+      setError((deleteError as Error).message || "Не удалось удалить redirect");
     }
   };
 
@@ -181,9 +187,22 @@ export default function EmergencyRedirectsPage() {
               )}
             </p>
           </div>
-          <Badge variant="secondary" className="px-3 py-1">
-            {t("Rules: {0}", [items.length])}
-          </Badge>
+          <div className="flex items-center gap-3">
+            {canWrite && !showEditor && (
+              <Button
+                size="sm"
+                onClick={() => {
+                  setError("");
+                  setShowEditor(true);
+                }}
+              >
+                {t("Новое правило")}
+              </Button>
+            )}
+            <Badge variant="secondary" className="px-3 py-1">
+              {t("Rules: {0}", [items.length])}
+            </Badge>
+          </div>
         </header>
 
         {error ? (
@@ -197,30 +216,29 @@ export default function EmergencyRedirectsPage() {
           </div>
         ) : null}
 
-        {canWrite ? (
+        {canWrite && showEditor ? (
           <form
             onSubmit={handleSubmit}
             className="space-y-4 rounded-xl border border-border bg-card p-5 "
           >
             <div className="flex items-center justify-between">
               <h2 className="font-semibold">
-                {editingId
-                  ? t("Редактирование правила")
-                  : t("Новое правило")}
+                {editingId ? t("Редактирование правила") : t("Новое правило")}
               </h2>
-              {editingId ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  type="button"
-                  onClick={resetForm}
-                >
-                  {t("Отменить")}
-                </Button>
-              ) : null}
+              <Button
+                variant="outline"
+                size="sm"
+                type="button"
+                onClick={resetForm}
+              >
+                {t("Отменить")}
+              </Button>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+            <fieldset className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+              <legend className="mb-3 text-sm font-medium">
+                {t("Matching build")}
+              </legend>
               <Input
                 label={t("Название")}
                 value={form.name}
@@ -259,10 +277,13 @@ export default function EmergencyRedirectsPage() {
               <Input
                 label={t("From channel")}
                 value={form.fromChannel}
-                onChange={(value) =>
-                  setForm({ ...form, fromChannel: value })
-                }
+                onChange={(value) => setForm({ ...form, fromChannel: value })}
               />
+            </fieldset>
+            <fieldset className="grid gap-3 border-t pt-3 md:grid-cols-3">
+              <legend className="pr-2 text-sm font-medium">
+                {t("Destination release")}
+              </legend>
               <Input
                 label={t("To channel")}
                 value={form.toChannel}
@@ -296,26 +317,19 @@ export default function EmergencyRedirectsPage() {
                   setForm({ ...form, expectedUpdateId: value || null })
                 }
               />
-            </div>
+            </fieldset>
 
             <label className="flex items-center gap-2 text-sm">
-              <input
-                className="size-4 rounded border-input accent-primary"
-                type="checkbox"
+              <Switch
                 checked={form.enabled}
-                onChange={(event) =>
-                  setForm({ ...form, enabled: event.target.checked })
+                onCheckedChange={(checked) =>
+                  setForm({ ...form, enabled: checked })
                 }
               />
               {t("Включить правило сразу после сохранения")}
             </label>
 
-            <Button
-              variant="default"
-              size="sm"
-              type="submit"
-              disabled={saving}
-            >
+            <Button variant="default" size="sm" type="submit" disabled={saving}>
               {saving
                 ? t("Сохранение...")
                 : editingId
@@ -392,9 +406,7 @@ export default function EmergencyRedirectsPage() {
                             {item.enabled ? t("Enabled") : t("Disabled")}
                           </Badge>
                         </TableCell>
-                        <TableCell className="px-4 py-3">
-                          {item.name}
-                        </TableCell>
+                        <TableCell className="px-4 py-3">{item.name}</TableCell>
                         <TableCell className="px-4 py-3">
                           {item.runtimeVersion} / {item.platform}
                         </TableCell>

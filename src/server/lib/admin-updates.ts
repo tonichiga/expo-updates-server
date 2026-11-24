@@ -6,7 +6,7 @@ import {
   UpdatePolicyValidationError,
   validateUpdatePolicy,
 } from "./update-policy";
-import { getManifestAppVersion } from "../manifest/manifest-values";
+import { getManifestAppVersion, getAppVersionFromFields } from "../manifest/manifest-values";
 import { assertOtaDistributionAllowed } from "./distribution-control";
 
 type UpdateStatus = "active" | "disabled";
@@ -62,6 +62,37 @@ export type OtaChannelRow = {
   modified_at: string;
 };
 
+const listColumns = [
+  "id",
+  "update_id",
+  "comment",
+  "runtime_version",
+  "channel",
+  "platform",
+  "created_at",
+  "created_at_path",
+  "storage_base_path",
+  "is_active",
+  "audience_mode",
+  "assets_count",
+  "launch_asset_path",
+  "delivery_mode",
+  "guard_action",
+  "policy_version",
+  "policy_published_at",
+] as const;
+type ListRow = Pick<OtaUpdateRow, (typeof listColumns)[number]>;
+type ListChannel = Pick<
+  OtaChannelRow,
+  | "id"
+  | "runtime_version"
+  | "channel"
+  | "platform"
+  | "latest_update_id"
+  | "active_update_id"
+>;
+type VersionProjection = { app_version: unknown; legacy_version: unknown };
+
 export type UpdateRecord = {
   key: string;
   encodedKey: string;
@@ -95,6 +126,7 @@ export type UpdateRecord = {
 };
 
 export type UpdateDetail = UpdateRecord & {
+  isNewestInScope: boolean;
   updateInfo: Record<string, unknown>;
   updateMeta: UpdateMetaState;
   metadata: Record<string, unknown> | null;
@@ -117,6 +149,12 @@ type ListOptions = {
   pageSize: number;
   sortBy: SortField;
   order: SortOrder;
+  q?: string;
+  platform?: string;
+  channel?: string;
+  runtime?: string;
+  status?: string;
+  audience?: string;
 };
 
 type Scope = {
@@ -157,7 +195,7 @@ function extractUpdateIdFromKey(key: string): string {
   return tail;
 }
 
-function makeUpdateKey(row: OtaUpdateRow): string {
+function makeUpdateKey(row: ListRow): string {
   return `${row.runtime_version}/${row.platform}/${row.channel}/${row.update_id}`;
 }
 
@@ -216,8 +254,9 @@ async function getNewestUpdateByScope(
 }
 
 export function mapRowToRecord(
-  row: OtaUpdateRow,
-  channel: OtaChannelRow | null,
+  row: ListRow & { manifest?: unknown },
+  channel: ListChannel | null,
+  appVersion = getManifestAppVersion(row.manifest),
 ): UpdateRecord {
   const key = makeUpdateKey(row);
   const isLatest = channel?.latest_update_id === row.update_id;
@@ -234,7 +273,7 @@ export function mapRowToRecord(
   return {
     key,
     encodedKey: encodeUpdateKey(row.update_id),
-    appVersion: getManifestAppVersion(row.manifest),
+    appVersion,
     comment: row.comment,
     runtimeVersion: row.runtime_version,
     platform: row.platform,
@@ -616,7 +655,7 @@ async function getUpdateRowsByScope(scope: Scope): Promise<OtaUpdateRow[]> {
   return (data || []) as OtaUpdateRow[];
 }
 
-function makeScopeFromRow(row: OtaUpdateRow): Scope {
+function makeScopeFromRow(row: ListRow): Scope {
   return {
     runtimeVersion: row.runtime_version,
     channel: row.channel,
@@ -737,66 +776,114 @@ export function parseUpdateKey(key: string) {
   };
 }
 
-export async function getUpdatesPage(options: ListOptions) {
-  const { data, error } = await supabase
-    .from("ota_updates")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .order("update_id", { ascending: false })
-    .execute();
+// A server may cap each PostgREST response below our requested batch size.
+// Advance on the unique indexed key until the next query is empty.
+async function* readHistory<T extends { id: string | number }>(
+  table: "ota_updates" | "ota_update_channels",
+  columns: string,
+) {
+  let cursor: string | number | undefined;
+  for (;;) {
+    const query = supabase.from(table).select(columns).order("id").limit(200);
+    if (cursor !== undefined) query.gt("id", cursor);
+    const { data, error } = await query.execute();
+    if (error) throw new Error(`Failed to fetch ${table}: ${error.message}`);
+    const rows = (data ?? []) as T[];
+    if (!rows.length) return;
+    yield rows;
+    cursor = rows[rows.length - 1].id;
+  }
+}
 
-  if (error) {
-    throw new Error(`Failed to fetch ota_updates: ${error.message}`);
+function scopeKey(
+  row: Pick<OtaUpdateRow, "runtime_version" | "channel" | "platform">,
+) {
+  return JSON.stringify([row.runtime_version, row.channel, row.platform]);
+}
+
+function matchesRelease(
+  item: UpdateRecord,
+  options: ListOptions,
+  search: string,
+) {
+  if (options.platform && item.platform !== options.platform) return false;
+  if (options.channel && item.channel !== options.channel) return false;
+  if (options.runtime && item.runtimeVersion !== options.runtime) return false;
+  if (options.audience && item.audienceMode !== options.audience) return false;
+  if (options.status === "rollback") {
+    if (!item.isRollbackActive) return false;
+  } else if (
+    options.status &&
+    options.status !== (item.policyEditable ? "draft" : item.status)
+  ) {
+    return false;
+  }
+  return (
+    !search ||
+    [
+      item.comment,
+      item.updateId,
+      item.appVersion,
+      item.runtimeVersion,
+      item.channel,
+    ].some((value) => value?.toLowerCase().includes(search))
+  );
+}
+
+export async function getUpdatesPage(options: ListOptions) {
+  const search = options.q?.trim().toLowerCase() || "";
+  const channelsByScope = new Map<string, ListChannel>();
+  for await (const batch of readHistory<ListChannel>(
+    "ota_update_channels",
+    "id,runtime_version,channel,platform,latest_update_id,active_update_id",
+  )) {
+    for (const channel of batch)
+      channelsByScope.set(scopeKey(channel), channel);
   }
 
-  const rows = (data || []) as OtaUpdateRow[];
-  const scopeKeys = Array.from(
-    new Set(
-      rows.map(
-        (row) => `${row.runtime_version}::${row.channel}::${row.platform}`,
-      ),
-    ),
-  );
+  const matching: UpdateRecord[] = [];
+  const scopes = new Map<string, Scope>();
+  const channels = new Set<string>();
+  const runtimes = new Set<string>();
+  const columns = [
+    ...listColumns,
+    "app_version:manifest->extra->expoClient->version",
+    "legacy_version:manifest->expoClient->version",
+  ].join(",");
+  for await (const batch of readHistory<ListRow & VersionProjection>(
+    "ota_updates",
+    columns,
+  )) {
+    for (const row of batch) {
+      const key = scopeKey(row);
+      scopes.set(key, makeScopeFromRow(row));
+      channels.add(row.channel);
+      runtimes.add(row.runtime_version);
+      const item = mapRowToRecord(
+        row,
+        channelsByScope.get(key) ?? null,
+        getAppVersionFromFields(row.app_version, row.legacy_version),
+      );
+      if (matchesRelease(item, options, search)) matching.push(item);
+    }
+  }
 
-  const channelsByScope = new Map<string, OtaChannelRow | null>();
-  await Promise.all(
-    scopeKeys.map(async (scopeKey) => {
-      const [runtimeVersion, channel, platform] = scopeKey.split("::");
-      const channelRow = await getChannelRow({
-        runtimeVersion,
-        channel,
-        platform: platform as "ios" | "android",
-      });
-      channelsByScope.set(scopeKey, channelRow);
-    }),
-  );
-
-  const allUpdates = rows.map((row) => {
-    const scopeKey = `${row.runtime_version}::${row.channel}::${row.platform}`;
-    const channelRow = channelsByScope.get(scopeKey) || null;
-    return mapRowToRecord(row, channelRow);
-  });
-
-  const rollbackLockByScope = scopeKeys.map((scopeKey) => {
-    const [runtimeVersion, channel, platform] = scopeKey.split("::");
-    const channelRow = channelsByScope.get(scopeKey) || null;
+  const rollbackLockByScope = Array.from(scopes, ([key, scope]) => {
+    const channel = channelsByScope.get(key);
     const rollbackActive =
-      Boolean(channelRow?.active_update_id) &&
-      channelRow?.active_update_id !== channelRow?.latest_update_id;
-
+      Boolean(channel?.active_update_id) &&
+      channel?.active_update_id !== channel?.latest_update_id;
     return {
-      scopeKey,
-      runtimeVersion,
-      channel,
-      platform: platform as "ios" | "android",
+      ...scope,
+      scopeKey: `${scope.runtimeVersion}::${scope.channel}::${scope.platform}`,
       rollbackActive,
       autoDeliveryEnabled: !rollbackActive,
-      activeUpdateId: channelRow?.active_update_id || null,
-      latestUpdateId: channelRow?.latest_update_id || null,
+      activeUpdateId: channel?.active_update_id ?? null,
+      latestUpdateId: channel?.latest_update_id ?? null,
     };
   });
 
-  const sorted = sortUpdates(allUpdates, options.sortBy, options.order);
+  const sorted = sortUpdates(matching, options.sortBy, options.order);
   const total = sorted.length;
   const totalPages = Math.max(1, Math.ceil(total / options.pageSize));
   const page = Math.min(Math.max(1, options.page), totalPages);
@@ -805,6 +892,7 @@ export async function getUpdatesPage(options: ListOptions) {
 
   return {
     items: sorted.slice(start, end),
+    filters: { channels: [...channels].sort(), runtimes: [...runtimes].sort() },
     total,
     page,
     pageSize: options.pageSize,
@@ -830,6 +918,7 @@ export async function getUpdateDetailByKey(key: string): Promise<UpdateDetail> {
 
   return {
     ...record,
+    isNewestInScope: newestRow?.update_id === row.update_id,
     updateInfo: manifest,
     updateMeta: mapUpdateMeta(row),
     metadata: extractMetadataFromManifest(manifest),
@@ -1090,7 +1179,7 @@ export async function rollbackToUpdateByKey(
       is_active: true,
       updated_at: now,
       disabled_at: null,
-      policy_published_at: row.policy_published_at || now,
+      ...(!row.policy_published_at && { policy_published_at: now }),
     })
     .eq("update_id", updateId)
     .execute();
@@ -1172,7 +1261,7 @@ export async function promoteLatestByKey(key: string) {
       is_active: true,
       updated_at: promoteNow,
       disabled_at: null,
-      policy_published_at: row.policy_published_at || promoteNow,
+      ...(!row.policy_published_at && { policy_published_at: promoteNow }),
     })
     .eq("update_id", latestUpdateId)
     .execute();

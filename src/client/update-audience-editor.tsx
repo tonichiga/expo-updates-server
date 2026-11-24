@@ -14,7 +14,13 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { NativeSelect } from "@/components/ui/native-select";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { ChevronDown, Globe2, Users } from "lucide-react";
 import type { Audience } from "@/src/server/devices/audience";
 
 type Target = {
@@ -36,14 +42,20 @@ const splitIds = (value: string) => [
 export default function UpdateAudienceEditor({
   encodedKey,
   platform,
+  canWrite,
+  onSaved,
 }: {
   encodedKey: string;
   platform: string;
+  canWrite: boolean;
+  onSaved: (mode: Audience["audience_mode"]) => void;
 }) {
   const { t } = useI18n();
   const [audience, setAudience] = useState<Audience | null>(null);
   const [devices, setDevices] = useState<Target[]>([]);
-  const [mode, setMode] = useState("all");
+  const [mode, setMode] = useState<Audience["audience_mode"]>("all");
+  const [targetsError, setTargetsError] = useState("");
+  const [loadingTargets, setLoadingTargets] = useState(false);
   const [deviceIds, setDeviceIds] = useState("");
   const [installationIds, setInstallationIds] = useState("");
   const [search, setSearch] = useState("");
@@ -54,27 +66,50 @@ export default function UpdateAudienceEditor({
   const url = `/api/admin/updates/${encodedKey}/audience`;
   useEffect(() => {
     const abort = new AbortController();
-    Promise.all([
-      fetch(url, { signal: abort.signal }).then(json),
-      fetch(`/api/admin/device-targets?platform=${platform}`, {
-        signal: abort.signal,
-      }).then(json),
-    ])
-      .then(([a, d]) => {
+    setAudience(null);
+    setError("");
+    fetch(url, { signal: abort.signal })
+      .then(json)
+      .then((a: Audience) => {
+        if (abort.signal.aborted) return;
         setAudience(a);
         setMode(a.audience_mode);
         setDeviceIds(a.audience_device_ids.join("\n"));
         setInstallationIds(a.audience_installation_ids.join("\n"));
-        setDevices(d.devices);
-        setError("");
       })
       .catch((e) => {
         if (!abort.signal.aborted) setError(e.message);
       });
     return () => abort.abort();
-  }, [url, platform, revision]);
+  }, [url, revision]);
+  useEffect(() => {
+    if (mode !== "devices") return;
+    const abort = new AbortController();
+    setLoadingTargets(true);
+    setTargetsError("");
+    fetch(`/api/admin/device-targets?platform=${platform}`, {
+      signal: abort.signal,
+    })
+      .then(json)
+      .then((data) => {
+        if (!abort.signal.aborted) setDevices(data.devices);
+      })
+      .catch((e) => {
+        if (!abort.signal.aborted) setTargetsError(e.message);
+      })
+      .finally(() => {
+        if (!abort.signal.aborted) setLoadingTargets(false);
+      });
+    return () => abort.abort();
+  }, [mode, platform, revision]);
   const selectedDevices = splitIds(deviceIds);
   const selectedInstallations = splitIds(installationIds);
+  const dirty =
+    audience !== null &&
+    (mode !== audience.audience_mode ||
+      selectedDevices.join(",") !== audience.audience_device_ids.join(",") ||
+      selectedInstallations.join(",") !==
+        audience.audience_installation_ids.join(","));
   const seen = new Set<string>();
   const options = devices
     .filter((d) => {
@@ -95,7 +130,7 @@ export default function UpdateAudienceEditor({
     })
     .slice(0, 50);
   async function save() {
-    if (!audience) return;
+    if (!audience || !canWrite) return;
     setBusy(true);
     setError("");
     setSuccess("");
@@ -111,6 +146,7 @@ export default function UpdateAudienceEditor({
         }),
       }).then(json);
       setAudience(saved);
+      onSaved(saved.audience_mode);
       setSuccess(
         "Аудитория сохранена. Для черновика отдельно включите распространение.",
       );
@@ -121,7 +157,7 @@ export default function UpdateAudienceEditor({
     }
   }
   return (
-    <Card>
+    <Card className="shadow-none">
       <CardHeader>
         <CardTitle>{t("Аудитория обновления")}</CardTitle>
         <CardDescription>
@@ -136,31 +172,56 @@ export default function UpdateAudienceEditor({
             {t(error)}
           </p>
         )}
-        {success && (
+        {success && !dirty && (
           <p role="status" className="text-sm text-muted-foreground">
             {t(success)}
           </p>
         )}
+        {!audience && !error && (
+          <p role="status" className="text-sm text-muted-foreground">
+            {t("Загрузка...")}
+          </p>
+        )}
         {audience && (
           <>
-            <label className="block space-y-2 text-sm">
-              <span>{t("Кому доступен OTA")}</span>
-              <NativeSelect
+            <fieldset disabled={busy || !canWrite} className="space-y-2">
+              <legend className="text-sm font-medium">
+                {t("Кому доступен OTA")}
+              </legend>
+              <RadioGroup
                 value={mode}
-                onChange={(e) => {
-                  setMode(e.target.value);
-                  setSuccess("");
+                disabled={busy || !canWrite}
+                aria-label={t("Кому доступен OTA")}
+                className="grid gap-2 sm:grid-cols-2"
+                onValueChange={(value) => {
+                  if (value === "all" || value === "devices") {
+                    setMode(value);
+                    setSuccess("");
+                  }
                 }}
-                disabled={busy}
               >
-                <option value="all">
-                  {t("Все совместимые устройства")}
-                </option>
-                <option value="devices">
-                  {t("Только выбранные устройства / установки")}
-                </option>
-              </NativeSelect>
-            </label>
+                {(["all", "devices"] as const).map((choice) => {
+                  const Icon = choice === "all" ? Globe2 : Users;
+                  return (
+                    <label
+                      key={choice}
+                      className="flex items-center gap-3 rounded-lg border p-3 text-sm has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5 has-focus-visible:ring-2 has-focus-visible:ring-ring"
+                    >
+                      <Icon
+                        aria-hidden="true"
+                        className="size-4 shrink-0 text-muted-foreground"
+                      />
+                      <span className="flex-1">
+                        {choice === "all"
+                          ? t("Все совместимые устройства")
+                          : t("Только выбранные устройства / установки")}
+                      </span>
+                      <RadioGroupItem value={choice} />
+                    </label>
+                  );
+                })}
+              </RadioGroup>
+            </fieldset>
             {mode === "devices" && (
               <div className="space-y-4">
                 <Input
@@ -176,18 +237,22 @@ export default function UpdateAudienceEditor({
                     ", до 50 совпадений. Device ID сохраняет адресата при переустановке; Installation ID относится к одной установке.",
                   )}
                 </p>
-                <div className="max-h-64 overflow-y-auto rounded-md border divide-y">
+                {targetsError && (
+                  <p role="alert" className="text-sm text-destructive">
+                    {t(targetsError)}
+                  </p>
+                )}
+                <div
+                  aria-busy={loadingTargets}
+                  className="max-h-64 overflow-y-auto rounded-md border divide-y"
+                >
                   {options.map((d) => {
                     const id = d.device_id || d.installation_id;
                     const selected = d.device_id
                       ? selectedDevices
                       : selectedInstallations;
-                    const set = d.device_id
-                      ? setDeviceIds
-                      : setInstallationIds;
-                    const kind = d.device_id
-                      ? t("Устройство")
-                      : t("Установка");
+                    const set = d.device_id ? setDeviceIds : setInstallationIds;
+                    const kind = d.device_id ? t("Устройство") : t("Установка");
                     return (
                       <label
                         key={id}
@@ -196,7 +261,7 @@ export default function UpdateAudienceEditor({
                         <Checkbox
                           aria-label={d.name || `${kind} ${id}`}
                           className="mt-1"
-                          disabled={busy}
+                          disabled={busy || !canWrite}
                           checked={selected.includes(id)}
                           onCheckedChange={(checked) =>
                             set(
@@ -219,7 +284,12 @@ export default function UpdateAudienceEditor({
                       </label>
                     );
                   })}
-                  {options.length === 0 && (
+                  {loadingTargets && (
+                    <p className="p-3 text-sm text-muted-foreground">
+                      {t("Загрузка...")}
+                    </p>
+                  )}
+                  {!loadingTargets && !targetsError && options.length === 0 && (
                     <p className="p-4 text-sm text-muted-foreground">
                       {t(
                         "Устройства не найдены. Запустите приложение с обновлённым OTA-клиентом или укажите ID ниже.",
@@ -227,34 +297,40 @@ export default function UpdateAudienceEditor({
                     </p>
                   )}
                 </div>
-                <details>
-                  <summary className="cursor-pointer text-sm">
-                    {t("Выбранные ID и ручное добавление ·")}{" "}
-                    {selectedDevices.length + selectedInstallations.length}
-                  </summary>
-                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <Collapsible>
+                  <CollapsibleTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="group"
+                    >
+                      {t("Выбранные ID и ручное добавление ·")}{" "}
+                      {selectedDevices.length + selectedInstallations.length}
+                      <ChevronDown className="size-4 group-data-[state=open]:rotate-180" />
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="mt-3 grid gap-3 md:grid-cols-2">
                     <label className="space-y-2 text-sm">
                       <span>{t("Device ID (по одному в строке)")}</span>
                       <Textarea
                         aria-label={t("Device IDs")}
                         value={deviceIds}
-                        disabled={busy}
+                        disabled={busy || !canWrite}
                         onChange={(e) => setDeviceIds(e.target.value)}
                       />
                     </label>
                     <label className="space-y-2 text-sm">
-                      <span>
-                        {t("Installation ID (по одному в строке)")}
-                      </span>
+                      <span>{t("Installation ID (по одному в строке)")}</span>
                       <Textarea
                         aria-label={t("Installation IDs")}
                         value={installationIds}
-                        disabled={busy}
+                        disabled={busy || !canWrite}
                         onChange={(e) => setInstallationIds(e.target.value)}
                       />
                     </label>
-                  </div>
-                </details>
+                  </CollapsibleContent>
+                </Collapsible>
               </div>
             )}
             <p className="text-xs text-muted-foreground">
@@ -262,18 +338,21 @@ export default function UpdateAudienceEditor({
                 "Ограничение влияет на следующие проверки OTA. Уже скачанное обновление нельзя отозвать изменением аудитории. Force update действует только для её участников.",
               )}
             </p>
-            <Button
-              className="mr-2"
-              onClick={save}
-              disabled={
-                busy ||
-                (mode === "devices" &&
-                  !selectedDevices.length &&
-                  !selectedInstallations.length)
-              }
-            >
-              {t("Сохранить аудиторию")}
-            </Button>
+            {canWrite && (
+              <Button
+                className="mr-2"
+                onClick={save}
+                disabled={
+                  busy ||
+                  !dirty ||
+                  (mode === "devices" &&
+                    !selectedDevices.length &&
+                    !selectedInstallations.length)
+                }
+              >
+                {t("Сохранить аудиторию")}
+              </Button>
+            )}
           </>
         )}
         <Button

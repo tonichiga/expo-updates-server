@@ -19,7 +19,7 @@ describe("Guard action combobox semantics", () => {
       source.indexOf("filteredOptions.map"),
       source.indexOf("{showCreate ?"),
     );
-    expect(optionRow.match(/<button/g)).toHaveLength(2);
+    expect(optionRow.match(/<Button/g)).toHaveLength(2);
     expect(optionRow).toContain("chooseOption(option)");
     expect(optionRow).toContain("void onDelete(option)");
   });

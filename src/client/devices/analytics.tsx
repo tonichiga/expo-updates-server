@@ -2,7 +2,27 @@
 import { useFormatters } from "@/src/client/i18n/use-formatters";
 import { useI18n } from "@/src/client/i18n/provider";
 
-import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@/components/ui/collapsible";
+import { Button } from "@/components/ui/button";
+import {
+  ChevronDown,
+  Activity,
+  CircleArrowDown,
+  Layers3,
+  Smartphone,
+} from "lucide-react";
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ReferenceLine,
+  XAxis,
+  YAxis,
+} from "recharts";
 import {
   ChartContainer,
   ChartTooltip,
@@ -16,12 +36,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
-import {
   Table,
   TableBody,
   TableCell,
@@ -29,10 +43,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { VersionAdoptionChart } from "./version-adoption-chart";
+
 import type { DevicesReport } from "@/src/server/devices/report-types";
-export const percent = (n: number, total: number) =>
-  total ? `${Math.round((n / total) * 100)}%` : "—";
 export function useKindNames() {
   const { t } = useI18n();
   return {
@@ -41,8 +53,8 @@ export function useKindNames() {
     unknown: t("Не определён"),
   };
 }
-export function Analytics({ report }: { report: DevicesReport }) {
-  const { number, date } = useFormatters();
+export function Overview({ report }: { report: DevicesReport }) {
+  const { number, date, share } = useFormatters();
   const { t } = useI18n();
   const { summary: s } = report;
   const kinds = [
@@ -60,9 +72,10 @@ export function Analytics({ report }: { report: DevicesReport }) {
   ];
   return (
     <>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 xl:grid-cols-4">
         {[
           {
+            icon: Smartphone,
             label: t("Активные установки"),
             value: number(s.activeInstallations),
             detail: t("Heartbeat за последние {0}", [
@@ -72,46 +85,52 @@ export function Analytics({ report }: { report: DevicesReport }) {
             ]),
           },
           {
+            icon: CircleArrowDown,
             label: t("Используют OTA"),
-            value: percent(s.otaInstallations, s.activeInstallations),
+            value: share(s.otaInstallations, s.activeInstallations),
             detail: t("{0} из {1} установок", [
               number(s.otaInstallations),
               number(s.activeInstallations),
             ]),
           },
           {
-            label: t("Встроенная версия"),
-            value: number(s.embeddedInstallations),
-            detail: t("Сочетаний версий в выборке: {0}", [
-              number(s.reportedVersions),
-            ]),
+            icon: Activity,
+            label: t("New installations"),
+            value: number(s.newInstallations),
+            detail: t("First seen during this period"),
           },
           {
-            label: t("Аварийный запуск"),
-            value: number(s.emergencyInstallations),
-            detail: t("Не определён тип запуска: {0}", [
-              number(s.unknownInstallations),
-            ]),
+            icon: Layers3,
+            label: t("Reported versions"),
+            value: number(s.reportedVersions),
+            detail: t("Distinct version combinations"),
           },
         ].map((kpi) => (
-          <Card key={kpi.label} className="gap-3 py-5 shadow-none">
-            <CardHeader className="px-5">
-              <CardDescription>{kpi.label}</CardDescription>
+          <Card key={kpi.label} className="min-w-0 gap-2.5 py-4 shadow-none">
+            <CardHeader className="gap-3 px-4">
+              <CardDescription className="flex items-center justify-between gap-1 text-xs font-medium">
+                {kpi.label}
+                <kpi.icon
+                  className="size-4 shrink-0 text-primary"
+                  aria-hidden="true"
+                />
+              </CardDescription>
               <CardTitle className="text-3xl font-semibold tracking-tight tabular-nums">
                 {kpi.value}
               </CardTitle>
             </CardHeader>
-            <CardContent className="px-5 text-xs text-muted-foreground">
+            <CardContent className="px-4 text-xs text-muted-foreground">
               {kpi.detail}
             </CardContent>
           </Card>
         ))}
       </div>
-      <VersionAdoptionChart report={report} />
-      <div className="grid min-w-0 gap-4 xl:grid-cols-[1.25fr_1fr]">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.65fr)_minmax(14rem,1fr)]">
         <Card className="min-w-0 shadow-none">
           <CardHeader>
-            <CardTitle>{t("Активность установок")}</CardTitle>
+            <CardTitle>
+              <h2>{t("Активность установок")}</h2>
+            </CardTitle>
             <CardDescription>
               {t("Уникальные установки с heartbeat за день · UTC")}
             </CardDescription>
@@ -128,15 +147,15 @@ export function Analytics({ report }: { report: DevicesReport }) {
                   color: "var(--chart-2)",
                 },
               }}
-              className="h-52 w-full"
+              className="aspect-auto h-56 w-full"
               aria-label={t("График ежедневных активных и новых установок")}
             >
               <AreaChart
                 accessibilityLayer
                 data={report.activity}
-                margin={{ top: 12, right: 12, left: -24, bottom: 0 }}
+                margin={{ top: 12, right: 16, left: 0, bottom: 0 }}
               >
-                <CartesianGrid vertical={false} />
+                <CartesianGrid vertical={false} strokeDasharray="3 4" />
                 <XAxis
                   dataKey="date"
                   tickFormatter={date}
@@ -146,15 +165,33 @@ export function Analytics({ report }: { report: DevicesReport }) {
                   minTickGap={24}
                 />
                 <YAxis
+                  width="auto"
                   allowDecimals={false}
                   axisLine={false}
                   tickLine={false}
                   tick={{ fill: "var(--muted-foreground)" }}
                 />
+                {report.activity
+                  .filter((day) => day.coverage === "partial")
+                  .map((day) => (
+                    <ReferenceLine
+                      key={day.date}
+                      x={day.date}
+                      stroke="var(--muted-foreground)"
+                      strokeDasharray="3 4"
+                    />
+                  ))}
                 <ChartTooltip
                   content={
                     <ChartTooltipContent
-                      labelFormatter={(value) => date(String(value))}
+                      labelFormatter={(value) => {
+                        const day = report.activity.find(
+                          (entry) => entry.date === value,
+                        );
+                        return day?.coverage === "partial"
+                          ? `${date(day.date)} · ${t("Неполный день")}`
+                          : date(String(value));
+                      }}
                     />
                   }
                 />
@@ -165,7 +202,7 @@ export function Analytics({ report }: { report: DevicesReport }) {
                   fill="var(--color-activeInstallations)"
                   fillOpacity={0.12}
                   strokeWidth={2}
-                  dot={{ r: 3 }}
+                  dot={{ r: 2, fill: "var(--color-activeInstallations)" }}
                   connectNulls={false}
                   isAnimationActive={false}
                 />
@@ -176,7 +213,8 @@ export function Analytics({ report }: { report: DevicesReport }) {
                   fill="var(--color-newInstallations)"
                   fillOpacity={0.05}
                   strokeWidth={2}
-                  dot={{ r: 2 }}
+                  strokeDasharray="5 3"
+                  dot={{ r: 2, fill: "var(--color-newInstallations)" }}
                   connectNulls={false}
                   isAnimationActive={false}
                 />
@@ -184,12 +222,25 @@ export function Analytics({ report }: { report: DevicesReport }) {
             </ChartContainer>
             <div className="mt-3 flex flex-wrap gap-4 text-xs text-muted-foreground">
               <span>
-                <i className="mr-2 inline-block size-2 rounded-full bg-chart-1" />
+                <i
+                  aria-hidden="true"
+                  className="mr-2 inline-block w-4 align-middle border-t-2 border-chart-1"
+                />
                 {t("Активные")}
               </span>
               <span>
-                <i className="mr-2 inline-block size-2 rounded-full bg-chart-2" />
+                <i
+                  aria-hidden="true"
+                  className="mr-2 inline-block w-4 align-middle border-t-2 border-dashed border-chart-2"
+                />
                 {t("Новые")}
+              </span>
+              <span>
+                <i
+                  aria-hidden="true"
+                  className="mr-2 inline-block h-3 align-middle border-l border-dashed border-muted-foreground"
+                />
+                {t("Неполный день")}
               </span>
             </div>
             <p className="mt-3 text-xs leading-5 text-muted-foreground">
@@ -199,44 +250,63 @@ export function Analytics({ report }: { report: DevicesReport }) {
                 " · Сегодня — неполный день. До начала сбора данных нет; история хранится 90 дней.",
               )}
             </p>
-            <details className="mt-3 text-xs text-muted-foreground">
-              <summary className="cursor-pointer">
-                {t("Показать значения по дням")}
-              </summary>
-              <Table className="mt-2">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t("Дата UTC")}</TableHead>
-                    <TableHead>{t("Активные")}</TableHead>
-                    <TableHead>{t("Новые")}</TableHead>
-                    <TableHead>{t("Покрытие")}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {report.activity.map((day) => (
-                    <TableRow key={day.date}>
-                      <TableCell>{date(day.date)}</TableCell>
-                      <TableCell>
-                        {day.activeInstallations ?? "—"}
-                      </TableCell>
-                      <TableCell>{day.newInstallations ?? "—"}</TableCell>
-                      <TableCell>
-                        {day.coverage === "complete"
-                          ? t("Полный день")
-                          : day.coverage === "partial"
-                            ? t("Неполный день")
-                            : t("Нет данных")}
-                      </TableCell>
+            <Collapsible className="group/daily mt-3 text-xs text-muted-foreground">
+              <CollapsibleTrigger asChild>
+                <Button size="sm" variant="outline">
+                  <ChevronDown
+                    className="group-data-[state=open]/daily:rotate-180"
+                    aria-hidden="true"
+                  />
+                  {t("Показать значения по дням")}
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <Table
+                  className="mt-2"
+                  aria-label={t("Показать значения по дням")}
+                >
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t("Дата UTC")}</TableHead>
+                      <TableHead>{t("Активные")}</TableHead>
+                      <TableHead>{t("Новые")}</TableHead>
+                      <TableHead>{t("Покрытие")}</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </details>
+                  </TableHeader>
+                  <TableBody>
+                    {report.activity.map((day) => (
+                      <TableRow key={day.date}>
+                        <TableCell>{date(day.date)}</TableCell>
+                        <TableCell>
+                          {day.activeInstallations === null
+                            ? "—"
+                            : number(day.activeInstallations)}
+                        </TableCell>
+                        <TableCell>
+                          {day.newInstallations === null
+                            ? "—"
+                            : number(day.newInstallations)}
+                        </TableCell>
+                        <TableCell>
+                          {day.coverage === "complete"
+                            ? t("Полный день")
+                            : day.coverage === "partial"
+                              ? t("Неполный день")
+                              : t("Нет данных")}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CollapsibleContent>
+            </Collapsible>
           </CardContent>
         </Card>
         <Card className="min-w-0 shadow-none">
           <CardHeader>
-            <CardTitle>{t("Тип запуска")}</CardTitle>
+            <CardTitle>
+              <h2>{t("Тип запуска")}</h2>
+            </CardTitle>
             <CardDescription>
               {t("Текущее состояние активных установок")}
             </CardDescription>
@@ -245,9 +315,7 @@ export function Analytics({ report }: { report: DevicesReport }) {
             <div
               className="flex h-3 overflow-hidden rounded-full bg-muted"
               role="img"
-              aria-label={kinds
-                .map((k) => `${k.label}: ${k.value}`)
-                .join(", ")}
+              aria-label={kinds.map((k) => `${k.label}: ${k.value}`).join(", ")}
             >
               {kinds.map((k) => (
                 <div
@@ -261,9 +329,12 @@ export function Analytics({ report }: { report: DevicesReport }) {
                 />
               ))}
             </div>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="divide-y">
               {kinds.map((k) => (
-                <div key={k.label}>
+                <div
+                  key={k.label}
+                  className="flex items-center justify-between gap-3 py-3"
+                >
                   <p className="text-xs text-muted-foreground">
                     <i
                       className="mr-1.5 inline-block size-2 rounded-full"
@@ -271,14 +342,26 @@ export function Analytics({ report }: { report: DevicesReport }) {
                     />
                     {k.label}
                   </p>
-                  <p className="mt-1 text-lg font-semibold tabular-nums">
+                  <p className="text-base font-semibold tabular-nums">
                     {number(k.value)}{" "}
-                    <span className="text-xs font-normal text-muted-foreground">
-                      {percent(k.value, s.activeInstallations)}
+                    <span className="inline-block min-w-12 text-right text-xs font-normal text-muted-foreground">
+                      {share(k.value, s.activeInstallations)}
                     </span>
                   </p>
                 </div>
               ))}
+            </div>
+            <div className="flex items-center justify-between gap-3 rounded-md bg-muted/50 px-3 py-2 text-xs">
+              <span>{t("Аварийный запуск")}</span>
+              <strong
+                className={
+                  s.emergencyInstallations
+                    ? "text-destructive"
+                    : "text-foreground"
+                }
+              >
+                {number(s.emergencyInstallations)}
+              </strong>
             </div>
             {!report.total && (
               <p className="text-sm text-muted-foreground">
@@ -288,155 +371,6 @@ export function Analytics({ report }: { report: DevicesReport }) {
           </CardContent>
         </Card>
       </div>
-      <Card className="min-w-0 shadow-none">
-        <CardHeader>
-          <CardTitle>{t("Когорты установок")}</CardTitle>
-          <CardDescription>
-            {t(
-              "Группы по неделе первого heartbeat. Одна установка — одна запись, переустановка может создать новую.",
-            )}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Tabs defaultValue="adoption">
-            <TabsList className="mb-4">
-              <TabsTrigger value="adoption">
-                {t("Текущие версии")}
-              </TabsTrigger>
-              <TabsTrigger value="retention">
-                {t("Возвращаемость")}
-              </TabsTrigger>
-            </TabsList>
-            <TabsContent value="adoption">
-              <p className="mb-3 text-xs text-muted-foreground">
-                {t(
-                  "Активные за выбранный период, сгруппированные по неделе первого появления. Проценты внутри каждой когорты.",
-                )}
-              </p>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t("Неделя · UTC")}</TableHead>
-                    <TableHead>{t("Установки")}</TableHead>
-                    <TableHead>OTA</TableHead>
-                    <TableHead>{t("Embedded")}</TableHead>
-                    <TableHead>{t("Не определён")}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {report.adoptionCohorts.map((c) => (
-                    <TableRow key={c.weekStart}>
-                      <TableCell className="font-medium">
-                        {date(c.weekStart)}
-                      </TableCell>
-                      <TableCell className="tabular-nums">
-                        {number(c.installations)}
-                      </TableCell>
-                      {[
-                        c.otaInstallations,
-                        c.embeddedInstallations,
-                        c.unknownInstallations,
-                      ].map((count, i) => (
-                        <TableCell key={i}>
-                          <div
-                            className="rounded-md px-3 py-2 text-center tabular-nums"
-                            style={{
-                              background: `color-mix(in srgb, var(--chart-${i + 1}) ${c.installations ? 5 + (count / c.installations) * 20 : 0}%, transparent)`,
-                            }}
-                          >
-                            {percent(count, c.installations)}{" "}
-                            <span className="ml-1 text-xs text-muted-foreground">
-                              ({number(count)})
-                            </span>
-                          </div>
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              {!report.adoptionCohorts.length && (
-                <p className="py-6 text-center text-sm text-muted-foreground">
-                  {t("Пока нет когорт для этой выборки.")}
-                </p>
-              )}
-            </TabsContent>
-            <TabsContent value="retention">
-              <p className="mb-3 max-w-4xl text-xs leading-5 text-muted-foreground">
-                {t(
-                  "Новые установки за последние 90 дней после начала сбора. Фильтры платформы, канала, runtime и типа запуска применяются на момент первого heartbeat. D1/D7 — heartbeat ровно через 1/7 дней, даже если версия изменилась. D0 — исходная когорта (100%); для D1 и дальше неполные дни исключены. «—» означает, что день ещё не наблюдался полностью.",
-                )}
-              </p>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t("Неделя · UTC")}</TableHead>
-                    <TableHead>{t("Новые")}</TableHead>
-                    {[0, 1, 7, 14, 30].map((d) => (
-                      <TableHead key={d} className="text-center">
-                        D{d}
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {report.cohorts.map((c) => (
-                    <TableRow key={c.weekStart}>
-                      <TableCell>{date(c.weekStart)}</TableCell>
-                      <TableCell>{number(c.installations)}</TableCell>
-                      {c.cells.map((cell) => (
-                        <TableCell key={cell.day}>
-                          <div
-                            className="rounded-md px-2 py-2 text-center tabular-nums"
-                            title={
-                              cell.rate === null
-                                ? t("Нет полностью наблюдаемых дней")
-                                : cell.day === 0
-                                  ? t(
-                                      "D0: исходная когорта, включая сегодняшние установки",
-                                    )
-                                  : t(
-                                      "{0} из {1} установок с полностью наблюдаемым днём",
-                                      [
-                                        cell.retainedInstallations,
-                                        cell.eligibleInstallations,
-                                      ],
-                                    )
-                            }
-                            style={{
-                              background:
-                                cell.rate === null
-                                  ? "var(--muted)"
-                                  : `color-mix(in srgb, var(--chart-1) ${5 + cell.rate * 25}%, transparent)`,
-                            }}
-                          >
-                            {cell.rate === null
-                              ? "—"
-                              : `${Math.round(cell.rate * 100)}%`}
-                            <span className="block text-[10px] text-muted-foreground">
-                              {cell.rate === null
-                                ? t("нет данных")
-                                : `${cell.retainedInstallations}/${cell.eligibleInstallations}`}
-                            </span>
-                          </div>
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              {!report.cohorts.length && (
-                <p className="py-6 text-center text-sm text-muted-foreground">
-                  {t(
-                    "Возвращаемость появится для новых установок после начала сбора",
-                  )}{" "}
-                  {date(report.coverage.collectionStartedAt)}.
-                </p>
-              )}
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
     </>
   );
 }

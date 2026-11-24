@@ -186,6 +186,9 @@ begin
     new.served_manifest_changed_at := greatest(
       clock_timestamp(),
       old.served_manifest_changed_at + interval '1 millisecond',
+      -- The publishing clock may be ahead of the database server.
+      old.latest_created_at + interval '1 millisecond',
+      new.latest_created_at,
       old.active_changed_at + interval '1 millisecond',
       new.active_changed_at
     );
@@ -947,6 +950,8 @@ begin
          served_manifest_changed_at = greatest(
            clock_timestamp(),
            served_manifest_changed_at + interval '1 millisecond',
+           latest_created_at + interval '1 millisecond',
+           new.created_at,
            active_changed_at + interval '1 millisecond'
          )
    where runtime_version = new.runtime_version

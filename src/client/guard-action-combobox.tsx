@@ -1,6 +1,13 @@
 "use client";
 import { useI18n } from "@/src/client/i18n/provider";
 
+import { Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverAnchor,
+  PopoverContent,
+} from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 
 import {
@@ -37,7 +44,7 @@ export default function GuardActionCombobox({
   const generatedId = useId();
   const popupId = `${generatedId}-popup`;
   const errorId = `${generatedId}-error`;
-  const rootRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const [draftValue, setDraftValue] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -130,45 +137,51 @@ export default function GuardActionCombobox({
   };
 
   return (
-    <div
-      ref={rootRef}
-      className="relative min-w-56 flex-1"
-      onBlur={(event) => {
-        if (!rootRef.current?.contains(event.relatedTarget)) {
-          setOpen(false);
-          setDraftValue(null);
-        }
-      }}
-    >
-      <Input
-        value={inputValue}
-        maxLength={100}
-        readOnly={selectionDisabled}
-        aria-disabled={selectionDisabled}
-        role="combobox"
-        aria-label={t("Rule action")}
-        aria-autocomplete="list"
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-controls={popupId}
-        aria-describedby={inputError || mutationError ? errorId : undefined}
-        onFocus={() => setOpen(true)}
-        onChange={(event) => {
-          setDraftValue(event.target.value);
-          setInputError("");
-          setOpen(true);
-          setActiveIndex(-1);
+    <div className="min-w-0 flex-1">
+      <Popover
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (!next) setDraftValue(null);
         }}
-        onKeyDown={handleKeyDown}
-        className="w-full"
-        placeholder={t("Action (required)")}
-      />
-      {open ? (
-        <div
+      >
+        <PopoverAnchor asChild>
+          <Input
+            ref={inputRef}
+            value={inputValue}
+            maxLength={100}
+            readOnly={selectionDisabled}
+            aria-disabled={selectionDisabled}
+            role="combobox"
+            aria-label={t("Rule action")}
+            aria-autocomplete="list"
+            aria-haspopup="dialog"
+            aria-expanded={open}
+            aria-controls={popupId}
+            aria-describedby={inputError || mutationError ? errorId : undefined}
+            onFocus={() => setOpen(true)}
+            onChange={(event) => {
+              setDraftValue(event.target.value);
+              setInputError("");
+              setOpen(true);
+              setActiveIndex(-1);
+            }}
+            onKeyDown={handleKeyDown}
+            className="w-full"
+            placeholder={t("Action (required)")}
+          />
+        </PopoverAnchor>
+        <PopoverContent
+          align="start"
+          onOpenAutoFocus={(event) => event.preventDefault()}
+          onCloseAutoFocus={(event) => event.preventDefault()}
+          onInteractOutside={(event) => {
+            if (event.target === inputRef.current) event.preventDefault();
+          }}
           id={popupId}
           role="dialog"
           aria-label={t("Guard action catalog")}
-          className="absolute z-20 mt-1 max-h-60 w-full overflow-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-md"
+          className="max-h-60 w-[var(--radix-popover-trigger-width)] overflow-auto p-1"
         >
           {filteredOptions.map((option, index) => (
             <div
@@ -177,22 +190,24 @@ export default function GuardActionCombobox({
                 activeIndex === index ? "bg-accent" : ""
               }`}
             >
-              <button
+              <Button
+                variant="ghost"
+                size="sm"
                 type="button"
                 tabIndex={-1}
                 disabled={selectionDisabled}
-                aria-current={
-                  option.actionKey === value ? "true" : undefined
-                }
+                aria-current={option.actionKey === value ? "true" : undefined}
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => chooseOption(option)}
-                className="min-w-0 flex-1 truncate px-3 py-2 text-left text-sm disabled:cursor-default"
+                className="min-w-0 flex-1 justify-start truncate px-3 py-2 text-left text-sm disabled:cursor-default"
                 title={option.actionKey}
               >
                 {option.actionKey}
-              </button>
+              </Button>
               {option.persisted && canMutateCatalog ? (
-                <button
+                <Button
+                  variant="ghost"
+                  size="sm"
                   type="button"
                   aria-label={t("Delete {0} from action catalog", [
                     option.actionKey,
@@ -205,23 +220,15 @@ export default function GuardActionCombobox({
                   }}
                   className="m-1 rounded p-2 text-destructive hover:bg-destructive/10"
                 >
-                  <svg
-                    viewBox="0 0 24 24"
-                    width="16"
-                    height="16"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    aria-hidden="true"
-                  >
-                    <path d="M3 6h18M8 6V4h8v2m-9 0 1 14h8l1-14M10 10v6m4-6v6" />
-                  </svg>
-                </button>
+                  <Trash2 aria-hidden="true" />
+                </Button>
               ) : null}
             </div>
           ))}
           {showCreate ? (
-            <button
+            <Button
+              variant="ghost"
+              size="sm"
               type="button"
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => void create()}
@@ -230,15 +237,15 @@ export default function GuardActionCombobox({
               }`}
             >
               {t("Create “{0}”", [creatableValue])}
-            </button>
+            </Button>
           ) : null}
           {filteredOptions.length === 0 && !showCreate ? (
             <p className="px-3 py-2 text-sm text-muted-foreground">
               {t("No matching actions")}
             </p>
           ) : null}
-        </div>
-      ) : null}
+        </PopoverContent>
+      </Popover>
       {inputError || mutationError ? (
         <div
           id={errorId}
@@ -247,13 +254,15 @@ export default function GuardActionCombobox({
         >
           <span>{t(inputError || mutationError || "")}</span>
           {mutationError && onRetry ? (
-            <button
+            <Button
+              variant="ghost"
+              size="sm"
               type="button"
               onClick={() => void onRetry()}
               className="underline"
             >
               {t("Retry")}
-            </button>
+            </Button>
           ) : null}
         </div>
       ) : null}

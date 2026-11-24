@@ -1,3 +1,4 @@
+import { ConfirmActionProvider } from "@/components/admin/confirm-action";
 import { getAdminSessionFromServerCookies } from "@/src/server/lib/admin-auth";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { redirect } from "next/navigation";
@@ -13,7 +14,7 @@ export default async function UpdatesLayout({
 
   return (
     <AdminShell session={{ username: session.username, role: session.role }}>
-      {children}
+      <ConfirmActionProvider>{children}</ConfirmActionProvider>
     </AdminShell>
   );
 }

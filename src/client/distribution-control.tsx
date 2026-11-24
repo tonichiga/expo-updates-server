@@ -1,4 +1,5 @@
 "use client";
+import { useConfirmAction } from "@/components/admin/confirm-action";
 import type { TranslationMessage } from "@/src/client/i18n/messages";
 import { useI18n } from "@/src/client/i18n/provider";
 
@@ -7,12 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import {
-  ShieldCheck,
-  ShieldAlert,
-  ChevronDown,
-  RefreshCw,
-} from "lucide-react";
+import { ShieldCheck, ShieldAlert, ChevronDown, RefreshCw } from "lucide-react";
 
 import {
   AdminApiError,
@@ -23,9 +19,7 @@ import type { DistributionControlResponse } from "./admin-types";
 import { useCallback, useEffect, useState } from "react";
 
 export function useDistributionControlState() {
-  const [state, setState] = useState<DistributionControlResponse | null>(
-    null,
-  );
+  const [state, setState] = useState<DistributionControlResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -99,9 +93,7 @@ export function DistributionControlBanner({
 
   return (
     <section className="rounded-lg border border-destructive/25 bg-destructive/5 p-4 text-destructive">
-      <p className="font-semibold">
-        {t("Распространение OTA остановлено")}
-      </p>
+      <p className="font-semibold">{t("Распространение OTA остановлено")}</p>
       <p className="mt-1 text-sm">{state.reason}</p>
       <p className="mt-2 text-xs">
         {new Date(state.changedAt).toLocaleString(formatLocale)} ·{" "}
@@ -112,6 +104,7 @@ export function DistributionControlBanner({
 }
 
 export default function DistributionControl() {
+  const confirmAction = useConfirmAction();
   const { t, formatLocale } = useI18n();
   const { state, setState, loading, error, setError, refresh } =
     useDistributionControlState();
@@ -131,12 +124,14 @@ export default function DistributionControl() {
       return;
     }
 
-    const confirmed = window.confirm(
+    const confirmed = await confirmAction(
+      blocked ? t("Остановить все OTA") : t("Возобновить OTA"),
       blocked
         ? t(
             "Немедленно остановить выдачу manifest и всех OTA assets для всех клиентов?",
           )
         : t("Возобновить глобальное OTA-распространение?"),
+      blocked,
     );
     if (!confirmed) {
       return;
@@ -245,8 +240,7 @@ export default function DistributionControl() {
           <p className="text-xs text-muted-foreground">
             {t("Изменено: ")}
             {new Date(state.changedAt).toLocaleString(formatLocale)} ·{" "}
-            {formatChangedBy(state, t)}{" "}
-            {t(" · version {0}", [state.version])}
+            {formatChangedBy(state, t)} {t(" · version {0}", [state.version])}
           </p>
           {!state.blocked && (
             <label className="block space-y-2 text-sm font-medium">

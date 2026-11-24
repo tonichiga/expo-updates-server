@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 const CHANNEL_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const LEGACY_GENERATED_FILE_SHA256 = {
   embeddedRegistrars: [
+    "6d2201f51851d9af41449f8da3653a4792cddb30d411d59e3c161adbc5cf76ff",
     "29c48288d4804c072129da0ef60a12ad0892809eb8d57a14be94d039d990d6d7",
     "89997ef11a939ce00e65159bd8e04845f16b184d5192f8fb56b1bc4204b07bca",
   ],

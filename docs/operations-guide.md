@@ -339,6 +339,8 @@ Activation advances the channel epoch even if its latest pointer is unchanged.
 Pointer changes and repeated rollback operations advance the epoch clock by
 at least one millisecond, so successive publications remain ordered for Expo.
 
+Reapply this repeatable migration when upgrading an existing installation. It also orders a fallback after a disabled patch when the publishing machine’s clock runs ahead of the server. Devices already on the fallback receive a no-update response.
+
 The server records the manifest-to-update mapping before returning a manifest.
 Missing mapping tables, lookup errors, or failed mapping writes now fail the
 request instead of silently changing IDs or losing history. Identical mapping
@@ -406,3 +408,49 @@ fully observed later days. Existing installations remain visible in current
 composition cohorts. See [installation telemetry](./installation-telemetry.md)
 for exact filter/window semantics, migration checks, the event contract, client
 entry behavior, access rules and limitations.
+
+### Moving an existing OTA endpoint to this server {#in-place-upgrade}
+
+Keep the mobile manifest URL, signing key pair, database, bucket and object
+prefixes from the running deployment. Existing binaries trust the certificate
+embedded when they were built. Keep their channel headers and runtime versions
+as well. An existing client can receive public updates immediately. Device
+targeting and launch analytics require a client that sends the corresponding IDs.
+
+1. Take a restorable database backup and record the current server deployment,
+   distribution switch state, release IDs and rollback pins. Retain bucket
+   objects and their version history. Restore the database into a private test
+   environment. Point the rehearsal server at a test bucket containing copies
+   of the releases used for verification.
+2. On the restored copy run
+   `DATABASE_URL="$RESTORED_DATABASE_URL" node scripts/migrate-legacy.mjs --rehearse`.
+   This executes the six ordered migrations from the distribution-control
+   schema, checks every existing release, channel, embedded build, redirect and
+   switch row against its original columns, then rolls back the transaction.
+   Use `--apply` on the copy to test the upgraded server. Both modes acquire
+   PostgreSQL DDL locks. The rehearsal belongs on the copy.
+3. Verify the production build and run the disposable HTTP/browser suite from
+   the source checkout. For the legacy path provide the **schema SQL only** from
+   the legacy repository. The suite creates its own database, object store, test
+   users and signing key. It can run with Docker, Node and the Playwright Chromium
+   browser installed.
+
+   ```bash
+   npm ci
+   npx playwright install chromium
+   OTA_E2E_LEGACY_SCHEMA=../legacy/docs/migrations/schema.sql npm run test:e2e
+   npm run test:e2e
+   ```
+
+4. At the agreed switch time, suspend publishing, stop OTA distribution in
+   the legacy panel, and drain old instances. Keep the previous deployment
+   available. Run `node scripts/migrate-legacy.mjs --apply` using the existing
+   database URL and its TLS settings. The schema changes commit together after
+   row verification. Deploy this server at the existing hostname, with the
+   original secrets and storage configuration. Restore the switch to its
+   recorded state once the infrastructure is ready.
+5. If the cutover fails, leave delivery stopped. Restore the previous server
+   and, if new writes have occurred, reconcile them before restoring the
+   pre-cutover database backup. After targeted releases exist, an old server
+   cannot enforce their audience. Resume only with a server and schema that
+   agree on eligible recipients.

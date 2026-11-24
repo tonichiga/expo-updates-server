@@ -1,368 +1,461 @@
 "use client";
-import { useI18n } from "@/src/client/i18n/provider";
 
-import { NativeSelect } from "@/components/ui/native-select";
-
-import { getUpdates } from "@/src/client/admin-api";
-import { UpdateItem } from "@/src/client/admin-types";
-import DistributionControl from "@/src/client/distribution-control";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from "@/components/ui/table";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   ArrowDownUp,
-  ArrowRight,
+  ArrowUpRight,
   ChevronLeft,
   ChevronRight,
+  Layers3,
   RefreshCw,
-  Package,
+  Search,
   ShieldAlert,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { getUpdates } from "@/src/client/admin-api";
+import type {
+  ReleaseFilters,
+  UpdatesListResponse,
+} from "@/src/client/admin-types";
+import DistributionControl from "@/src/client/distribution-control";
+import { useI18n } from "@/src/client/i18n/provider";
+import { useFormatters } from "@/src/client/i18n/use-formatters";
 
-const PAGE_SIZE = 20;
-
-type SortBy =
-  | "createdAt"
-  | "runtimeVersion"
-  | "platform"
-  | "channel"
-  | "stage"
-  | "status"
-  | "updateId";
+const emptyFilters: ReleaseFilters = {
+  q: "",
+  platform: "",
+  channel: "",
+  runtime: "",
+  status: "",
+  audience: "",
+};
+const sorts = [
+  ["createdAt", "По дате"],
+  ["runtimeVersion", "По runtime"],
+  ["platform", "По платформе"],
+  ["channel", "По каналу"],
+  ["status", "По статусу"],
+  ["updateId", "По ID"],
+];
 
 export default function UpdatesPage() {
-  const { t, formatLocale } = useI18n();
-  const [items, setItems] = useState<UpdateItem[]>([]);
-  const [rollbackScopes, setRollbackScopes] = useState<
-    Array<{
-      scopeKey: string;
-      runtimeVersion: string;
-      channel: string;
-      platform: "ios" | "android";
-      rollbackActive: boolean;
-      autoDeliveryEnabled: boolean;
-      activeUpdateId: string | null;
-      latestUpdateId: string | null;
-    }>
-  >([]);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [total, setTotal] = useState(0);
-  const [sortBy, setSortBy] = useState<SortBy>("createdAt");
-  const [order, setOrder] = useState<"asc" | "desc">("desc");
+  const { t } = useI18n();
+  const { number, fullDate } = useFormatters();
+  const [draft, setDraft] = useState(emptyFilters);
+  const [query, setQuery] = useState({
+    ...emptyFilters,
+    page: 1,
+    sortBy: "createdAt",
+    order: "desc" as "asc" | "desc",
+  });
+  const [result, setResult] = useState<UpdatesListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
-  const hasRollbackActive = items.some((item) => item.isRollbackActive);
-  const hasIgnoredUpdates = items.some((item) => item.isIgnoredByRollback);
-  const lockedScopes = rollbackScopes.filter(
-    (scope) => scope.rollbackActive,
-  );
-
-  const loadUpdates = useCallback(async () => {
-    setLoading(true);
-    setError("");
-
-    try {
-      const response = await getUpdates({
-        page,
-        pageSize: PAGE_SIZE,
-        sortBy,
-        order,
-      });
-      setItems(response.items);
-      setRollbackScopes(response.rollbackLockByScope || []);
-      setTotalPages(response.totalPages);
-      setTotal(response.total);
-    } catch (loadError: unknown) {
-      setError(
-        (loadError as Error).message || "Не удалось загрузить список",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [page, sortBy, order]);
+  const [resultsFiltered, setResultsFiltered] = useState(false);
 
   useEffect(() => {
-    void loadUpdates();
-  }, [loadUpdates]);
+    const controller = new AbortController();
+    getUpdates({ ...query, pageSize: 20 }, controller.signal)
+      .then((next) => {
+        if (controller.signal.aborted) return;
+        setResult(next);
+        setResultsFiltered(
+          Boolean(
+            query.q ||
+              query.platform ||
+              query.channel ||
+              query.runtime ||
+              query.status ||
+              query.audience,
+          ),
+        );
+      })
+      .catch((e: Error) => {
+        if (!controller.signal.aborted)
+          setError(e.message || "Не удалось загрузить список");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [query]);
+
+  function requestPage(next: typeof query) {
+    setLoading(true);
+    setError("");
+    setQuery(next);
+  }
+
+  function apply(event: FormEvent) {
+    event.preventDefault();
+    requestPage({ ...query, ...draft, q: draft.q.trim(), page: 1 });
+  }
+  function reset() {
+    setDraft(emptyFilters);
+    requestPage({ ...query, ...emptyFilters, page: 1 });
+  }
+  function filter(
+    key: keyof ReleaseFilters,
+    label: string,
+    options: [string, string][],
+  ) {
+    return (
+      <NativeSelect
+        value={draft[key]}
+        aria-label={label}
+        className="max-w-48"
+        onChange={(e) => setDraft({ ...draft, [key]: e.target.value })}
+      >
+        <option value="">{label}</option>
+        {options.map(([value, title]) => (
+          <option key={value} value={value}>
+            {title}
+          </option>
+        ))}
+      </NativeSelect>
+    );
+  }
+  const locked =
+    result?.rollbackLockByScope.filter((scope) => scope.rollbackActive) ?? [];
+  const page = result?.page ?? 1;
+  const pages = result?.totalPages ?? 1;
 
   return (
-    <div className="mx-auto max-w-[1600px] space-y-6 p-4 md:p-8">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {t("OTA Updates")}
+    <div className="mx-auto max-w-[1500px] space-y-5 p-4 sm:p-6 lg:p-8">
+      <header className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight">
+            {t("Публикации")}
           </h1>
-          <p className="text-sm text-muted-foreground">
-            {t("Публикации, версии и управление доставкой обновлений.")}
+          <p className="mt-1.5 text-sm text-muted-foreground">
+            {t("Manage release audiences, delivery policies and rollbacks.")}
           </p>
         </div>
         <Button
           variant="outline"
-          onClick={() => void loadUpdates()}
+          size="sm"
           disabled={loading}
+          onClick={() => requestPage({ ...query })}
         >
-          <RefreshCw className={loading ? "animate-spin" : ""} />{" "}
-          {t(" Обновить")}
+          <RefreshCw className={loading ? "animate-spin" : ""} />
+          {t("Обновить")}
         </Button>
       </header>
 
       <DistributionControl />
 
-      {error && (
+      {locked.length > 0 && (
         <div
-          role="alert"
-          className="rounded-lg border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive"
+          role="status"
+          className="flex gap-3 rounded-lg border border-amber-500/35 bg-amber-500/5 p-4 text-sm"
         >
-          {t(error)}
-        </div>
-      )}
-      {hasRollbackActive && (
-        <div className="flex gap-3 rounded-lg border border-amber-500/25 bg-amber-500/5 p-4 text-sm">
-          <ShieldAlert className="mt-0.5 size-4 shrink-0 text-amber-600" />
-          <div>
+          <ShieldAlert className="size-5 shrink-0 text-amber-700 dark:text-amber-400" />
+          <div className="min-w-0">
             <p className="font-medium">{t("Rollback активен")}</p>
-            <p className="mt-1 text-muted-foreground">
-              {t("Автодоставка новых обновлений временно отключена.")}
-              {hasIgnoredUpdates
-                ? t(" Новые публикации в этих scope помечены как ignored.")
-                : ""}
+            <p className="mt-1 break-words text-muted-foreground">
+              {t("Автодоставка новых обновлений временно отключена.")}{" "}
+              {locked
+                .map((s) =>
+                  [s.runtimeVersion, s.platform, s.channel].join(" / "),
+                )
+                .join(" · ")}
             </p>
           </div>
         </div>
       )}
-      {lockedScopes.length > 0 && (
-        <p className="text-xs text-muted-foreground">
-          {t("Rollback lock:")}{" "}
-          {lockedScopes
-            .map(
-              (scope) =>
-                `${scope.runtimeVersion} / ${scope.platform} / ${scope.channel}`,
-            )
-            .join("; ")}
-        </p>
-      )}
 
-      <Card className="gap-0 overflow-hidden py-0 shadow-none">
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b p-4">
-          <div className="flex items-center gap-2">
-            <Package className="size-4 text-muted-foreground" />
-            <h2 className="text-sm font-semibold">{t("Публикации")}</h2>
-            <Badge variant="secondary">{total}</Badge>
+      <Card className="min-w-0 gap-0 overflow-hidden py-0 shadow-none">
+        <div className="space-y-4 border-b p-4 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-semibold">{t("Release history")}</h2>
+              {result && (
+                <Badge variant="secondary" className="tabular-nums">
+                  {number(result.total)}
+                </Badge>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <NativeSelect
+                size="sm"
+                aria-label={t("Сортировка списка апдейтов")}
+                value={query.sortBy}
+                onChange={(e) =>
+                  requestPage({ ...query, sortBy: e.target.value, page: 1 })
+                }
+              >
+                {sorts.map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {t(label)}
+                  </option>
+                ))}
+              </NativeSelect>
+              <Button
+                variant="outline"
+                size="sm"
+                aria-label={
+                  query.order === "desc"
+                    ? t("Сортировать по возрастанию")
+                    : t("Сортировать по убыванию")
+                }
+                onClick={() =>
+                  requestPage({
+                    ...query,
+                    order: query.order === "desc" ? "asc" : "desc",
+                    page: 1,
+                  })
+                }
+              >
+                <ArrowDownUp />
+                {query.order === "desc" ? t("Descending") : t("Ascending")}
+              </Button>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <NativeSelect
-              value={sortBy}
-              onChange={(event) => {
-                setSortBy(event.target.value as SortBy);
-                setPage(1);
-              }}
-              aria-label={t("Сортировка списка апдейтов")}
-              className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <option value="createdAt">{t("По дате")}</option>
-              <option value="runtimeVersion">{t("По runtime")}</option>
-              <option value="platform">{t("По платформе")}</option>
-              <option value="channel">{t("По каналу")}</option>
-              <option value="stage">{t("По stage")}</option>
-              <option value="status">{t("По статусу")}</option>
-              <option value="updateId">{t("По ID")}</option>
-            </NativeSelect>
+          <form onSubmit={apply} role="search" className="space-y-3">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="search"
+                aria-label={t("Search releases")}
+                placeholder={t(
+                  "Search by comment, update ID, version or channel",
+                )}
+                className="pl-9"
+                value={draft.q}
+                onChange={(e) => setDraft({ ...draft, q: e.target.value })}
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {filter("platform", t("Все платформы"), [
+                ["ios", "iOS"],
+                ["android", "Android"],
+              ])}
+              {filter(
+                "channel",
+                t("Все каналы"),
+                (result?.filters?.channels ?? []).map((v) => [v, v]),
+              )}
+              {filter(
+                "runtime",
+                t("All runtimes"),
+                (result?.filters?.runtimes ?? []).map((v) => [v, v]),
+              )}
+              {filter("status", t("All statuses"), [
+                ["active", t("active")],
+                ["draft", t("draft")],
+                ["disabled", t("disabled")],
+                ["rollback", t("Rollback")],
+              ])}
+              {filter("audience", t("All audiences"), [
+                ["all", t("Все совместимые устройства")],
+                ["devices", t("Выбранные устройства")],
+              ])}
+              <Button type="submit" size="sm">
+                {t("Применить")}
+              </Button>
+              {(Object.values(draft).some(Boolean) || resultsFiltered) && (
+                <Button type="button" variant="ghost" size="sm" onClick={reset}>
+                  {t("Сбросить")}
+                </Button>
+              )}
+            </div>
+          </form>
+        </div>
+
+        {error && (
+          <div
+            role="alert"
+            className="border-b bg-destructive/5 p-4 text-sm text-destructive"
+          >
+            {t(error)} {result && t("Showing the previous results.")}{" "}
             <Button
-              variant="outline"
               size="sm"
-              onClick={() => {
-                setOrder((current) => (current === "asc" ? "desc" : "asc"));
-                setPage(1);
-              }}
-              aria-label={
-                order === "asc"
-                  ? t("Сортировать по убыванию")
-                  : t("Сортировать по возрастанию")
-              }
+              variant="outline"
+              onClick={() => requestPage({ ...query })}
             >
-              <ArrowDownUp />
-              {order === "asc" ? t("Ascending") : t("Descending")}
+              {t("Retry")}
             </Button>
           </div>
-        </div>
-        <Table>
+        )}
+        <Table aria-busy={loading}>
           <TableHeader>
-            <TableRow className="bg-muted/40 hover:bg-muted/40">
-              <TableHead className="pl-5">{t("Обновление")}</TableHead>
-              <TableHead>{t("Runtime / App")}</TableHead>
-              <TableHead>{t("Платформа / канал")}</TableHead>
+            <TableRow className="bg-muted/35">
+              <TableHead className="pl-4 sm:pl-5">{t("Release")}</TableHead>
+              <TableHead className="hidden lg:table-cell">
+                {t("Compatibility")}
+              </TableHead>
               <TableHead>{t("Состояние")}</TableHead>
-              <TableHead>{t("Доставка")}</TableHead>
-              <TableHead>{t("Assets")}</TableHead>
-              <TableHead className="pr-5 text-right">
+              <TableHead className="hidden sm:table-cell">
+                {t("Audience")}
+              </TableHead>
+              <TableHead className="hidden xl:table-cell">
+                {t("Доставка")}
+              </TableHead>
+              <TableHead className="hidden pr-5 text-right md:table-cell">
                 {t("Создано")}
               </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {loading && (
+            {!result && loading && (
               <TableRow>
                 <TableCell
-                  colSpan={7}
+                  colSpan={6}
                   className="h-36 text-center text-muted-foreground"
                 >
-                  <RefreshCw className="mx-auto mb-2 size-5 animate-spin" />
                   {t("Загрузка обновлений…")}
                 </TableCell>
               </TableRow>
             )}
-            {!loading && items.length === 0 && (
+            {result?.items.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} className="h-48 text-center">
-                  <Package className="mx-auto mb-3 size-8 text-muted-foreground/50" />
-                  <p className="font-medium">{t("Обновлений пока нет")}</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {t(
-                      "Опубликуйте OTA, чтобы управлять его доставкой здесь.",
-                    )}
+                <TableCell colSpan={6} className="h-40 text-center">
+                  <Layers3 className="mx-auto mb-3 size-6 text-muted-foreground" />
+                  <p className="font-medium">
+                    {resultsFiltered
+                      ? t("No matching releases")
+                      : t("Обновлений пока нет")}
                   </p>
+                  {resultsFiltered ? (
+                    <Button variant="link" size="sm" onClick={reset}>
+                      {t("Сбросить")}
+                    </Button>
+                  ) : (
+                    <p className="mt-1 whitespace-normal text-sm text-muted-foreground">
+                      {t(
+                        "Опубликуйте OTA, чтобы управлять его доставкой здесь.",
+                      )}
+                    </p>
+                  )}
                 </TableCell>
               </TableRow>
             )}
-            {!loading &&
-              items.map((item) => (
-                <TableRow
-                  key={item.key}
-                  className={item.isRollbackActive ? "bg-amber-500/5" : ""}
-                >
-                  <TableCell className="max-w-80 py-4 pl-5">
-                    <Link
-                      href={`/updates/${item.encodedKey}`}
-                      className="group flex items-center gap-2 text-sm font-medium text-foreground hover:text-primary"
-                    >
-                      <span className="truncate">
-                        {item.comment || t("Без комментария")}
-                      </span>
-                      <ArrowRight className="size-3.5 shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />
-                    </Link>
-                    <Link
-                      href={`/updates/${item.encodedKey}`}
-                      className="mt-1 block max-w-60 truncate font-mono text-[11px] text-muted-foreground hover:text-primary"
-                      title={item.updateId}
-                    >
-                      {item.updateId}
-                    </Link>
-                  </TableCell>
-                  <TableCell>
-                    <p className="font-medium">{item.runtimeVersion}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {t("App")} {item.appVersion || "—"}
-                    </p>
-                  </TableCell>
-                  <TableCell>
-                    <span className="text-sm">
-                      {item.platform === "ios" ? "iOS" : "Android"}
+            {result?.items.map((item) => (
+              <TableRow key={item.key}>
+                <TableCell className="max-w-44 whitespace-normal py-4 pl-4 sm:max-w-80 sm:pl-5">
+                  <Link
+                    href={`/updates/${item.encodedKey}`}
+                    className="group inline-flex max-w-full items-start gap-1.5 rounded-sm font-semibold hover:text-primary"
+                  >
+                    <span className="line-clamp-2 break-words">
+                      {item.comment ||
+                        (item.appVersion
+                          ? t("Version {0}", [item.appVersion])
+                          : t("Release {0}", [item.updateId.slice(0, 8)]))}
                     </span>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {item.channel}
-                    </p>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1.5">
-                      <Badge
-                        variant={
-                          item.status === "active" ? "default" : "secondary"
-                        }
-                        className={
-                          item.status === "active"
-                            ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-                            : ""
-                        }
-                      >
-                        {t(item.status)}
-                      </Badge>
-                      {item.isLatest && (
-                        <Badge variant="outline">{t("Latest")}</Badge>
-                      )}
-                      {item.audienceMode === "devices" && (
-                        <Badge variant="outline">
-                          {t("Выбранные устройства")}
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="mt-1.5 text-xs text-muted-foreground">
-                      {item.stage}
-                    </p>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1.5">
-                      <Badge variant="outline">
-                        {item.deliveryMode === "background"
-                          ? t("Background")
-                          : t("Manual")}
-                      </Badge>
-                      {item.hasGuard && (
-                        <Badge variant="secondary">{t("Guard")}</Badge>
-                      )}
-                    </div>
-                    <p
-                      className={`mt-1.5 text-xs ${item.isRollbackActive ? "text-amber-600" : "text-muted-foreground"}`}
+                    <ArrowUpRight className="mt-0.5 size-3.5 shrink-0 text-muted-foreground group-hover:text-primary" />
+                  </Link>
+                  <div
+                    className="mt-1 font-mono text-xs text-muted-foreground"
+                    title={item.updateId}
+                  >
+                    {item.updateId.slice(0, 8)}
+                  </div>
+                  <div className="mt-1 break-words text-xs text-muted-foreground lg:hidden">
+                    {item.platform === "ios" ? "iOS" : "Android"} ·{" "}
+                    {item.channel} · {item.runtimeVersion}
+                  </div>
+                </TableCell>
+                <TableCell className="hidden max-w-60 whitespace-normal lg:table-cell">
+                  <div className="break-words font-medium">
+                    {item.platform === "ios" ? "iOS" : "Android"} ·{" "}
+                    {item.channel}
+                  </div>
+                  <div className="mt-1 break-words text-xs text-muted-foreground">
+                    {t("Runtime {0}", [item.runtimeVersion])}
+                    {item.appVersion ? ` · ${t("App")} ${item.appVersion}` : ""}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div className="flex flex-col items-start gap-1.5">
+                    <Badge
+                      variant={
+                        item.status === "active" ? "default" : "secondary"
+                      }
                     >
-                      {item.isRollbackActive
-                        ? t("Rollback")
-                        : item.isIgnoredByRollback
-                          ? t("Ignored by rollback")
-                          : t("Scope open")}
-                    </p>
-                  </TableCell>
-                  <TableCell className="tabular-nums text-muted-foreground">
-                    {item.assetsCount}
-                  </TableCell>
-                  <TableCell className="pr-5 text-right text-xs tabular-nums text-muted-foreground">
-                    {new Date(item.createdAt).toLocaleString(
-                      formatLocale,
-                    ) || item.createdAtPath}
-                  </TableCell>
-                </TableRow>
-              ))}
+                      {item.policyEditable ? t("draft") : t(item.status)}
+                    </Badge>
+                    {item.isLatest && (
+                      <span className="text-xs text-muted-foreground">
+                        {t("Latest")}
+                      </span>
+                    )}
+                    {(item.isRollbackActive || item.isIgnoredByRollback) && (
+                      <span className="max-w-36 whitespace-normal text-xs text-amber-700 dark:text-amber-400">
+                        {item.isRollbackActive
+                          ? t("Rollback")
+                          : t("Ignored by rollback")}
+                      </span>
+                    )}
+                    <span className="text-xs text-muted-foreground sm:hidden">
+                      {item.audienceMode === "devices"
+                        ? t("Выбранные устройства")
+                        : t("All devices")}
+                    </span>
+                  </div>
+                </TableCell>
+                <TableCell className="hidden sm:table-cell">
+                  {item.audienceMode === "devices"
+                    ? t("Выбранные устройства")
+                    : t("All devices")}
+                </TableCell>
+                <TableCell className="hidden xl:table-cell">
+                  {item.deliveryMode === "background"
+                    ? t("Background")
+                    : t("Manual")}
+                  {item.hasGuard && (
+                    <Badge className="ml-1.5" variant="outline">
+                      {t("Guard")}
+                    </Badge>
+                  )}
+                </TableCell>
+                <TableCell className="hidden pr-5 text-right text-xs text-muted-foreground md:table-cell">
+                  {fullDate(item.createdAt)}
+                </TableCell>
+              </TableRow>
+            ))}
           </TableBody>
         </Table>
-        <div className="flex items-center justify-between gap-3 border-t px-5 py-3">
-          <p className="text-xs text-muted-foreground">
-            {t("Страница ")}
-            {page} {t(" из ")}
-            {totalPages}
-          </p>
+        <footer className="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3 sm:px-5">
+          <span aria-live="polite" className="text-sm text-muted-foreground">
+            {loading
+              ? t("Загрузка...")
+              : t("Page {0} of {1}", [number(page), number(pages)])}
+          </span>
           <div className="flex gap-2">
             <Button
-              variant="outline"
               size="sm"
-              onClick={() => setPage((current) => Math.max(1, current - 1))}
-              disabled={page <= 1 || loading}
+              variant="outline"
+              disabled={loading || page <= 1}
+              onClick={() => requestPage({ ...query, page: page - 1 })}
             >
               <ChevronLeft />
               {t("Назад")}
             </Button>
             <Button
-              variant="outline"
               size="sm"
-              onClick={() =>
-                setPage((current) => Math.min(totalPages, current + 1))
-              }
-              disabled={page >= totalPages || loading}
+              variant="outline"
+              disabled={loading || page >= pages}
+              onClick={() => requestPage({ ...query, page: page + 1 })}
             >
               {t("Вперёд")}
               <ChevronRight />
             </Button>
           </div>
-        </div>
+        </footer>
       </Card>
     </div>
   );

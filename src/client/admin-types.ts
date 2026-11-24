@@ -37,7 +37,17 @@ export type UpdatePolicy = {
   editable: boolean;
 };
 
+export type ReleaseFilters = {
+  q: string;
+  platform: string;
+  channel: string;
+  runtime: string;
+  status: string;
+  audience: string;
+};
+
 export type UpdatesListResponse = {
+  filters: { channels: string[]; runtimes: string[] };
   items: UpdateItem[];
   total: number;
   page: number;
@@ -56,6 +66,7 @@ export type UpdatesListResponse = {
 };
 
 export interface UpdateDetail extends UpdateItem {
+  isNewestInScope: boolean;
   updateInfo: Record<string, unknown>;
   updateMeta: {
     isActive: boolean;

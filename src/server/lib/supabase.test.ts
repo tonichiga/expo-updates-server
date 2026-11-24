@@ -11,6 +11,8 @@ const poolQuery = vi.hoisted(() =>
 );
 const supabaseUpdate = vi.hoisted(() => vi.fn());
 const supabaseUpsert = vi.hoisted(() => vi.fn());
+const supabaseCursor = vi.hoisted(() => vi.fn());
+const supabaseSelect = vi.hoisted(() => vi.fn());
 
 const supabaseBuilder = vi.hoisted(() => {
   const builder = {
@@ -25,7 +27,12 @@ const supabaseBuilder = vi.hoisted(() => {
     eq() {
       return builder;
     },
-    select() {
+    select(columns: string) {
+      supabaseSelect(columns);
+      return builder;
+    },
+    gt(key: string, cursor: string) {
+      supabaseCursor(key, cursor);
       return builder;
     },
     maybeSingle() {
@@ -147,6 +154,36 @@ describe("common database abstraction", () => {
       ),
       [JSON.stringify(payload), ["updates:read", "updates:write"], "update-id"],
     );
+  });
+
+  it("selects only release version fields and advances the PostgreSQL cursor", async () => {
+    const { supabase } = await import("./supabase.js");
+    await supabase
+      .from("ota_updates")
+      .select("id,app_version:manifest->extra->expoClient->version")
+      .gt("id", "last-id")
+      .order("id")
+      .limit(200)
+      .execute();
+    expect(poolQuery).toHaveBeenCalledWith(
+      "SELECT id, manifest->'extra'->'expoClient'->'version' AS app_version FROM ota_updates WHERE id > $1 ORDER BY id ASC NULLS LAST LIMIT $2",
+      ["last-id", 200],
+    );
+  });
+
+  it("forwards the release projection and cursor to PostgREST", async () => {
+    process.env.DATABASE_PROVIDER = "supabase";
+    process.env.SUPABASE_URL = "https://example.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "test-key";
+    const { supabase } = await import("./supabase.js");
+    const columns = "id,app_version:manifest->extra->expoClient->version";
+    await supabase
+      .from("ota_updates")
+      .select(columns)
+      .gt("id", "last-id")
+      .execute();
+    expect(supabaseSelect).toHaveBeenCalledWith(columns);
+    expect(supabaseCursor).toHaveBeenCalledWith("id", "last-id");
   });
 
   it("unwraps JSONB payloads for Supabase without changing plain arrays", async () => {

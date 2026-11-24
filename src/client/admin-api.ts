@@ -8,6 +8,7 @@ import {
   EmergencyRedirectsListResponse,
   GuardActionItem,
   GuardActionsListResponse,
+  ReleaseFilters,
   UpdateDetail,
   UpdatePolicy,
   UpdatesListResponse,
@@ -73,12 +74,15 @@ export async function getAdminSession() {
   return parseJson<AdminSessionResponse>(response);
 }
 
-export async function getUpdates(params: {
-  page: number;
-  pageSize: number;
-  sortBy: string;
-  order: "asc" | "desc";
-}) {
+export async function getUpdates(
+  params: Partial<ReleaseFilters> & {
+    page: number;
+    pageSize: number;
+    sortBy: string;
+    order: "asc" | "desc";
+  },
+  signal?: AbortSignal,
+) {
   const query = new URLSearchParams({
     page: String(params.page),
     pageSize: String(params.pageSize),
@@ -86,15 +90,27 @@ export async function getUpdates(params: {
     order: params.order,
   });
 
+  for (const key of [
+    "q",
+    "platform",
+    "channel",
+    "runtime",
+    "status",
+    "audience",
+  ] as const) {
+    if (params[key]) query.set(key, params[key]);
+  }
   const response = await fetch(`/api/admin/updates?${query.toString()}`, {
+    signal,
     cache: "no-store",
   });
 
   return parseJson<UpdatesListResponse>(response);
 }
 
-export async function getUpdate(encodedKey: string) {
+export async function getUpdate(encodedKey: string, signal?: AbortSignal) {
   const response = await fetch(`/api/admin/updates/${encodedKey}`, {
+    signal,
     cache: "no-store",
   });
 

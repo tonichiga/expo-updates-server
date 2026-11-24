@@ -1,7 +1,7 @@
 "use client";
 import { useI18n } from "@/src/client/i18n/provider";
 
-import { RefreshCw, SlidersHorizontal, X } from "lucide-react";
+import { ChevronDown, RefreshCw, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,11 +10,19 @@ import {
   NativeSelectOption,
 } from "@/components/ui/native-select";
 import { Badge } from "@/components/ui/badge";
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@/components/ui/collapsible";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Analytics, useKindNames } from "@/src/client/devices/analytics";
-import { Registry } from "@/src/client/devices/registry";
+import { Overview, useKindNames } from "@/src/client/devices/analytics";
+import { Cohorts } from "@/src/client/devices/cohorts";
+import { VersionAdoptionChart } from "@/src/client/devices/version-adoption-chart";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Registry, VersionTable } from "@/src/client/devices/registry";
 import {
   useDevicesReport,
   type Filters,
@@ -41,147 +49,156 @@ export default function DevicesPage() {
   const update = (key: keyof Filters, value: string) =>
     setFilters((previous) => ({ ...previous, [key]: value }));
   const options = report?.options;
+  const period =
+    applied.days === "1" ? t("24 часа") : t("{0} дней", [applied.days]);
   return (
-    <main className="mx-auto max-w-[1600px] space-y-6 p-4 md:p-8">
-      <header className="flex flex-wrap items-start justify-between gap-4">
+    <div className="mx-auto w-full max-w-[1600px] space-y-5 p-4 md:p-8">
+      <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="mb-1 text-xs font-medium uppercase tracking-[.16em] text-muted-foreground">
-            {t("Аналитика приложения")}
-          </p>
-          <h1 className="text-2xl font-semibold tracking-tight md:text-[28px]">
+          <h1 className="text-3xl font-semibold tracking-tight">
             {t("Установки")}
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {t("Версии, активность и переход на OTA в одном месте.")}
+          <p className="mt-1.5 text-sm text-muted-foreground">
+            {t("Versions and activity reported by app installations.")}
           </p>
         </div>
-        <Button variant="outline" disabled={loading} onClick={refresh}>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={loading}
+          onClick={refresh}
+        >
           <RefreshCw
-            className={
-              loading ? "animate-spin motion-reduce:animate-none" : ""
-            }
+            className={loading ? "animate-spin motion-reduce:animate-none" : ""}
           />
           {loading ? t("Обновление…") : t("Обновить")}
         </Button>
       </header>
-      <Card className="gap-0 py-5 shadow-none">
-        <CardContent>
-          <div className="mb-4 flex items-center gap-2 text-sm font-medium">
-            <SlidersHorizontal className="size-4 text-muted-foreground" />
-            {t("Фильтры")}
-            {activeFilters > 0 && (
-              <Badge variant="secondary">{activeFilters}</Badge>
-            )}
-            <span className="ml-auto text-xs font-normal text-muted-foreground">
-              {t("Вся выборка")}
-            </span>
-          </div>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              apply();
-            }}
-            className="grid grid-cols-2 items-end gap-3 lg:grid-cols-3 2xl:grid-cols-6"
-          >
-            <Filter
-              label={t("Период активности")}
-              id="days"
-              value={filters.days}
-              onChange={(v) => update("days", v)}
-              items={[
-                ["1", t("24 часа")],
-                ["7", t("7 дней")],
-                ["30", t("30 дней")],
-              ]}
-            />
-            <Filter
-              label={t("Платформа")}
-              id="platform"
-              value={filters.platform}
-              onChange={(v) => update("platform", v)}
-              items={[
-                ["", t("Все платформы")],
-                ...["android", "ios"].map((v) => [
-                  v,
-                  v === "ios" ? "iOS" : "Android",
-                ]),
-              ]}
-            />
-            <Filter
-              label={t("Канал")}
-              id="channel"
-              value={filters.channel}
-              onChange={(v) => update("channel", v)}
-              items={[
-                ["", t("Все каналы")],
-                ...(options?.channels || []).map((v) => [v, v]),
-              ]}
-            />
-            <Filter
-              label={t("Runtime")}
-              id="runtime"
-              value={filters.runtime}
-              onChange={(v) => update("runtime", v)}
-              items={[
-                ["", t("Все runtime")],
-                ...(options?.runtimes || []).map((v) => [v, v]),
-              ]}
-            />
-            <Filter
-              label={t("Тип запуска")}
-              id="launchKind"
-              value={filters.launchKind}
-              onChange={(v) => update("launchKind", v)}
-              items={[["", t("Все типы")], ...Object.entries(kindNames)]}
-            />
-            <div className="grid gap-2">
-              <Label htmlFor="installation-search">
-                {t("Installation ID")}
-              </Label>
-              <Input
-                id="installation-search"
-                placeholder={t("ID или часть ID")}
-                value={filters.search}
-                maxLength={36}
-                pattern="[a-fA-F0-9\-]*"
-                title={t("Часть UUID: цифры, буквы a–f и дефисы")}
-                onChange={(e) => update("search", e.target.value)}
-                className="bg-background/40"
-              />
-            </div>
-            <div className="flex flex-wrap items-center gap-2 col-span-2 lg:col-span-3 2xl:col-span-6">
-              <Button type="submit" size="sm" disabled={loading}>
-                {t("Применить")}
-              </Button>
+      <Card className="gap-0 py-0 shadow-none">
+        <CardContent className="px-4 sm:px-5">
+          <Collapsible className="group/filters">
+            <CollapsibleTrigger asChild>
               <Button
-                type="button"
-                size="sm"
                 variant="ghost"
-                onClick={reset}
-                disabled={loading}
+                className="h-auto w-full flex-wrap justify-start gap-x-3 gap-y-2 py-3.5 whitespace-normal"
+                aria-label={t("Фильтры")}
               >
-                <X />
-                {t("Сбросить")}
-              </Button>
-              {dirty && (
-                <span className="text-xs text-muted-foreground">
-                  {t("Есть неприменённые изменения")}
+                <SlidersHorizontal
+                  aria-hidden="true"
+                  className="size-4 text-primary"
+                />
+                <span className="font-medium">{t("Фильтры")}</span>
+                <span className="border-l pl-3 text-xs text-muted-foreground">
+                  {period}
                 </span>
-              )}
-              <span className="ml-auto text-xs text-muted-foreground">
-                {report && !loading
-                  ? t("Данные на {0}", [
-                      new Date(
-                        report.coverage.generatedAt,
-                      ).toLocaleTimeString(formatLocale, {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      }),
-                    ])
-                  : ""}
-              </span>
-            </div>
-          </form>
+                {activeFilters > 0 && (
+                  <Badge variant="secondary">
+                    {t("{0} filters applied", [activeFilters])}
+                  </Badge>
+                )}
+                {dirty && (
+                  <span className="text-xs text-muted-foreground">
+                    {t("Есть неприменённые изменения")}
+                  </span>
+                )}
+                <ChevronDown
+                  aria-hidden="true"
+                  className="ml-auto size-4 text-muted-foreground group-data-[state=open]/filters:rotate-180"
+                />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  apply();
+                }}
+                className="grid grid-cols-1 items-end gap-3 border-t py-4 min-[380px]:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6"
+              >
+                <Filter
+                  label={t("Период активности")}
+                  id="days"
+                  value={filters.days}
+                  onChange={(v) => update("days", v)}
+                  items={[
+                    ["1", t("24 часа")],
+                    ["7", t("7 дней")],
+                    ["30", t("30 дней")],
+                  ]}
+                />
+                <Filter
+                  label={t("Платформа")}
+                  id="platform"
+                  value={filters.platform}
+                  onChange={(v) => update("platform", v)}
+                  items={[
+                    ["", t("Все платформы")],
+                    ...["android", "ios"].map((v) => [
+                      v,
+                      v === "ios" ? "iOS" : "Android",
+                    ]),
+                  ]}
+                />
+                <Filter
+                  label={t("Канал")}
+                  id="channel"
+                  value={filters.channel}
+                  onChange={(v) => update("channel", v)}
+                  items={[
+                    ["", t("Все каналы")],
+                    ...(options?.channels || []).map((v) => [v, v]),
+                  ]}
+                />
+                <Filter
+                  label={t("Runtime")}
+                  id="runtime"
+                  value={filters.runtime}
+                  onChange={(v) => update("runtime", v)}
+                  items={[
+                    ["", t("Все runtime")],
+                    ...(options?.runtimes || []).map((v) => [v, v]),
+                  ]}
+                />
+                <Filter
+                  label={t("Тип запуска")}
+                  id="launchKind"
+                  value={filters.launchKind}
+                  onChange={(v) => update("launchKind", v)}
+                  items={[["", t("Все типы")], ...Object.entries(kindNames)]}
+                />
+                <div className="grid gap-2">
+                  <Label htmlFor="installation-search">
+                    {t("Installation ID")}
+                  </Label>
+                  <Input
+                    id="installation-search"
+                    placeholder={t("ID или часть ID")}
+                    value={filters.search}
+                    maxLength={36}
+                    pattern="[a-fA-F0-9\-]*"
+                    title={t("Часть UUID: цифры, буквы a–f и дефисы")}
+                    onChange={(e) => update("search", e.target.value)}
+                    className="bg-background/40"
+                  />
+                </div>
+                <div className="col-span-full flex flex-wrap items-center gap-2">
+                  <Button type="submit" size="sm" disabled={loading}>
+                    {t("Применить")}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={reset}
+                    disabled={loading}
+                  >
+                    <X />
+                    {t("Сбросить")}
+                  </Button>
+                </div>
+              </form>
+            </CollapsibleContent>
+          </Collapsible>
         </CardContent>
       </Card>
       {error && (
@@ -216,20 +233,61 @@ export default function DevicesPage() {
           <Skeleton className="h-64 rounded-xl" />
         </div>
       ) : report ? (
-        <div
-          className={loading ? "space-y-6 opacity-60" : "space-y-6"}
+        <Tabs
+          defaultValue="overview"
+          className="min-w-0 gap-4"
           aria-busy={loading}
         >
-          <Analytics report={report} />
-          <Registry report={report} loading={loading} paginate={paginate} />
-          <p className="text-xs leading-5 text-muted-foreground">
-            {t(
-              "Метрика считает установки приложения, а не уникальных людей. Сводка и реестр отражают последнее состояние; график — состояние на конец каждого дня. Переустановка может изменить Installation ID.",
-            )}
-          </p>
-        </div>
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-b pb-2">
+            <TabsList
+              aria-label={t("Аналитика приложения")}
+              variant="line"
+              className="grid h-auto w-full grid-cols-2 justify-start gap-0 sm:flex sm:w-fit"
+            >
+              {[
+                ["overview", t("Overview")],
+                ["versions", t("Versions")],
+                ["cohorts", t("Cohorts")],
+                ["registry", t("Registry")],
+              ].map(([id, label]) => (
+                <TabsTrigger
+                  value={id}
+                  key={id}
+                  className="min-h-9 px-3 after:bottom-0! after:bg-primary"
+                >
+                  {label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+            <p className="text-xs text-muted-foreground">
+              {t("Данные на {0}", [
+                new Date(report.coverage.generatedAt).toLocaleTimeString(
+                  formatLocale,
+                  {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    timeZone: "UTC",
+                  },
+                ) + " UTC",
+              ])}
+            </p>
+          </div>
+          <TabsContent value="overview" className="min-w-0 space-y-4">
+            <Overview report={report} />
+          </TabsContent>
+          <TabsContent value="versions" className="min-w-0 space-y-4">
+            <VersionAdoptionChart report={report} />
+            <VersionTable report={report} />
+          </TabsContent>
+          <TabsContent value="cohorts" className="min-w-0">
+            <Cohorts report={report} />
+          </TabsContent>
+          <TabsContent value="registry" className="min-w-0">
+            <Registry report={report} loading={loading} paginate={paginate} />
+          </TabsContent>
+        </Tabs>
       ) : null}
-    </main>
+    </div>
   );
 }
 function Filter({

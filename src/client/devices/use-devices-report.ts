@@ -1,5 +1,4 @@
 "use client";
-import { useI18n } from "@/src/client/i18n/provider";
 
 import { useEffect, useState } from "react";
 import type { DevicesReport } from "@/src/server/devices/report-types";
@@ -20,7 +19,6 @@ export const defaultFilters: Filters = {
   search: "",
 };
 export function useDevicesReport() {
-  const { t } = useI18n();
   const [filters, setFilters] = useState(defaultFilters);
   const [applied, setApplied] = useState(defaultFilters);
   const [offset, setOffset] = useState(0);
@@ -97,7 +95,7 @@ export function useDevicesReport() {
     setFilters,
     applied,
     report,
-    error: t(error),
+    error,
     loading,
     offset,
     apply,

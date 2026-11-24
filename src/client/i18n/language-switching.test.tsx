@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AdminRoleContext } from "@/components/admin/admin-role";
 import { LanguageSwitcher } from "@/components/admin/language-switcher";
 import EmergencyRedirectsPage from "@/app/updates/emergency-redirects/page";
 import UpdatePolicyEditor from "@/src/client/update-policy-editor";
@@ -44,6 +45,11 @@ const redirect = {
   expectedUpdateId: "22222222-2222-4222-8222-222222222222",
 };
 beforeEach(() => {
+  vi.stubGlobal("ResizeObserver", class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  });
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   container = document.createElement("div");
   document.body.append(container);
@@ -79,7 +85,7 @@ async function switchTo(locale: Locale) {
 }
 async function click(text: string) {
   const button = [...container.querySelectorAll("button")].find(
-    (b) => b.textContent === text,
+    (b) => b.textContent?.trim() === text,
   );
   expect(button, text).toBeDefined();
   await act(async () => button!.click());
@@ -130,7 +136,7 @@ describe("language switching", () => {
     expect(container.textContent).toContain("Аварийный маршрут обновлён");
     await switchTo("uk");
     expect(container.textContent).toContain("Аварійний маршрут оновлено");
-    expect(container.textContent).toContain("Початковий канал");
+    expect(container.querySelector("form")).toBeNull();
     expect(container.textContent).toContain("Увімкнено");
     expect(container.textContent).toContain(redirect.name);
     expect(document.documentElement.lang).toBe("uk");
@@ -200,12 +206,13 @@ describe("language switching", () => {
       root.render(
         <LocaleProvider initialLocale="ru">
           <LanguageSwitcher />
-          <UpdatePolicyEditor encodedKey="test" onSaved={async () => {}} />
+          <AdminRoleContext.Provider value="operator"><UpdatePolicyEditor encodedKey="test" onSaved={async () => {}} /></AdminRoleContext.Provider>
         </LocaleProvider>,
       ),
     );
     expect(container.textContent).toContain("Политика обновления");
     expect(container.textContent).toContain("Каталог действий");
+    await click("Каталог действий");
     await switchTo("uk");
     expect(container.textContent).toContain("Політика оновлення");
     expect(container.textContent).toContain("Додати дію до каталогу");

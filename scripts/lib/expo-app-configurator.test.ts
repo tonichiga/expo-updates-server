@@ -194,6 +194,10 @@ function readCurrentRegistrar() {
 function createManifestOnlyRegistrar() {
   const manifestOnly = readCurrentRegistrar()
     .replace(
+      /if \(process\.argv\[1\] && fs\.existsSync[\s\S]*?fileURLToPath\(import\.meta\.url\)\)\) \{/,
+      "if (process.argv[1] === fileURLToPath(import.meta.url)) {",
+    )
+    .replace(
       `
 export function readExpoAppVersion(appRoot, readFile = fs.readFileSync) {
   try {

@@ -1,7 +1,8 @@
 "use client";
 import { useI18n } from "@/src/client/i18n/provider";
 
-import { useEffect, useState } from "react";
+import { AdminRoleContext } from "@/components/admin/admin-role";
+import { useContext, useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 export function DeviceName({
@@ -12,6 +13,8 @@ export function DeviceName({
   platform: string;
 }) {
   const { t } = useI18n();
+  const role = useContext(AdminRoleContext);
+  const canEdit = role === "admin" || role === "operator";
   const [name, setName] = useState("");
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
@@ -47,9 +50,7 @@ export function DeviceName({
       });
       if (!r.ok)
         throw new Error((await r.json()).error || "Не удалось сохранить");
-      setStatus(
-        "Имя сохранено — устройство можно выбрать в аудитории OTA.",
-      );
+      setStatus("Имя сохранено — устройство можно выбрать в аудитории OTA.");
     } catch (e) {
       setStatus((e as Error).message);
     } finally {
@@ -57,25 +58,38 @@ export function DeviceName({
     }
   }
   return (
-    <div className="space-y-2 px-6 pb-6">
-      <label htmlFor="ota-device-name" className="text-sm font-medium">
-        {t("Имя устройства")}
-      </label>
-      <Input
-        id="ota-device-name"
-        maxLength={80}
-        placeholder={t("Мой телефон")}
-        value={name}
-        disabled={!loaded || busy}
-        onChange={(e) => setName(e.target.value)}
-      />
-      <Button
-        variant="outline"
-        onClick={save}
-        disabled={!loaded || busy || !name.trim()}
-      >
-        {t("Сохранить имя")}
-      </Button>
+    <div className="mx-4 space-y-2 rounded-lg border bg-muted/35 p-4 sm:mx-6">
+      {canEdit ? (
+        <>
+          <label htmlFor="ota-device-name" className="text-sm font-medium">
+            {t("Имя устройства")}
+          </label>
+          <Input
+            id="ota-device-name"
+            maxLength={80}
+            placeholder={t("Мой телефон")}
+            value={name}
+            disabled={!loaded || busy}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <Button
+            variant="outline"
+            onClick={save}
+            disabled={!loaded || busy || !name.trim()}
+          >
+            {t("Сохранить имя")}
+          </Button>
+        </>
+      ) : (
+        <>
+          <p className="text-xs font-medium text-muted-foreground">
+            {t("Имя устройства")}
+          </p>
+          <p className="break-words text-sm">
+            {loaded || status ? name || "—" : t("Загрузка...")}
+          </p>
+        </>
+      )}
       <p className="text-xs text-muted-foreground" role="status">
         {t(status)}
       </p>

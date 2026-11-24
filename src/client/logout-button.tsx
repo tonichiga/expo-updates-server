@@ -1,4 +1,5 @@
 "use client";
+import { Button } from "@/components/ui/button";
 import { useI18n } from "@/src/client/i18n/provider";
 
 import { adminLogout } from "@/src/client/admin-api";
@@ -21,13 +22,12 @@ export default function LogoutButton() {
   };
 
   return (
-    <button
+    <Button variant="outline"
       type="button"
       onClick={handleLogout}
       disabled={isLoading}
-      className="rounded-md border border-zinc-300 px-4 py-4 text-sm hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:hover:bg-zinc-900"
     >
       {isLoading ? t("Выход...") : t("Выйти")}
-    </button>
+    </Button>
   );
 }

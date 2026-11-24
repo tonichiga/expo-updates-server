@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import vm from "node:vm";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -441,4 +441,14 @@ describe("embedded update registrar", () => {
       "ci_scripts/register-embedded-update.sh",
     );
   });
+});
+
+it("executes the embedded registrar when Xcode invokes a symlinked path", () => {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "ota-cli-link-"));
+  temporaryDirectories.push(scratch);
+  const entry = path.join(scratch, "register.mjs");
+  fs.symlinkSync(fileURLToPath(registrarUrl), entry);
+  const result = spawnSync(process.execPath, [entry, "--platform", "ios"], { encoding: "utf8" });
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain("Embedded update registration failed");
 });

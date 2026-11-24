@@ -1,4 +1,13 @@
 "use client";
+import { AdminRoleContext } from "@/components/admin/admin-role";
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@/components/ui/collapsible";
+import { ChevronDown } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { useConfirmAction } from "@/components/admin/confirm-action";
 import type { TranslationMessage } from "@/src/client/i18n/messages";
 import { useI18n } from "@/src/client/i18n/provider";
 
@@ -30,7 +39,7 @@ import {
   mergeGuardActionOptions,
   normalizeCreatableGuardAction,
 } from "@/src/client/guard-action-options";
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { useContext, FormEvent, useEffect, useRef, useState } from "react";
 
 function payloadText(guard: UpdatePolicyGuard | null): string {
   return guard?.payload === undefined
@@ -45,6 +54,8 @@ export default function UpdatePolicyEditor({
   encodedKey: string;
   onSaved: () => Promise<void>;
 }) {
+  const isViewer = useContext(AdminRoleContext) === "viewer";
+  const confirmAction = useConfirmAction();
   const { t, formatLocale } = useI18n();
   const [policy, setPolicy] = useState<UpdatePolicy | null>(null);
   const [payload, setPayload] = useState("");
@@ -99,7 +110,7 @@ export default function UpdatePolicyEditor({
   }
 
   const readOnly = !policy.editable;
-  const editingDisabled = readOnly || saving;
+  const editingDisabled = readOnly || isViewer || saving;
   const guardActionOptions = mergeGuardActionOptions(
     guardActions,
     policy.guard ? [policy.guard.action] : [],
@@ -171,12 +182,14 @@ export default function UpdatePolicyEditor({
   const removeGuardAction = async (option: GuardActionOption) => {
     if (
       !option.id ||
-      !window.confirm(
+      !(await confirmAction(
+        t("Delete from catalog"),
         t(
           'Delete "{0}" from the action catalog? Existing policies are unaffected.',
           [option.actionKey],
         ),
-      )
+        true,
+      ))
     ) {
       return;
     }
@@ -207,9 +220,7 @@ export default function UpdatePolicyEditor({
         const trimmedPayload = payload.trim();
         guard = {
           action: policy.guard.action,
-          ...(trimmedPayload
-            ? { payload: JSON.parse(trimmedPayload) }
-            : {}),
+          ...(trimmedPayload ? { payload: JSON.parse(trimmedPayload) } : {}),
         };
       }
       const saved = await putUpdatePolicy(
@@ -305,116 +316,21 @@ export default function UpdatePolicyEditor({
           </Button>
         </div>
       ) : null}
-      {canWriteGuardActions ? (
-        <form
-          onSubmit={(event) => void createCatalogOnlyAction(event)}
-          className="flex flex-wrap items-end gap-2 rounded-md border border-border p-3 "
-        >
-          <label className="min-w-56 flex-1 text-xs text-muted-foreground">
-            {t("Add action to catalog")}
-            <TextInput
-              value={catalogCreateValue}
-              maxLength={100}
-              disabled={catalogCreatePending}
-              onChange={(event) => {
-                setCatalogCreateValue(event.target.value);
-                setCatalogCreateError("");
-              }}
-              aria-describedby="guard-action-catalog-create-help"
-              className="mt-1 w-full rounded border border-input bg-background p-2 text-sm "
-              placeholder={t("Reusable action name")}
-            />
-          </label>
-          <Button
-            variant="outline"
-            size="sm"
-            type="submit"
-            disabled={catalogCreatePending}
-          >
-            {catalogCreatePending ? t("Adding…") : t("Add to catalog")}
-          </Button>
-          <p
-            id="guard-action-catalog-create-help"
-            className="w-full text-xs text-muted-foreground"
-          >
-            {t(
-              "Adds a reusable catalog item without changing this policy.",
-            )}
-          </p>
-          {catalogCreateError ? (
-            <div
-              role="status"
-              className="flex w-full items-center gap-2 text-xs text-amber-700 dark:text-amber-300"
-            >
-              <span>{t(catalogCreateError)}</span>
-              <Button variant="outline" size="sm" type="submit">
-                {t("Retry")}
-              </Button>
-            </div>
-          ) : null}
-        </form>
-      ) : null}
-      <div className="space-y-2 rounded-md border border-border p-3 ">
-        <h3 className="text-sm font-medium">{t("Action catalog")}</h3>
-        {guardActions.length > 0 ? (
-          <ul
-            aria-label={t("Guard action catalog entries")}
-            className="max-h-40 space-y-1 overflow-auto"
-          >
-            {guardActions.map((item) => (
-              <li
-                key={item.id}
-                className="flex items-center justify-between gap-2 rounded bg-muted/30 px-2 py-1 text-sm dark:bg-muted/20"
-              >
-                <span className="min-w-0 truncate" title={item.actionKey}>
-                  {item.actionKey}
-                </span>
-                {canWriteGuardActions ? (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    type="button"
-                    aria-label={t("Delete {0} from action catalog", [
-                      item.actionKey,
-                    ])}
-                    onClick={() =>
-                      void removeGuardAction({
-                        id: item.id,
-                        actionKey: item.actionKey,
-                        persisted: true,
-                      })
-                    }
-                  >
-                    {t("Delete")}
-                  </Button>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            {t("No catalog actions found.")}
-          </p>
-        )}
-      </div>
-
       <div className="space-y-3 rounded-lg border border-input p-3 ">
         <label className="flex items-center gap-2 text-sm font-medium">
-          <input
-            className="size-4 rounded border-input accent-primary"
-            type="checkbox"
+          <Switch
             checked={policy.guard !== null}
             disabled={editingDisabled}
-            onChange={(event) => {
+            onCheckedChange={(checked) => {
               beginCatalogAttempt(actionAttempt.current);
               setActionError("");
               setPolicy({
                 ...policy,
-                guard: event.target.checked
+                guard: checked
                   ? { action: guardActions[0]?.actionKey || "" }
                   : null,
               });
-              if (!event.target.checked) setPayload("");
+              if (!checked) setPayload("");
             }}
           />
           {t("Guard enabled")}
@@ -468,6 +384,106 @@ export default function UpdatePolicyEditor({
       >
         {t("Save policy")}
       </Button>
+      <Collapsible className="border-t pt-3">
+        <CollapsibleTrigger asChild>
+          <Button variant="ghost" size="sm">
+            {t("Action catalog")} <ChevronDown />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-3 space-y-3">
+          {canWriteGuardActions ? (
+            <form
+              onSubmit={(event) => void createCatalogOnlyAction(event)}
+              className="flex flex-wrap items-end gap-2 rounded-md border border-border p-3 "
+            >
+              <label className="min-w-56 flex-1 text-xs text-muted-foreground">
+                {t("Add action to catalog")}
+                <TextInput
+                  value={catalogCreateValue}
+                  maxLength={100}
+                  disabled={catalogCreatePending}
+                  onChange={(event) => {
+                    setCatalogCreateValue(event.target.value);
+                    setCatalogCreateError("");
+                  }}
+                  aria-describedby="guard-action-catalog-create-help"
+                  className="mt-1 w-full rounded border border-input bg-background p-2 text-sm "
+                  placeholder={t("Reusable action name")}
+                />
+              </label>
+              <Button
+                variant="outline"
+                size="sm"
+                type="submit"
+                disabled={catalogCreatePending}
+              >
+                {catalogCreatePending ? t("Adding…") : t("Add to catalog")}
+              </Button>
+              <p
+                id="guard-action-catalog-create-help"
+                className="w-full text-xs text-muted-foreground"
+              >
+                {t(
+                  "Adds a reusable catalog item without changing this policy.",
+                )}
+              </p>
+              {catalogCreateError ? (
+                <div
+                  role="status"
+                  className="flex w-full items-center gap-2 text-xs text-amber-700 dark:text-amber-300"
+                >
+                  <span>{t(catalogCreateError)}</span>
+                  <Button variant="outline" size="sm" type="submit">
+                    {t("Retry")}
+                  </Button>
+                </div>
+              ) : null}
+            </form>
+          ) : null}
+          <div className="space-y-2 rounded-md border border-border p-3 ">
+            {guardActions.length > 0 ? (
+              <ul
+                aria-label={t("Guard action catalog entries")}
+                className="max-h-40 space-y-1 overflow-auto"
+              >
+                {guardActions.map((item) => (
+                  <li
+                    key={item.id}
+                    className="flex items-center justify-between gap-2 rounded bg-muted/30 px-2 py-1 text-sm dark:bg-muted/20"
+                  >
+                    <span className="min-w-0 truncate" title={item.actionKey}>
+                      {item.actionKey}
+                    </span>
+                    {canWriteGuardActions ? (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        type="button"
+                        aria-label={t("Delete {0} from action catalog", [
+                          item.actionKey,
+                        ])}
+                        onClick={() =>
+                          void removeGuardAction({
+                            id: item.id,
+                            actionKey: item.actionKey,
+                            persisted: true,
+                          })
+                        }
+                      >
+                        {t("Delete")}
+                      </Button>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                {t("No catalog actions found.")}
+              </p>
+            )}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
     </Card>
   );
 }

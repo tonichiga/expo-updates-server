@@ -4,8 +4,8 @@ The admin panel uses a shared shadcn/ui (Radix) UI kit, Tailwind CSS 4, Lucide a
 
 ## Navigation and data {#навигация-и-данные}
 
-- **Installations** (`/updates/devices`): shared server filters, KPIs, daily activity, version distribution, cohorts and registry. Search supports partial installation IDs. Select an ID for full identifiers and diagnostics.
-- **OTA updates** (`/updates`): releases, sorting, pagination and editing. The emergency distribution stop is in the expandable Management panel.
+- **Releases** (`/updates`) opens after sign-in. Search all releases by ID, comment, channel or version. Combine platform, channel, runtime, status and audience filters before paging. Open a release to review its delivery scope, edit the audience and policy, activate, roll back or promote. Metadata has its own tab. The global distribution switch appears above the list.
+- **Installations** (`/updates/devices`) has Overview, Versions, Cohorts and Registry tabs. Shared filters apply across tabs. Daily values distinguish missing history, zero activity and a partial UTC day. Version shares use the installations in each displayed platform and channel.
 - **Embedded builds** and **Emergency redirects** retain the existing role restrictions and management actions.
 
 Apply filters to the entire selection with Apply. A failed request keeps the previous result with an explicit message. If the last page disappears after a refresh, the registry moves to the last available page. Analytics count installations, not unique people.

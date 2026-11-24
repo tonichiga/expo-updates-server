@@ -2,6 +2,9 @@
 import { LanguageSwitcher } from "@/components/admin/language-switcher";
 import { useI18n } from "@/src/client/i18n/provider";
 
+import { ArrowRight, RadioTower } from "lucide-react";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { adminLogin } from "@/src/client/admin-api";
@@ -32,50 +35,68 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="absolute right-4 top-4">
-        <LanguageSwitcher />
-      </div>
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-sm"
-      >
-        <h1 className="text-2xl font-semibold">OTA Admin</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {t("Вход в панель управления обновлениями")}
-        </p>
-
-        <div className="mt-6 space-y-4">
-          <label className="block">
-            <span className="mb-1 block text-sm">{t("Логин")}</span>
-            <Input
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
-
-              autoComplete="username"
-              required
-            />
-          </label>
-
-          <label className="block">
-            <span className="mb-1 block text-sm">{t("Пароль")}</span>
-            <Input
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-
-              autoComplete="current-password"
-              required
-            />
-          </label>
+    <main className="flex min-h-svh flex-col bg-background">
+      <header className="flex items-center justify-between gap-4 border-b px-5 py-3 md:px-8">
+        <div className="flex items-center gap-2.5 font-semibold tracking-tight">
+          <span className="grid size-8 place-items-center rounded-lg bg-primary text-primary-foreground">
+            <RadioTower aria-hidden="true" className="size-[18px]" />
+          </span>
+          OTA Console
         </div>
-
-        {error ? <p className="mt-4 text-sm text-red-600">{t(error)}</p> : null}
-
-        <Button type="submit" disabled={loading} className="mt-6 w-full">
-          {loading ? t("Вход...") : t("Войти")}
-        </Button>
-      </form>
+        <LanguageSwitcher />
+      </header>
+      <div className="grid flex-1 place-items-center px-4 py-12">
+        <Card className="w-full max-w-sm gap-5">
+          <CardHeader>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {t("Войти")}
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              {t("Вход в панель управления обновлениями")}
+            </p>
+          </CardHeader>
+          <CardContent>
+            <form
+              onSubmit={handleSubmit}
+              className="grid gap-4"
+              aria-busy={loading}
+            >
+              <label className="grid gap-2 text-sm font-medium">
+                {t("Логин")}
+                <Input
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  autoComplete="username"
+                  name="username"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  required
+                />
+              </label>
+              <label className="grid gap-2 text-sm font-medium">
+                {t("Пароль")}
+                <Input
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  autoComplete="current-password"
+                  name="password"
+                  required
+                />
+              </label>
+              {error && (
+                <Alert variant="destructive">
+                  <AlertDescription>{t(error)}</AlertDescription>
+                </Alert>
+              )}
+              <Button type="submit" disabled={loading} className="mt-1 w-full">
+                {loading ? t("Вход...") : t("Войти")}{" "}
+                <ArrowRight aria-hidden="true" />
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
     </main>
   );
 }

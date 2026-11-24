@@ -96,6 +96,27 @@ describe("GET /api/admin/updates authorization", () => {
     expect(getUpdatesPage).toHaveBeenCalledOnce();
   });
 
+  it("forwards search and release filters to the history query", async () => {
+    sessionAuth.result = { id: "viewer", username: "reader", role: "viewer" };
+    const { GET } = await import("./route");
+    const response = await GET(
+      new NextRequest(
+        "https://updates.example.com/api/admin/updates?q=2.4&channel=beta&runtime=2&platform=ios&audience=devices&status=draft",
+      ),
+    );
+    expect(response.status).toBe(200);
+    expect(getUpdatesPage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        q: "2.4",
+        channel: "beta",
+        runtime: "2",
+        platform: "ios",
+        audience: "devices",
+        status: "draft",
+      }),
+    );
+  });
+
   it("returns the app version associated with each update", async () => {
     tokenAuth.result = {
       id: "token-id",
