@@ -1,8 +1,28 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { planOtaRootHook } from "./ota-root-hook-patcher.mjs";
 const ENTRY = "ota-entry.js";
 const META = "ota-client-entry.json";
+// Unmodified TypeScript client shipped in 0.4.0 and early 0.5.0 templates.
+const previousClientFiles = new Map([
+  [
+    "ota-client/model/update-controller.ts",
+    "130bcfa37864383143b0f1fb2b0789e94e5f3e2b7f4fe3d22e168a55643b7e03",
+  ],
+  [
+    "ota-client/types.ts",
+    "29c4894ed1f7cbd61f59f2f62319748f3555f9e2d883d858e3b64100d8940c64",
+  ],
+  [
+    "ota-client/ui/ota-updates.tsx",
+    "e2a710f41e9ab2f33fbd8b7948f25c43a601324703b7f714bf34f4fdc9099f2c",
+  ],
+  [
+    "ota-client/docs/update-lifecycle.md",
+    "f16381c3884675c0278968a5980c869af909b89ba61dfcaf8cdc3febe97604b4",
+  ],
+]);
 const extensions = ["tsx", "ts", "jsx", "js", "mjs", "cjs"];
 function hasEntry(root, entry, platform) {
   const suffixes = platform === "web" ? ["web", ""] : [platform, "native", ""];
@@ -124,10 +144,15 @@ export function planOtaClient({
     );
   for (const [name, content] of files) {
     const destination = path.join(appRoot, name);
+    if (force || !fs.existsSync(destination)) continue;
+    const current = fs.readFileSync(destination, "utf8");
+    if (current === content) continue;
+    const previousHash = previousClientFiles.get(name);
     if (
-      fs.existsSync(destination) &&
-      fs.readFileSync(destination, "utf8") !== content &&
-      !force
+      !previousHash ||
+      createHash("sha256")
+        .update(current.replace(/\r\n/g, "\n"))
+        .digest("hex") !== previousHash
     ) {
       throw new Error(
         `Refusing to overwrite ${destination}. Re-run with --force.`,

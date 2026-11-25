@@ -886,7 +886,7 @@ describe("configureExpoApp", () => {
       app: appRoot,
       certificate: certificatePath,
       serverUrl: "https://updates.example.com",
-      channel: "production",
+      channel: "qa-preview",
       runtimeVersion: "1.0.0",
     };
     fs.mkdirSync(path.dirname(registrarPath), { recursive: true });

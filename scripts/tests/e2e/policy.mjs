@@ -53,6 +53,13 @@ export async function exercisePolicyEditor(page, { db, storage, password }) {
   );
 
   await radio("Require a store update").click();
+  const delivery = tab.getByRole("combobox", { name: "Delivery", exact: true });
+  await expect(delivery).toHaveAccessibleDescription(/next full launch.*store button/i);
+  await delivery.click();
+  await page.getByRole("option", { name: "Manual", exact: true }).click();
+  await expect(delivery).toHaveAccessibleDescription(/when to download and restart.*block the OTA download/i);
+  await delivery.click();
+  await page.getByRole("option", { name: "Background", exact: true }).click();
   await save.click();
   await expect(tab.getByRole("alert")).toContainText(
     "Enter a valid store link",

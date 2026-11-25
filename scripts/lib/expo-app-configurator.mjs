@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 
 const CHANNEL_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const LEGACY_GENERATED_FILE_SHA256 = {
+  publisherDatabaseClient: "79fd8aea1fa626485f83c1b3bf5b234317c5bcadd64dac7c6c9faddc490cbe62",
   embeddedRegistrars: [
     "6d2201f51851d9af41449f8da3653a4792cddb30d411d59e3c161adbc5cf76ff",
     "29c48288d4804c072129da0ef60a12ad0892809eb8d57a14be94d039d990d6d7",
@@ -462,15 +463,6 @@ function patchPackageJson(packageJson, platform) {
   return packageJson;
 }
 
-function patchPublisherEnvExample(filePath, channel) {
-  const current = fs.readFileSync(filePath, "utf8");
-  const next = current.replace(
-    /^EXPO_UPDATE_CHANNEL=.*$/m,
-    `EXPO_UPDATE_CHANNEL=${channel}`,
-  );
-  fs.writeFileSync(filePath, next, "utf8");
-}
-
 function validateProject(appRoot) {
   const packagePath = path.join(appRoot, "package.json");
   const appJsonPath = path.join(appRoot, "app.json");
@@ -715,9 +707,18 @@ export function configureExpoApp(
     exportCommandDestination,
     force,
   );
-  assertCopyAllowed(envExampleSource, envExampleDestination, force);
+  const envExample = fs.readFileSync(envExampleSource, "utf8").replace(
+    /^EXPO_UPDATE_CHANNEL=.*$/m,
+    `EXPO_UPDATE_CHANNEL=${channel}`,
+  );
+  if (fs.existsSync(envExampleDestination) && fs.readFileSync(envExampleDestination, "utf8") !== envExample) {
+    assertCopyAllowed(envExampleSource, envExampleDestination, force);
+  }
   for (const file of publisherFiles) {
-    assertCopyAllowed(file.source, file.destination, force);
+    const knownVersions = file.source === path.join(publisherTemplateRoot, "api", "database-client.mjs")
+      ? [LEGACY_GENERATED_FILE_SHA256.publisherDatabaseClient]
+      : [];
+    assertGeneratedCopyAllowed(file.source, file.destination, force, knownVersions);
   }
   assertGeneratedCopyAllowed(
     registrarSource,
@@ -775,7 +776,7 @@ export function configureExpoApp(
   copyFile(certificatePath, certificateDestination);
   copyFile(publisherSource, publisherDestination);
   copyFile(exportCommandSource, exportCommandDestination);
-  copyFile(envExampleSource, envExampleDestination);
+  fs.writeFileSync(envExampleDestination, envExample);
   for (const file of publisherFiles) {
     copyFile(file.source, file.destination);
   }
@@ -783,7 +784,6 @@ export function configureExpoApp(
   copyFile(androidRegistrarSource, androidRegistrarDestination);
   fs.chmodSync(androidRegistrarDestination, 0o755);
   copyFile(iosPluginSource, iosPluginDestination);
-  patchPublisherEnvExample(envExampleDestination, channel);
   if (localPublisherEnv) {
     fs.writeFileSync(
       publisherEnvDestination,

@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import path from "node:path";
+import { mkdir, writeFile, readFile, symlink } from "node:fs/promises";
+import { planOtaClient } from "../../lib/ota-client-configurator.mjs";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { fileURLToPath } from "node:url";
@@ -11,6 +14,7 @@ export async function exerciseClientLifecycle({
   storage,
   password,
   publicKey,
+  scratch,
 }) {
   assert.equal(new URL(origin).hostname, "127.0.0.1");
   const response = await fetch(origin + "/api/admin/login", {
@@ -83,6 +87,34 @@ export async function exerciseClientLifecycle({
     }
   }
   const root = fileURLToPath(new URL("../../../", import.meta.url));
+  const appRoot = path.join(scratch, "mobile");
+  await mkdir(appRoot);
+  await writeFile(
+    path.join(appRoot, "index.js"),
+    "import {registerRootComponent} from 'expo'; import App from './App'; registerRootComponent(App);",
+  );
+  await writeFile(
+    path.join(appRoot, "App.jsx"),
+    "export default function App() { return null; }",
+  );
+  const plan = planOtaClient({
+    appRoot,
+    templateRoot: path.join(root, "templates/expo-app"),
+    packageJson: { main: "index.js" },
+    manifestUrl: origin + "/api/manifest",
+    channel: suite,
+  });
+  assert.deepEqual(plan.warnings, []);
+  plan.apply();
+  assert.match(
+    await readFile(path.join(appRoot, "App.jsx"), "utf8"),
+    /<OtaUpdates autoCheck autoUpdate=\{false\} autoReload=\{false\}/,
+  );
+  await symlink(
+    path.join(root, "node_modules"),
+    path.join(appRoot, "node_modules"),
+    "dir",
+  );
   const child = spawn(
     process.execPath,
     [
@@ -96,6 +128,7 @@ export async function exerciseClientLifecycle({
       stdio: "inherit",
       env: {
         ...process.env,
+        OTA_E2E_CLIENT_DIRECTORY: path.join(appRoot, "ota-client"),
         OTA_LIFECYCLE_FIXTURE: JSON.stringify({
           origin,
           cookie,

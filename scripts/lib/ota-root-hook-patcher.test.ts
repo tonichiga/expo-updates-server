@@ -268,6 +268,30 @@ describe("root selection", () => {
       planOtaRootHook({ appRoot, originalEntry: "__platform_default__" }).files,
     ).toHaveLength(0);
   });
+  it("mounts the client in a blank Expo app and leaves custom registrations alone", () => {
+    const index =
+      "import {registerRootComponent} from 'expo';\nimport App from './App';\n// Standard Expo entry\nregisterRootComponent(App);";
+    const appRoot = fixture({ "index.js": index, "App.js": component });
+    const plan = () =>
+      planOtaRootHook({ appRoot, originalEntry: "./index.js" });
+    const first = plan();
+    expect(first.warnings).toEqual([]);
+    const [[file, patched]] = first.files;
+    expect(file).toBe("App.js");
+    expect(patched).toContain(
+      "<OtaUpdates autoCheck autoUpdate={false} autoReload={false}",
+    );
+    fs.writeFileSync(path.join(appRoot, file), patched);
+    expect(plan().files[0][1]).toBe(patched);
+    fs.writeFileSync(
+      path.join(appRoot, "index.js"),
+      index.replace(
+        "registerRootComponent(App);",
+        "registerRootComponent(wrap(App));",
+      ),
+    );
+    expect(plan().files).toEqual([]);
+  });
   it("does not patch ignored app root when src/app exists without a layout", () => {
     const appRoot = fixture({
       "src/app/index.tsx": component,

@@ -455,6 +455,7 @@ export default function UpdatePolicyEditor({
                         >
                           <SelectTrigger
                             id="policy-delivery"
+                            aria-describedby="policy-delivery-hint policy-guard-hint"
                             className="w-full"
                           >
                             <SelectValue />
@@ -468,10 +469,29 @@ export default function UpdatePolicyEditor({
                             </SelectItem>
                           </SelectContent>
                         </Select>
-                        <p className="text-xs text-muted-foreground">
-                          {t(
-                            "The guard takes priority while access is blocked.",
-                          )}
+                        <p
+                          id="policy-delivery-hint"
+                          className="text-xs leading-relaxed text-muted-foreground"
+                        >
+                          {draft.delivery === "background"
+                            ? t(
+                                "When OTA is allowed, the app downloads it silently during use. It takes effect on the next full launch. For an automatic restart, select Immediate required update.",
+                              )
+                            : t(
+                                "When OTA is allowed, the default client lets the user choose when to download and restart. They can postpone the update.",
+                              )}
+                        </p>
+                        <p
+                          id="policy-guard-hint"
+                          className="text-xs leading-relaxed text-muted-foreground"
+                        >
+                          {draft.behavior === "store"
+                            ? t(
+                                "This release requires an update from the store. Both delivery modes show the store button and block the OTA download.",
+                              )
+                            : t(
+                                "Delivery starts only after the app’s custom action allows the update.",
+                              )}
                         </p>
                       </div>
                     )}

@@ -200,7 +200,7 @@ try {
   }, "HTTP server startup");
   const fixture = { origin, db, storage, password, publicKey, old };
   await exerciseDelivery(fixture);
-  await exerciseClientLifecycle(fixture);
+  await exerciseClientLifecycle({ ...fixture, scratch });
   await exerciseConsole(fixture);
   await checkRegistrarToken(origin, DATABASE_URL, scratchApp);
   console.log("PASS signed OTA HTTP and browser workflows");

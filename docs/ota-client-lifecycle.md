@@ -89,7 +89,9 @@ manual controls and shared state. The configurator selects the appropriate impor
 no database or admin credentials belong in the application. Generated source includes
 `ota-client/docs/update-lifecycle.md` with this contract for application developers.
 
-For an already configured project, review generated-file changes and rerun with
+Rerun `npm run configure-app` with the original settings to upgrade an unmodified 0.4.0 or earlier 0.5.0 TypeScript client. The patch keeps the existing root options. Deliver the updated JavaScript in a compatible OTA or a new binary before using immediate required updates.
+
+For a legacy JavaScript client, review generated-file changes and rerun with
 `--force`. This replaces the legacy JavaScript files with TypeScript, removes stale
 `.js`/`.d.ts` copies that could shadow the new modules, and migrates the stock root
 hook/gate while preserving its options. Custom code that uses the old root controller

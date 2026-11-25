@@ -443,6 +443,44 @@ function formatRoot(text, filename, newline) {
   }
 }
 
+// Expo's blank template imports App and registers it directly in index.js.
+function registersDefaultApp(filename) {
+  const source = ts.createSourceFile(
+    filename,
+    fs.readFileSync(filename, "utf8"),
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  if (source.parseDiagnostics.length || source.statements.length !== 3)
+    return false;
+  const imports = source.statements.filter(ts.isImportDeclaration);
+  const registration = imports.find(
+    (node) => node.moduleSpecifier.text === "expo",
+  )?.importClause?.namedBindings;
+  const app = imports.find((node) => node.moduleSpecifier.text === "./App")
+    ?.importClause?.name;
+  if (!app || !registration || !ts.isNamedImports(registration)) return false;
+  const register = registration.elements.find(
+    (element) =>
+      (element.propertyName ?? element.name).text === "registerRootComponent",
+  );
+  const last = source.statements[2];
+  if (
+    !register ||
+    !ts.isExpressionStatement(last) ||
+    !ts.isCallExpression(last.expression)
+  )
+    return false;
+  const call = last.expression;
+  return (
+    ts.isIdentifier(call.expression) &&
+    call.expression.text === register.name.text &&
+    call.arguments.length === 1 &&
+    ts.isIdentifier(call.arguments[0]) &&
+    call.arguments[0].text === app.text
+  );
+}
+
 export function planOtaRootHook({ appRoot, originalEntry }) {
   const candidates = (base) =>
     suffixes
@@ -459,8 +497,20 @@ export function planOtaRootHook({ appRoot, originalEntry }) {
         : "app/_layout",
     );
   } else if (
+    /^(?:\.\/)?index(?:\.[jt]sx?)?$/.test(originalEntry) ||
+    originalEntry === "__platform_default__"
+  ) {
+    const entries = candidates("index");
+    if (
+      entries.length &&
+      entries.every((entry) => registersDefaultApp(path.join(appRoot, entry)))
+    ) {
+      roots = candidates("App");
+    } else if (!entries.length && originalEntry === "__platform_default__") {
+      roots = candidates("App");
+    }
+  } else if (
     [
-      "__platform_default__",
       "__app_fallback__",
       "node_modules/expo/AppEntry.js",
       "expo/AppEntry",

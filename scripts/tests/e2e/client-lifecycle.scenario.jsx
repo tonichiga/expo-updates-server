@@ -2,11 +2,11 @@ import { createHash, verify } from "node:crypto";
 import { act, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createUpdateController } from "../../../templates/expo-app/ota-client/model/update-controller";
-import { OtaUpdateOverlay } from "../../../templates/expo-app/ota-client/ui/ota-updates";
+import { createUpdateController } from "patched-ota-client/model/update-controller";
+import { OtaUpdateOverlay } from "patched-ota-client/ui/ota-updates";
 
 vi.mock(
-  "../../../templates/expo-app/ota-client/model/hooks/useOtaUpdates",
+  "patched-ota-client/model/hooks/useOtaUpdates",
   () => ({
     useOtaUpdates: () => {
       throw new Error("Use the injected native bridge");

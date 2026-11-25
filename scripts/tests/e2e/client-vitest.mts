@@ -4,7 +4,10 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   resolve: {
     alias: {
-      "react-native": fileURLToPath(new URL("../fixtures/react-native-ui.tsx", import.meta.url)),
+      "patched-ota-client": process.env.OTA_E2E_CLIENT_DIRECTORY!,
+      "react-native": fileURLToPath(
+        new URL("../fixtures/react-native-ui.tsx", import.meta.url),
+      ),
     },
   },
   test: {
