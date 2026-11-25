@@ -62,8 +62,8 @@ publication must use the tag-triggered Trusted Publishing workflow.
    create-expo-updates-server-v<version>
    ```
 
-   For example, package version `0.6.0` requires
-   `create-expo-updates-server-v0.6.0`.
+   For example, package version `0.6.1` requires
+   `create-expo-updates-server-v0.6.1`.
 
 The tag-only workflow validates the tag against the package version, rebuilds
 and tests the deterministic template, and verifies that the tagged commit is

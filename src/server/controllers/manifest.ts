@@ -302,21 +302,7 @@ const manifestController = async (req: NextRequest) => {
           )
         : null;
     const embeddedVersionBlocks = embeddedAppVersionComparison === 1;
-    // A disabled, previously installed OTA can return to an older eligible
-    // release in its own scope. An embedded floor and a rollback targeting
-    // somebody else still take precedence.
-    const recoveringDisabledOta =
-      !rollbackUpdateId &&
-      currentInstalledUpdateMeta?.ota?.is_active === false &&
-      currentInstalledUpdateMeta.ota.runtime_version === runtimeVersion &&
-      currentInstalledUpdateMeta.platform === platform &&
-      currentInstalledUpdateMeta.channel === channel &&
-      isSameOrNewerDate(
-        normalizeExpoManifestDate(currentInstalledUpdateMeta.created_at),
-        selectedCreatedAt,
-      );
-    const currentInstalledVersionBlocks =
-      !recoveringDisabledOta && currentInstalledAppVersionComparison === 1;
+    const currentInstalledVersionBlocks = currentInstalledAppVersionComparison === 1;
 
     const embeddedTimestampBlocks = Boolean(
       embeddedUpdateMeta &&
@@ -330,7 +316,6 @@ const manifestController = async (req: NextRequest) => {
       ),
     );
     const currentInstalledTimestampBlocks = Boolean(
-      !recoveringDisabledOta &&
       currentInstalledUpdateMeta &&
       currentInstalledUpdateMeta.platform === platform &&
       currentInstalledUpdateMeta.channel === channel &&

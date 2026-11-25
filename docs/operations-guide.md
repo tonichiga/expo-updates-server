@@ -339,7 +339,7 @@ Activation advances the channel epoch even if its latest pointer is unchanged.
 Pointer changes and repeated rollback operations advance the epoch clock by
 at least one millisecond, so successive publications remain ordered for Expo.
 
-Reapply this repeatable migration when upgrading an existing installation. It also orders a fallback after a disabled patch when the publishing machine’s clock runs ahead of the server. Devices already on the fallback receive a no-update response.
+Reapply this repeatable migration when upgrading an existing installation. Disabling an installed OTA leaves that version running. Restoring an older public release makes it available to eligible clients. To deliver it to devices already running a newer version, use an explicit **Rollback**.
 
 The server records the manifest-to-update mapping before returning a manifest.
 Missing mapping tables, lookup errors, or failed mapping writes now fail the
