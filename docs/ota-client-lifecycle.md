@@ -60,6 +60,8 @@ Legacy exports `checkForUpdateAsync`/`fetchUpdateAsync` remain identity-aware lo
 APIs for existing integrations. They intentionally do not implement hook policies.
 No database/admin credentials are shipped: the server persists public heartbeat reports.
 
+Native crash recovery depends on the bundles retained by Expo Updates. In the SDK 56 release tests on Android and iOS, an early JavaScript crash terminated the first launch. On the next launch the embedded bundle ran, and the failed manifest ID was excluded. Keep the embedded release usable. Choose an explicit server rollback when operators need a particular previous release.
+
 ## Integration and customization
 
 Use the stock `npm run configure-app -- ...` command from the server project. It
