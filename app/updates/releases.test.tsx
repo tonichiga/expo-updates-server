@@ -147,6 +147,10 @@ describe("release workflows", () => {
     await act(async () => render("viewer"));
     expect(buttons()).not.toContain("Activate");
     expect(buttons()).not.toContain("Save audience");
-    expect(host.querySelector("fieldset")?.disabled).toBe(true);
+    const scopeChoices = host.querySelectorAll<HTMLButtonElement>(
+      '[role="radiogroup"][aria-label="Who can receive this OTA"] [role="radio"]',
+    );
+    expect(scopeChoices).toHaveLength(2);
+    expect([...scopeChoices].every((choice) => choice.disabled)).toBe(true);
   });
 });

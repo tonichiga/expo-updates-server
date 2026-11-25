@@ -60,9 +60,68 @@ export async function exerciseDeviceFavorites(
   await expect(details).toBeVisible();
   await page.goto(origin + path);
   const mode = page.getByRole("radio", {
-    name: "Selected devices / installations only",
+    name: "Selected recipients",
   });
   await mode.click();
+  const registryTab = page.getByRole("tab", { name: "Registry", exact: true });
+  const favoritesTab = page.getByRole("tab", {
+    name: "Favorites",
+    exact: true,
+  });
+  const selected = page.getByRole("region", { name: "Selected recipients" });
+  const submit = page.getByRole("button", { name: "Save audience" });
+  await expect(submit).toBeDisabled();
+  const search = page.getByRole("textbox", { name: "Find a recipient" });
+  await search.fill("no such recipient");
+  await page.getByRole("button", { name: "Paste IDs" }).click();
+  const manual = page.getByRole("textbox", {
+    name: "Device or installation IDs",
+  });
+  const stage = page.getByRole("button", { name: "Add to selection" });
+  await manual.fill(deviceId + "\n" + "dasdasdsa");
+  await stage.click();
+  await expect(manual).toHaveAttribute("aria-invalid", "true");
+  await expect(
+    page.getByRole("alert").filter({ hasText: "dasdasdsa" }),
+  ).toBeVisible();
+  await expect(selected.getByRole("listitem")).toHaveCount(0);
+  await expect(submit).toBeDisabled();
+  await manual.fill(Array.from({ length: 101 }, () => randomUUID()).join("\n"));
+  await stage.click();
+  await expect(
+    page.getByText(
+      "Up to 100 device IDs and 100 installation IDs per audience.",
+    ),
+  ).toBeVisible();
+  await manual.fill(
+    [deviceId.toUpperCase(), installationId, deviceId].join(", "),
+  );
+  await stage.click();
+  await expect(selected.getByRole("listitem")).toHaveCount(2);
+  await manual.fill(installationId);
+  await stage.click();
+  await expect(
+    page.getByText("These recipients are already selected."),
+  ).toBeVisible();
+  const viewport = page.viewportSize();
+  for (const width of [390, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.documentElement.scrollWidth - window.innerWidth,
+        ),
+      )
+      .toBeLessThanOrEqual(1);
+  }
+  if (viewport) await page.setViewportSize(viewport);
+  await page.getByRole("radio", { name: "All compatible devices" }).click();
+  await mode.click();
+  await expect(selected.getByRole("listitem")).toHaveCount(2);
+  await page.getByRole("button", { name: "Discard changes" }).click();
+  await mode.click();
+  await expect(selected.getByRole("listitem")).toHaveCount(0);
+  await registryTab.click();
   await page
     .getByRole("textbox", { name: "Find a recipient" })
     .fill(installationId);
@@ -87,7 +146,9 @@ export async function exerciseDeviceFavorites(
     await dialog.getByLabel("Favorite name").fill(name);
     await dialog.getByRole("button", { name: "Save favorite" }).click();
     await expect(dialog).toBeHidden();
+    await favoritesTab.click();
     await expect(favorites.getByText(name, { exact: true })).toBeVisible();
+    await registryTab.click();
   }
   expect((await (await page.request.get(audience)).json()).audience_mode).toBe(
     "all",
@@ -99,6 +160,7 @@ export async function exerciseDeviceFavorites(
   );
   await page.reload();
   await mode.click();
+  await favoritesTab.click();
   await expect(favorites.locator("time")).toHaveCount(2);
   const seen = await favorites.locator("time").first().getAttribute("datetime");
   expect(Date.now() - Date.parse(seen)).toBeGreaterThan(59 * 86400000);
@@ -174,7 +236,9 @@ export async function exerciseDeviceFavorites(
         const screen = await session.newPage();
         await screen.goto(origin + path);
         await expect(
-          screen.getByRole("heading", { name: "My favorites" }),
+          screen
+            .getByRole("region", { name: "Selected recipients" })
+            .getByText(installationId, { exact: true }),
         ).toBeVisible();
         await expect(
           screen.getByRole("button", { name: /^Bookmark / }),
@@ -210,15 +274,15 @@ export async function exerciseDeviceFavorites(
     [platform, installationId],
   );
   await page.reload();
+  await favoritesTab.click();
   await expect(
     favorites.getByText("Target is no longer in the registry"),
   ).toHaveCount(2);
   // Clearing a selected ID locally makes its Add control visible. A missing
   // registry target is still unavailable even when it is no longer selected.
-  await page
-    .getByRole("button", { name: /Selected IDs and manual entry/ })
+  await selected
+    .getByRole("button", { name: "Remove " + deviceId + " from selection" })
     .click();
-  await page.getByLabel("Device IDs", { exact: true }).fill("");
   await expect(add(deviceName)).toBeDisabled();
   await expect(
     favorites.getByRole("button", { name: installationName + " is selected" }),

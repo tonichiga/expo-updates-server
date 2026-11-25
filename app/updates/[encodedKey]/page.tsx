@@ -518,6 +518,10 @@ export default function UpdateDetailsPage() {
                 className="data-[state=inactive]:hidden"
               >
                 <UpdateAudienceEditor
+                  key={encodedKey}
+                  channel={detail.channel}
+                  runtime={detail.runtimeVersion}
+                  active={detail.status === "active"}
                   encodedKey={encodedKey}
                   platform={detail.platform}
                   canWrite={canWrite}

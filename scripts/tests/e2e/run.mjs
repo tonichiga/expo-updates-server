@@ -71,6 +71,8 @@ try {
   const pgPort = container(
     "ota-e2e-db",
     5432,
+    "--tmpfs",
+    "/var/lib/postgresql/data:rw,size=512m",
     "-e",
     "POSTGRES_PASSWORD=" + password,
     "postgres:17-alpine",
@@ -78,6 +80,8 @@ try {
   const storagePort = container(
     "ota-e2e-store",
     9000,
+    "--tmpfs",
+    "/data:rw,size=256m",
     "-e",
     "MINIO_ROOT_USER=e2e-local",
     "-e",

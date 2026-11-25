@@ -149,7 +149,9 @@ export function FavoriteList({
       )}
       {favorites?.length === 0 && (
         <p className="text-sm text-muted-foreground">
-          {t("Bookmark a recipient below to reuse it across releases.")}
+          {t(
+            "Bookmark a recipient in the registry to reuse it across releases.",
+          )}
         </p>
       )}
       {Boolean(favorites?.length) && (
