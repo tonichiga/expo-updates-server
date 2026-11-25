@@ -21,7 +21,7 @@ export async function exerciseReleaseConsole(page, password) {
   });
   await expect(release).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "Legacy public build", exact: true }),
+    page.getByRole("link", { name: "Initial public build", exact: true }),
   ).toHaveCount(0);
   await search.fill("no such release");
   await page.getByRole("button", { name: "Apply", exact: true }).click();
@@ -32,10 +32,10 @@ export async function exerciseReleaseConsole(page, password) {
     .getByRole("button", { name: "Reset", exact: true })
     .first()
     .click();
-  await search.fill("Legacy public build");
+  await search.fill("Initial public build");
   await page.getByRole("button", { name: "Apply", exact: true }).click();
   const old = page.getByRole("link", {
-    name: "Legacy public build",
+    name: "Initial public build",
     exact: true,
   });
   await expect(old).toBeVisible();

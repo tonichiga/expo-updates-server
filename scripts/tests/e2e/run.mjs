@@ -15,7 +15,6 @@ import bcrypt from "bcryptjs";
 import { exerciseClientLifecycle } from "./client-lifecycle.mjs";
 import { exerciseDelivery, seedPublication } from "./delivery.mjs";
 import { checkRegistrarToken } from "./registrar-token.mjs";
-import { upgradeLegacy } from "../../migrate-legacy.mjs";
 import { exerciseConsole } from "./console.mjs";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
@@ -106,22 +105,9 @@ try {
     "Object store startup",
   );
 
-  const legacy = process.env.OTA_E2E_LEGACY_SCHEMA;
-  const migrations = path.join(root, "docs/migrations");
-  await db.query(
-    await readFile(legacy || path.join(migrations, "schema.sql"), "utf8"),
-  );
-  const old = await seedPublication(db, storage, "Legacy public build", true);
-  if (legacy) {
-    const migrationClient = await db.connect();
-    try {
-      await upgradeLegacy(migrationClient);
-      await upgradeLegacy(migrationClient, { apply: true });
-      await upgradeLegacy(migrationClient, { apply: true });
-    } finally {
-      migrationClient.release();
-    }
-  }
+  const schema = await readFile(path.join(root, "docs/migrations/schema.sql"), "utf8");
+  await db.query(schema);
+  const old = await seedPublication(db, storage, "Initial public build", true);
   const hash = await bcrypt.hash(password, 4);
   for (const role of ["admin", "viewer"]) {
     await db.query(
@@ -202,10 +188,7 @@ try {
   await exerciseClientLifecycle(fixture);
   await exerciseConsole(fixture);
   await checkRegistrarToken(origin, DATABASE_URL, scratchApp);
-  console.log(
-    "PASS signed OTA HTTP and browser workflows" +
-      (legacy ? " after legacy upgrade" : " on fresh schema"),
-  );
+  console.log("PASS signed OTA HTTP and browser workflows");
 } catch (error) {
   console.error(error);
   process.exitCode = 1;

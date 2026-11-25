@@ -238,29 +238,31 @@ export async function exerciseReleaseMatrix({
   await expectNone("ios", upgradedRuntime, running(iosLatest));
   await expectRelease(iosV2, running(releases.ios));
   // A private build in one channel must never replace a public build in another.
-  const stable = await publish("ios", originalRuntime, 1, {
-    channel: "production",
-  });
-  const beta = await publish("ios", originalRuntime, 1, {
-    channel: "matrix-beta",
-  });
-  const restricted = await publish("ios", originalRuntime, 2, {
-    channel: beta.channel,
-    targeted: true,
-  });
-  const betaPublic = await expectRelease(beta);
-  await expectRelease(restricted, { ...deviceHeaders, ...running(betaPublic) });
-  await expectRelease(stable, deviceHeaders);
-  await expectRelease(stable, { "expo-channel-name": " " });
-  await expectRelease(beta, { "expo-channel-name": " MATRIX-BETA " });
-  await expectNone("ios", originalRuntime, {
-    ...deviceHeaders,
-    "expo-channel-name": "matrix-unpublished",
-  });
-  await expectNone("ios", originalRuntime, {
-    ...running(betaPublic),
-    "expo-channel-name": beta.channel,
-  });
+  for (const platform of ["ios", "android"]) {
+    const stable = await publish(platform, originalRuntime, 1, {
+      channel: "production",
+    });
+    const beta = await publish(platform, originalRuntime, 1, {
+      channel: "matrix-beta",
+    });
+    const restricted = await publish(platform, originalRuntime, 2, {
+      channel: beta.channel,
+      targeted: true,
+    });
+    const betaPublic = await expectRelease(beta);
+    await expectRelease(restricted, { ...deviceHeaders, ...running(betaPublic) });
+    await expectRelease(stable, deviceHeaders);
+    await expectRelease(stable, { "expo-channel-name": " " });
+    await expectRelease(beta, { "expo-channel-name": " MATRIX-BETA " });
+    await expectNone(platform, originalRuntime, {
+      ...deviceHeaders,
+      "expo-channel-name": "matrix-unpublished",
+    });
+    await expectNone(platform, originalRuntime, {
+      ...running(betaPublic),
+      "expo-channel-name": beta.channel,
+    });
+  }
 
   console.log(
     "PASS signed HTTP release matrix: both platform stacks, active/draft selection, scoped retired-build fallback, embedded floor, skipped versions, native runtime transition, normalized/empty/unknown channels and targeted channel isolation",
