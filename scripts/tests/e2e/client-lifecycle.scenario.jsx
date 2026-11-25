@@ -174,6 +174,9 @@ async function screen(model) {
   await act(async () => root.render(<Screen model={model} />));
 }
 const text = () => host.textContent;
+// The controller waits for the real HTTP server and object store in this suite.
+const waitForIdle = (model) =>
+  vi.waitFor(() => expect(model.getSnapshot().status).toBe("idle"), { timeout: 15_000 });
 const press = async (label, model) => {
   const element = [...host.querySelectorAll("button")].find(
     (el) => el.textContent === label,
@@ -181,7 +184,7 @@ const press = async (label, model) => {
   expect(element, label).toBeDefined();
   await act(async () => {
     element.click();
-    await vi.waitFor(() => expect(model.getSnapshot().status).toBe("idle"));
+    await waitForIdle(model);
   });
 };
 async function check(model) {
@@ -206,7 +209,7 @@ describe.each(["ios", "android"])(
       await screen(app);
       await act(async () => {
         app.automaticCheck();
-        await vi.waitFor(() => expect(app.getSnapshot().status).toBe("idle"));
+        await waitForIdle(app);
       });
       expect(phone.state.checks).toBe(1);
       expect(phone.state.downloads).toBe(0);
