@@ -23,34 +23,26 @@ import { Cohorts } from "@/src/client/devices/cohorts";
 import { VersionAdoptionChart } from "@/src/client/devices/version-adoption-chart";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Registry, VersionTable } from "@/src/client/devices/registry";
-import {
-  useDevicesReport,
-  type Filters,
-} from "@/src/client/devices/use-devices-report";
+import { useDevicesReport } from "@/src/client/devices/use-devices-report";
 export default function DevicesPage() {
   const { t, formatLocale } = useI18n();
   const kindNames = useKindNames();
   const {
     filters,
-    setFilters,
-    applied,
+    update,
     report,
     error,
     loading,
-    apply,
     reset,
     refresh,
     paginate,
   } = useDevicesReport();
-  const dirty = JSON.stringify(filters) !== JSON.stringify(applied);
-  const activeFilters = Object.entries(applied).filter(
-    ([key, value]) => key !== "days" && value,
+  const activeFilters = Object.entries(filters).filter(
+    ([key, value]) => key !== "days" && value.trim(),
   ).length;
-  const update = (key: keyof Filters, value: string) =>
-    setFilters((previous) => ({ ...previous, [key]: value }));
   const options = report?.options;
   const period =
-    applied.days === "1" ? t("24 часа") : t("{0} дней", [applied.days]);
+    filters.days === "1" ? t("24 часа") : t("{0} дней", [filters.days]);
   return (
     <div className="mx-auto w-full max-w-[1600px] space-y-5 p-4 md:p-8">
       <header className="flex flex-wrap items-center justify-between gap-3">
@@ -64,7 +56,6 @@ export default function DevicesPage() {
         </div>
         <Button
           size="sm"
-          variant="outline"
           disabled={loading}
           onClick={refresh}
         >
@@ -92,14 +83,9 @@ export default function DevicesPage() {
                   {period}
                 </span>
                 {activeFilters > 0 && (
-                  <Badge variant="secondary">
+                  <Badge variant="info">
                     {t("{0} filters applied", [activeFilters])}
                   </Badge>
-                )}
-                {dirty && (
-                  <span className="text-xs text-muted-foreground">
-                    {t("Есть неприменённые изменения")}
-                  </span>
                 )}
                 <ChevronDown
                   aria-hidden="true"
@@ -108,11 +94,7 @@ export default function DevicesPage() {
               </Button>
             </CollapsibleTrigger>
             <CollapsibleContent>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  apply();
-                }}
+              <div
                 className="grid grid-cols-1 items-end gap-3 border-t py-4 min-[380px]:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6"
               >
                 <Filter
@@ -182,21 +164,17 @@ export default function DevicesPage() {
                   />
                 </div>
                 <div className="col-span-full flex flex-wrap items-center gap-2">
-                  <Button type="submit" size="sm" disabled={loading}>
-                    {t("Применить")}
-                  </Button>
                   <Button
                     type="button"
                     size="sm"
                     variant="ghost"
                     onClick={reset}
-                    disabled={loading}
                   >
                     <X />
                     {t("Сбросить")}
                   </Button>
                 </div>
-              </form>
+              </div>
             </CollapsibleContent>
           </Collapsible>
         </CardContent>

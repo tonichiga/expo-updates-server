@@ -8,6 +8,11 @@ import { BookmarkTarget, useFavoriteTargets } from "./favorite-targets";
 import { useContext, useRef, useState } from "react";
 import { Copy, Check, ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  PlatformBadge,
+  ChannelBadge,
+  launchKindTone,
+} from "@/components/admin/release-badges";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -103,7 +108,7 @@ export function Registry({
             <CardTitle>
               <h2>{t("Реестр установок")}</h2>
             </CardTitle>
-            <Badge variant="secondary">{number(report.total)}</Badge>
+            <Badge variant="info">{number(report.total)}</Badge>
           </div>
           <CardDescription>
             {t(
@@ -147,10 +152,10 @@ export function Registry({
                     </p>
                   </TableCell>
                   <TableCell>
-                    <span>{d.platform === "ios" ? "iOS" : "Android"}</span>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {d.channel}
-                    </p>
+                    <div className="flex max-w-52 flex-wrap items-center gap-1">
+                      <PlatformBadge platform={d.platform} />
+                      <ChannelBadge channel={d.channel} />
+                    </div>
                   </TableCell>
                   <TableCell>
                     <p
@@ -177,11 +182,7 @@ export function Registry({
                     </p>
                   </TableCell>
                   <TableCell>
-                    <Badge
-                      variant={
-                        d.launch_kind === "ota" ? "default" : "secondary"
-                      }
-                    >
+                    <Badge variant={launchKindTone[d.launch_kind]}>
                       {kindNames[d.launch_kind]}
                     </Badge>
                     {d.emergency_launch && (
@@ -393,8 +394,10 @@ export function VersionTable({ report }: { report: DevicesReport }) {
                   )}
                 </TableCell>
                 <TableCell>
-                  {v.platform === "ios" ? "iOS" : "Android"}
-                  <p className="text-xs text-muted-foreground">{v.channel}</p>
+                  <div className="flex max-w-52 flex-wrap items-center gap-1">
+                    <PlatformBadge platform={v.platform} />
+                    <ChannelBadge channel={v.channel} />
+                  </div>
                 </TableCell>
                 <TableCell>
                   {v.runtime_version}
@@ -403,7 +406,9 @@ export function VersionTable({ report }: { report: DevicesReport }) {
                   </p>
                 </TableCell>
                 <TableCell>
-                  <Badge variant="secondary">{kindNames[v.launch_kind]}</Badge>
+                  <Badge variant={launchKindTone[v.launch_kind]}>
+                    {kindNames[v.launch_kind]}
+                  </Badge>
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {number(v.installations)}

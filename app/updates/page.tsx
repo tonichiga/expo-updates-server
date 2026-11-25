@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type FormEvent } from "react";
+import { useState } from "react";
 import {
   ArrowDownUp,
   ArrowUpRight,
@@ -12,6 +12,14 @@ import {
   Search,
   ShieldAlert,
 } from "lucide-react";
+import {
+  PlatformBadge,
+  ChannelBadge,
+  ReleaseStatusBadge,
+  AudienceBadge,
+  DeliveryBadge,
+} from "@/components/admin/release-badges";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -38,10 +46,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { getUpdates } from "@/src/client/admin-api";
-import type {
-  ReleaseFilters,
-  UpdatesListResponse,
-} from "@/src/client/admin-types";
+import type { ReleaseFilters } from "@/src/client/admin-types";
+import { useFilteredResults } from "@/src/client/use-filtered-results";
 import DistributionControl from "@/src/client/distribution-control";
 import { useI18n } from "@/src/client/i18n/provider";
 import { useFormatters } from "@/src/client/i18n/use-formatters";
@@ -63,67 +69,49 @@ const sorts = [
   ["updateId", "По ID"],
 ];
 
+const initialQuery = {
+  ...emptyFilters,
+  page: 1,
+  sortBy: "createdAt",
+  order: "desc" as "asc" | "desc",
+};
+
+function loadReleases(query: typeof initialQuery, signal: AbortSignal) {
+  return getUpdates({ ...query, q: query.q.trim(), pageSize: 20 }, signal);
+}
+
+function hasFilters(query: ReleaseFilters) {
+  return Boolean(
+    query.q.trim() ||
+      query.platform ||
+      query.channel ||
+      query.runtime ||
+      query.status ||
+      query.audience,
+  );
+}
+
 export default function UpdatesPage() {
   const { t } = useI18n();
   const { number, fullDate } = useFormatters();
   const [historyRevision, setHistoryRevision] = useState(0);
   const [distributionBlocked, setDistributionBlocked] = useState(true);
-  const [draft, setDraft] = useState(emptyFilters);
-  const [query, setQuery] = useState({
-    ...emptyFilters,
-    page: 1,
-    sortBy: "createdAt",
-    order: "desc" as "asc" | "desc",
-  });
-  const [result, setResult] = useState<UpdatesListResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [resultsFiltered, setResultsFiltered] = useState(false);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    getUpdates({ ...query, pageSize: 20 }, controller.signal)
-      .then((next) => {
-        if (controller.signal.aborted) return;
-        setResult(next);
-        setResultsFiltered(
-          Boolean(
-            query.q ||
-              query.platform ||
-              query.channel ||
-              query.runtime ||
-              query.status ||
-              query.audience,
-          ),
-        );
-      })
-      .catch((e: Error) => {
-        if (!controller.signal.aborted)
-          setError(e.message || "Не удалось загрузить список");
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => controller.abort();
-  }, [query]);
-
-  function requestPage(next: typeof query) {
-    setLoading(true);
-    setError("");
-    setQuery(next);
-  }
+  const {
+    query,
+    success,
+    loading,
+    error,
+    request: requestPage,
+  } = useFilteredResults(initialQuery, loadReleases);
+  const result = success?.data;
+  const resultsFiltered = success && hasFilters(success.query);
 
   function refreshReleases() {
     requestPage({ ...query });
     setHistoryRevision((value) => value + 1);
   }
 
-  function apply(event: FormEvent) {
-    event.preventDefault();
-    requestPage({ ...query, ...draft, q: draft.q.trim(), page: 1 });
-  }
   function reset() {
-    setDraft(emptyFilters);
     requestPage({ ...query, ...emptyFilters, page: 1 });
   }
   function filter(
@@ -133,9 +121,9 @@ export default function UpdatesPage() {
   ) {
     return (
       <Select
-        value={"option:" + draft[key]}
+        value={"option:" + query[key]}
         onValueChange={(value) =>
-          setDraft((current) => ({ ...current, [key]: value.slice(7) }))
+          requestPage({ ...query, [key]: value.slice(7), page: 1 })
         }
       >
         <SelectTrigger aria-label={label} className="max-w-48">
@@ -169,7 +157,6 @@ export default function UpdatesPage() {
           </p>
         </div>
         <Button
-          variant="outline"
           size="sm"
           disabled={loading}
           onClick={refreshReleases}
@@ -180,30 +167,18 @@ export default function UpdatesPage() {
       </header>
 
       <DistributionControl onAvailabilityChange={setDistributionBlocked} />
-      <DistributionHistory
-        revision={historyRevision}
-        blocked={distributionBlocked}
-        onRestored={refreshReleases}
-      />
 
       {locked.length > 0 && (
-        <div
-          role="status"
-          className="flex gap-3 rounded-lg border border-amber-500/35 bg-amber-500/5 p-4 text-sm"
-        >
-          <ShieldAlert className="size-5 shrink-0 text-amber-700 dark:text-amber-400" />
-          <div className="min-w-0">
-            <p className="font-medium">{t("Rollback активен")}</p>
-            <p className="mt-1 break-words text-muted-foreground">
-              {t("Автодоставка новых обновлений временно отключена.")}{" "}
-              {locked
-                .map((s) =>
-                  [s.runtimeVersion, s.platform, s.channel].join(" / "),
-                )
-                .join(" · ")}
-            </p>
-          </div>
-        </div>
+        <Alert role="status" variant="destructive">
+          <ShieldAlert aria-hidden="true" />
+          <AlertTitle>{t("Rollback активен")}</AlertTitle>
+          <AlertDescription className="break-words">
+            {t("Автодоставка новых обновлений временно отключена.")}{" "}
+            {locked
+              .map((s) => [s.runtimeVersion, s.platform, s.channel].join(" / "))
+              .join(" · ")}
+          </AlertDescription>
+        </Alert>
       )}
 
       <Card className="min-w-0 gap-0 overflow-hidden py-0 shadow-none">
@@ -212,7 +187,7 @@ export default function UpdatesPage() {
             <div className="flex items-center gap-2">
               <h2 className="text-lg font-semibold">{t("Release history")}</h2>
               {result && (
-                <Badge variant="secondary" className="tabular-nums">
+                <Badge variant="info" className="tabular-nums">
                   {number(result.total)}
                 </Badge>
               )}
@@ -253,7 +228,7 @@ export default function UpdatesPage() {
               </Button>
             </div>
           </div>
-          <form onSubmit={apply} role="search" className="space-y-3">
+          <div role="search" className="space-y-3">
             <InputGroup>
               <InputGroupAddon>
                 <Search />
@@ -264,8 +239,11 @@ export default function UpdatesPage() {
                 placeholder={t(
                   "Search by comment, update ID, version or channel",
                 )}
-                value={draft.q}
-                onChange={(e) => setDraft({ ...draft, q: e.target.value })}
+                value={query.q}
+                onChange={(event) => {
+                  const q = event.target.value;
+                  requestPage({ ...query, q, page: 1 }, Boolean(q.trim()));
+                }}
               />
             </InputGroup>
             <div className="flex flex-wrap items-center gap-2">
@@ -293,16 +271,13 @@ export default function UpdatesPage() {
                 ["all", t("Все совместимые устройства")],
                 ["devices", t("Выбранные устройства")],
               ])}
-              <Button type="submit" size="sm">
-                {t("Применить")}
-              </Button>
-              {(Object.values(draft).some(Boolean) || resultsFiltered) && (
+              {(hasFilters(query) || resultsFiltered) && (
                 <Button type="button" variant="ghost" size="sm" onClick={reset}>
                   {t("Сбросить")}
                 </Button>
               )}
             </div>
-          </form>
+          </div>
         </div>
 
         {error && (
@@ -394,15 +369,16 @@ export default function UpdatesPage() {
                   >
                     {item.updateId.slice(0, 8)}
                   </div>
-                  <div className="mt-1 break-words text-xs text-muted-foreground lg:hidden">
-                    {item.platform === "ios" ? "iOS" : "Android"} ·{" "}
-                    {item.channel} · {item.runtimeVersion}
+                  <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1 text-xs text-muted-foreground lg:hidden">
+                    <PlatformBadge platform={item.platform} />
+                    <ChannelBadge channel={item.channel} />
+                    <span className="break-all">{item.runtimeVersion}</span>
                   </div>
                 </TableCell>
                 <TableCell className="hidden max-w-60 whitespace-normal lg:table-cell">
-                  <div className="break-words font-medium">
-                    {item.platform === "ios" ? "iOS" : "Android"} ·{" "}
-                    {item.channel}
+                  <div className="flex min-w-0 flex-wrap items-center gap-1">
+                    <PlatformBadge platform={item.platform} />
+                    <ChannelBadge channel={item.channel} />
                   </div>
                   <div className="mt-1 break-words text-xs text-muted-foreground">
                     {t("Runtime {0}", [item.runtimeVersion])}
@@ -411,43 +387,36 @@ export default function UpdatesPage() {
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-col items-start gap-1.5">
-                    <Badge
-                      variant={
-                        item.status === "active" ? "default" : "secondary"
-                      }
-                    >
-                      {item.policyEditable ? t("draft") : t(item.status)}
-                    </Badge>
+                    <ReleaseStatusBadge release={item} />
                     {item.isLatest && (
                       <span className="text-xs text-muted-foreground">
                         {t("Latest")}
                       </span>
                     )}
                     {(item.isRollbackActive || item.isIgnoredByRollback) && (
-                      <span className="max-w-36 whitespace-normal text-xs text-amber-700 dark:text-amber-400">
+                      <Badge
+                        variant={
+                          item.isRollbackActive ? "destructive" : "warning"
+                        }
+                        className="max-w-36 whitespace-normal text-left"
+                      >
                         {item.isRollbackActive
                           ? t("Rollback")
                           : t("Ignored by rollback")}
-                      </span>
+                      </Badge>
                     )}
-                    <span className="text-xs text-muted-foreground sm:hidden">
-                      {item.audienceMode === "devices"
-                        ? t("Выбранные устройства")
-                        : t("All devices")}
-                    </span>
+                    <div className="max-w-32 sm:hidden">
+                      <AudienceBadge mode={item.audienceMode} compact />
+                    </div>
                   </div>
                 </TableCell>
                 <TableCell className="hidden sm:table-cell">
-                  {item.audienceMode === "devices"
-                    ? t("Выбранные устройства")
-                    : t("All devices")}
+                  <AudienceBadge mode={item.audienceMode} compact />
                 </TableCell>
                 <TableCell className="hidden xl:table-cell">
-                  {item.deliveryMode === "background"
-                    ? t("Background")
-                    : t("Manual")}
+                  <DeliveryBadge mode={item.deliveryMode} />
                   {item.hasGuard && (
-                    <Badge className="ml-1.5" variant="outline">
+                    <Badge className="ml-1.5" variant="warning">
                       {t("Guard")}
                     </Badge>
                   )}
@@ -487,6 +456,12 @@ export default function UpdatesPage() {
           </div>
         </footer>
       </Card>
+
+      <DistributionHistory
+        revision={historyRevision}
+        blocked={distributionBlocked}
+        onRestored={refreshReleases}
+      />
     </div>
   );
 }

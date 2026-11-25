@@ -37,8 +37,8 @@ export async function exerciseInstallations(page) {
     "true",
   );
   await page.getByRole("button", { name: "Filters", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Apply", exact: true })).toHaveCount(0);
   await page.getByLabel("Runtime", { exact: true }).selectOption(runtime);
-  await page.getByRole("button", { name: "Apply", exact: true }).click();
   await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
   await page
     .getByRole("button", { name: "Show daily values", exact: true })
@@ -92,7 +92,6 @@ export async function exerciseInstallations(page) {
   await expect(detailsButton).toBeFocused();
 
   await page.getByLabel("Installation ID", { exact: true }).fill(randomUUID());
-  await page.getByRole("button", { name: "Apply", exact: true }).click();
   await expect(
     page.getByText("No installations found", { exact: true }),
   ).toBeVisible();

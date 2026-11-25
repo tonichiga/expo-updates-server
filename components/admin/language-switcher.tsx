@@ -19,7 +19,7 @@ export function LanguageSwitcher() {
         title={label}
         value={locale}
         onChange={(event) => setLocale(resolveLocale(event.target.value))}
-        className="border-transparent pl-8 shadow-none dark:bg-transparent"
+        className="border-transparent bg-transparent pl-8 hover:border-input"
       >
         <option value="en" lang="en">
           English

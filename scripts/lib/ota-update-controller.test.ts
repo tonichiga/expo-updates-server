@@ -230,3 +230,65 @@ describe('OTA lifecycle policy and operations', () => {
     expect(client.getSnapshot()).toMatchObject({ blocked: false, available: false });
   });
 });
+
+describe('immediate required background updates', () => {
+  const ota = manifest('force-now', 'background', 'ota-force-update');
+  function required() {
+    const f = fixture();
+    f.configure({ autoCheck: false, autoUpdate: false, autoReload: false });
+    f.deps.check.mockResolvedValue({ isAvailable: true, manifest: ota });
+    f.deps.fetch.mockResolvedValue({ isNew: true, manifest: ota });
+    return f;
+  }
+  it('applies once on the active app and ignores repeated checks and native pending notifications', async () => {
+    const f = required();
+    await f.client.check();
+    await f.client.syncPending({ type: 'new', manifest: ota });
+    await f.client.check();
+    expect(f.deps.fetch).toHaveBeenCalledOnce();
+    expect(f.deps.reload).toHaveBeenCalledOnce();
+  });
+  it('applies an inactive download on foreground with automatic checks off and no new requests', async () => {
+    const f = required();
+    f.deps.isActive.mockReturnValue(false);
+    await f.client.check();
+    expect(f.deps.reload).not.toHaveBeenCalled();
+    f.deps.isActive.mockReturnValue(true);
+    f.client.automaticCheck();
+    await vi.waitFor(() => expect(f.deps.reload).toHaveBeenCalledOnce());
+    expect(f.deps.check).toHaveBeenCalledOnce();
+  });
+  it('retries failed reloads from verified cached bytes without a new fetch or network check', async () => {
+    const f = required();
+    f.deps.reload.mockRejectedValueOnce(new Error('Failed to restart'));
+    await expect(f.client.check()).rejects.toThrow('Failed to restart');
+    expect(f.client.getSnapshot()).toMatchObject({ pending: true, blocked: true });
+    f.client.automaticCheck();
+    expect(f.deps.reload).toHaveBeenCalledOnce();
+    await f.client.retry();
+    expect(f.deps.check).toHaveBeenCalledOnce();
+    expect(f.deps.fetch).toHaveBeenCalledOnce();
+    expect(f.deps.reload).toHaveBeenCalledTimes(2);
+  });
+  it('recovers a native pending bundle but skips the already running update', async () => {
+    const f = required();
+    await f.client.syncPending({ type: 'new', manifest: ota });
+    expect(f.deps.reload).toHaveBeenCalledOnce();
+    const running = createUpdateController({ ...f.deps, runningCandidate: () => ({ type: 'new', manifest: ota }) });
+    await running.syncPending({ type: 'new', manifest: ota });
+    await running.check();
+    expect(running.getSnapshot()).toMatchObject({ available: false, pending: false, blocked: false });
+    expect(f.deps.fetch).not.toHaveBeenCalled();
+    expect(f.deps.reload).toHaveBeenCalledOnce();
+  });
+  it('requires an identified downloaded manifest and honors a changed policy from fetch', async () => {
+    const f = required();
+    f.deps.fetch.mockResolvedValueOnce({ isNew: true, manifest: {extra: ota.extra} });
+    await expect(f.client.check()).rejects.toThrow('no update ID');
+    expect(f.client.getSnapshot()).toMatchObject({ pending: false, blocked: true });
+    f.deps.fetch.mockResolvedValueOnce({ isNew: true, manifest: manifest('replaced', 'background') });
+    await f.client.retry();
+    expect(f.client.getSnapshot()).toMatchObject({ pending: true, blocked: false });
+    expect(f.deps.reload).not.toHaveBeenCalled();
+  });
+});

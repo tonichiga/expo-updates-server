@@ -4,6 +4,7 @@ export const behaviors = [
   "manual",
   "background",
   "required",
+  "immediate",
   "store",
   "custom",
 ] as const;
@@ -28,7 +29,9 @@ export function draftFromPolicy(
   if (guard) {
     behavior =
       guard.action === required
-        ? "required"
+        ? delivery === "background"
+          ? "immediate"
+          : "required"
         : guard.action === store
           ? "store"
           : "custom";
@@ -47,12 +50,19 @@ export function chooseBehavior(
   behavior: PolicyBehavior,
 ): PolicyDraft {
   if (behavior === current.behavior) return current;
+  if (behavior === "required" || behavior === "immediate") {
+    return {
+      behavior,
+      delivery: behavior === "immediate" ? "background" : "manual",
+      action: required,
+      payload: current.action === required ? current.payload : "",
+    };
+  }
   const delivery =
     behavior === "manual" || behavior === "background"
       ? behavior
       : current.delivery;
-  const action =
-    behavior === "required" ? required : behavior === "store" ? store : "";
+  const action = behavior === "store" ? store : "";
   return { behavior, delivery, action, payload: "" };
 }
 

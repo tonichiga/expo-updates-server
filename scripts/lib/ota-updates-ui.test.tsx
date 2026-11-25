@@ -105,6 +105,31 @@ describe("standalone OTA updates UI", () => {
     await render();
     expect(container.querySelector("[role=dialog]")).toBeNull();
   });
+  it("keeps a healthy immediate update invisible and exposes a mandatory retry after failure", async () => {
+    controller = {
+      ...controller,
+      blocked: true,
+      blockReason: "ota-force-update",
+      policy: {
+        schemaVersion: 1,
+        delivery: "background",
+        guard: { action: "ota-force-update" },
+      },
+    };
+    await render();
+    expect(container.querySelector("[role=dialog]")).toBeNull();
+    controller = {
+      ...controller,
+      pending: true,
+      error: new Error("Restart failed"),
+    };
+    await render();
+    const dialog = container.querySelector("[role=dialog]");
+    expect(dialog?.textContent).toContain("Restart failed");
+    expect(dialog?.textContent).not.toContain("Later");
+    await click("Retry");
+    expect(controller.retry).toHaveBeenCalledOnce();
+  });
   it("does not allow dismissing required updates, even for a previously dismissed candidate", async () => {
     await render();
     await click("Later");

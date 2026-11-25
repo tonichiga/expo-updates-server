@@ -81,7 +81,7 @@ function Navigation({ current }: { current: Destination }) {
   return (
     <nav aria-label={t("Навигация")}>
       {groups.map((group) => (
-        <SidebarGroup key={group.label} className="mb-3">
+        <SidebarGroup key={group.label} className="mb-2 px-2">
           <SidebarGroupLabel className="h-8 text-xs font-medium text-muted-foreground">
             {t(group.label)}
           </SidebarGroupLabel>
@@ -92,7 +92,7 @@ function Navigation({ current }: { current: Destination }) {
                   <SidebarMenuButton
                     asChild
                     isActive={href === current.href}
-                    className="min-h-10 gap-3 px-3"
+                    className="min-h-9 gap-2.5 px-3 hover:bg-muted data-[active=true]:bg-sidebar-accent"
                   >
                     <Link
                       href={href}
@@ -121,7 +121,7 @@ function ConsoleBrand() {
       onClick={() => setOpenMobile(false)}
       className="flex w-fit items-center gap-3 rounded-md font-semibold tracking-tight text-foreground"
     >
-      <span className="grid size-9 place-items-center rounded-lg bg-primary text-primary-foreground">
+      <span className="grid size-8 place-items-center rounded-md border border-input bg-card text-foreground">
         <RadioTower className="size-5" aria-hidden="true" />
       </span>
       OTA Console
@@ -163,11 +163,11 @@ export function AdminShell({
       >
         {t("К содержимому")}
       </a>
-      <Sidebar collapsible="offcanvas" variant="inset">
-        <SidebarHeader className="h-16 justify-center border-b px-5">
+      <Sidebar collapsible="offcanvas" variant="sidebar">
+        <SidebarHeader className="h-14 justify-center border-b px-5">
           <ConsoleBrand />
         </SidebarHeader>
-        <SidebarContent className="p-2 pt-4">
+        <SidebarContent className="px-1 pt-3">
           <Navigation current={current} />
         </SidebarContent>
         <SidebarFooter className="gap-2 border-t p-4">
@@ -202,7 +202,7 @@ export function AdminShell({
         </SidebarFooter>
       </Sidebar>
       <SidebarInset className="min-w-0">
-        <header className="flex min-h-16 items-center justify-between gap-2 border-b px-3 sm:px-6 lg:px-8">
+        <header className="sticky top-0 z-20 flex min-h-14 items-center bg-sidebar justify-between gap-2 border-b px-3 sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-2 text-sm">
             <SidebarTrigger aria-label={t("Открыть или скрыть навигацию")} />
             <Separator
@@ -241,7 +241,7 @@ export function AdminShell({
             <LanguageSwitcher />
             <Button
               variant="ghost"
-              size="icon"
+              size="icon-sm"
               aria-label={t("Переключить светлую и тёмную тему")}
               onClick={() =>
                 setTheme(resolvedTheme === "dark" ? "light" : "dark")

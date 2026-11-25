@@ -207,7 +207,7 @@
   "Детали обновления": "Update details",
   "Метаданные, политика доставки и управление публикацией.": "Metadata, delivery policy and release management.",
   "Загрузка...": "Loading...",
-  "⚠️ Rollback активен в этом канале/платформе.": "⚠️ Rollback is active in this channel/platform.",
+  "⚠️ Rollback активен в этом канале/платформе.": "Rollback is active in this channel/platform.",
   "Сейчас раздаётся updateId: ": "Currently serving update ID: ",
   "Новые апдейты автоматически игнорируются до выполнения Promote.": "New updates are ignored until Promote is performed.",
   "Этот апдейт сейчас не доставляется.": "This update is not being delivered.",
@@ -583,5 +583,8 @@
   "Restored {0} in {1}.": "Restored {0} in {1}.",
   "Delivery changed. Review the refreshed scope before restoring.": "Delivery changed. Review the refreshed scope before restoring.",
   "Could not restore release.": "Could not restore release.",
-  "Unable to load delivery history.": "Unable to load delivery history."
+  "Unable to load delivery history.": "Unable to load delivery history.",
+  "Immediate required update": "Immediate required update",
+  "The app silently downloads this update and restarts as soon as it is active and ready. Users can retry if the update fails.": "The app silently downloads this update and restarts as soon as it is active and ready. Users can retry if the update fails.",
+  "Delete this release and its files from storage.": "Delete this release and its files from storage."
 }

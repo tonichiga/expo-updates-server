@@ -34,7 +34,7 @@ export interface OtaOptions {
   autoCheck?: boolean;
   /** Download ordinary releases automatically; does not control their visibility. */
   autoUpdate?: boolean;
-  /** Reload non-background updates while the application is active. */
+  /** Reload eligible manual updates. Required background updates reload independently. */
   autoReload?: boolean;
   guardHandlers?: Record<
     string,
@@ -82,4 +82,15 @@ export function manifestDetails(manifest: unknown): OtaManifest | null {
   return manifest && typeof manifest === "object"
     ? (manifest as OtaManifest)
     : null;
+}
+
+/** A background force-OTA policy applies its downloaded manifest on the active app. */
+export function requiresImmediateReload(
+  policy: OtaPolicy | null | undefined,
+): boolean {
+  return (
+    policy?.schemaVersion === 1 &&
+    policy.delivery === "background" &&
+    policy.guard?.action === "ota-force-update"
+  );
 }

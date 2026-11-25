@@ -153,6 +153,7 @@ export default function GuardActionCatalog({
                   <Button
                     type="button"
                     variant="ghost"
+                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                     size="icon-sm"
                     disabled={busy}
                     aria-label={t("Delete {0} from action catalog", [

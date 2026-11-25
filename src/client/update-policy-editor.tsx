@@ -9,6 +9,7 @@ import {
   ChevronDown,
   Download,
   ShieldCheck,
+  Zap,
   MousePointer2,
   Store,
   Braces,
@@ -81,6 +82,12 @@ const profiles = {
     description:
       "The app blocks access and downloads this update. Users restart to continue.",
     icon: ShieldCheck,
+  },
+  immediate: {
+    label: "Immediate required update",
+    description:
+      "The app silently downloads this update and restarts as soon as it is active and ready. Users can retry if the update fails.",
+    icon: Zap,
   },
   store: {
     label: "Require a store update",
@@ -288,7 +295,10 @@ export default function UpdatePolicyEditor({
             {t("Choose how this release reaches users.")}
           </p>
         </div>
-        <Badge variant="outline" className="font-normal">
+        <Badge
+          variant={policy.publishedAt ? "info" : "warning"}
+          className="whitespace-normal font-normal"
+        >
           {t("Version {0}", [policy.policyVersion])}
           {policy.publishedAt
             ? t(" · published {0}", [
@@ -410,7 +420,8 @@ export default function UpdatePolicyEditor({
               key={draft.behavior}
               defaultOpen={
                 draft.behavior === "custom" ||
-                draft.delivery === "background" ||
+                (draft.delivery === "background" &&
+                  draft.behavior !== "immediate") ||
                 Boolean(draft.payload && draft.behavior !== "store") ||
                 (draft.behavior === "store" && !storeFields)
               }
@@ -428,32 +439,42 @@ export default function UpdatePolicyEditor({
               </CollapsibleTrigger>
               <CollapsibleContent className="pt-3">
                 <div className="space-y-4 rounded-md border bg-muted/20 p-3">
-                  <div className="grid gap-1.5">
-                    <Label htmlFor="policy-delivery">{t("Delivery")}</Label>
-                    <Select
-                      value={draft.delivery}
-                      disabled={editingDisabled}
-                      onValueChange={(v) =>
-                        edit({
-                          ...draft,
-                          delivery: v as UpdatePolicy["delivery"],
-                        })
-                      }
-                    >
-                      <SelectTrigger id="policy-delivery" className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="manual">{t("Manual")}</SelectItem>
-                        <SelectItem value="background">
-                          {t("Background")}
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">
-                      {t("The guard takes priority while access is blocked.")}
-                    </p>
-                  </div>
+                  {draft.behavior !== "required" &&
+                    draft.behavior !== "immediate" && (
+                      <div className="grid gap-1.5">
+                        <Label htmlFor="policy-delivery">{t("Delivery")}</Label>
+                        <Select
+                          value={draft.delivery}
+                          disabled={editingDisabled}
+                          onValueChange={(v) =>
+                            edit({
+                              ...draft,
+                              delivery: v as UpdatePolicy["delivery"],
+                            })
+                          }
+                        >
+                          <SelectTrigger
+                            id="policy-delivery"
+                            className="w-full"
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="manual">
+                              {t("Manual")}
+                            </SelectItem>
+                            <SelectItem value="background">
+                              {t("Background")}
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          {t(
+                            "The guard takes priority while access is blocked.",
+                          )}
+                        </p>
+                      </div>
+                    )}
                   <div className="grid gap-1.5">
                     <Label htmlFor="policy-payload">
                       {t("Optional custom JSON payload")}

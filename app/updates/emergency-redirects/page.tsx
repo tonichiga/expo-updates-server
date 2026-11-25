@@ -1,4 +1,7 @@
 "use client";
+import { Siren, Trash2 } from "lucide-react";
+import { ChannelBadge, PlatformBadge } from "@/components/admin/release-badges";
+import { statusTones } from "@/components/ui/status-tones";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
 import { useConfirmAction } from "@/components/admin/confirm-action";
@@ -179,7 +182,12 @@ export default function EmergencyRedirectsPage() {
       <div className="space-y-6">
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-1">
-            <h1 className="text-2xl font-semibold tracking-tight">
+            <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+              <span
+                className={`inline-flex rounded-md border p-1.5 ${statusTones.destructive}`}
+              >
+                <Siren aria-hidden="true" className="size-5" />
+              </span>
               {t("Emergency redirects")}
             </h1>
             <p className="text-sm text-muted-foreground">
@@ -200,7 +208,7 @@ export default function EmergencyRedirectsPage() {
                 {t("Новое правило")}
               </Button>
             )}
-            <Badge variant="secondary" className="px-3 py-1">
+            <Badge variant="info" className="px-3 py-1">
               {t("Rules: {0}", [items.length])}
             </Badge>
           </div>
@@ -320,7 +328,9 @@ export default function EmergencyRedirectsPage() {
               />
             </fieldset>
 
-            <label className="flex items-center gap-2 text-sm">
+            <label
+              className={`flex items-center gap-3 rounded-md border p-3 text-sm ${form.enabled ? statusTones.warning : "bg-muted/25"}`}
+            >
               <Switch
                 checked={form.enabled}
                 onCheckedChange={(checked) =>
@@ -330,7 +340,12 @@ export default function EmergencyRedirectsPage() {
               {t("Включить правило сразу после сохранения")}
             </label>
 
-            <Button variant="default" size="sm" type="submit" disabled={saving}>
+            <Button
+              variant={form.enabled ? "destructive" : "default"}
+              size="sm"
+              type="submit"
+              disabled={saving}
+            >
               {saving
                 ? t("Сохранение...")
                 : editingId
@@ -396,26 +411,30 @@ export default function EmergencyRedirectsPage() {
                         className="border-t border-border "
                       >
                         <TableCell className="px-4 py-3">
-                          <Badge
-                            variant="secondary"
-                            className={
-                              item.enabled
-                                ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-                                : ""
-                            }
-                          >
+                          <Badge variant={item.enabled ? "warning" : "neutral"}>
                             {item.enabled ? t("Enabled") : t("Disabled")}
                           </Badge>
                         </TableCell>
                         <TableCell className="px-4 py-3">{item.name}</TableCell>
                         <TableCell className="px-4 py-3">
-                          {item.runtimeVersion} / {item.platform}
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <PlatformBadge platform={item.platform} />
+                            <span>{item.runtimeVersion}</span>
+                          </div>
                         </TableCell>
                         <TableCell className="px-4 py-3">
-                          {item.fromChannel} → {item.toChannel}
+                          <div className="flex max-w-72 flex-wrap items-center gap-1">
+                            <ChannelBadge channel={item.fromChannel} />
+                            <span>→</span>
+                            <ChannelBadge channel={item.toChannel} />
+                          </div>
                         </TableCell>
                         <TableCell className="px-4 py-3">
-                          <Badge variant="outline">
+                          <Badge
+                            variant={
+                              item.targetMode === "pinned" ? "violet" : "info"
+                            }
+                          >
                             {item.targetMode === "pinned"
                               ? t("Pinned update")
                               : t("Follow channel")}
@@ -449,7 +468,9 @@ export default function EmergencyRedirectsPage() {
                                 {t("Edit")}
                               </Button>
                               <Button
-                                variant="outline"
+                                variant={
+                                  item.enabled ? "outline" : "destructive"
+                                }
                                 size="sm"
                                 type="button"
                                 onClick={() => void toggle(item)}
@@ -462,6 +483,7 @@ export default function EmergencyRedirectsPage() {
                                 type="button"
                                 onClick={() => void remove(item)}
                               >
+                                <Trash2 aria-hidden="true" />
                                 {t("Delete")}
                               </Button>
                             </div>

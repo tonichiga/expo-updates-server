@@ -9,6 +9,8 @@ import {
   type ReactNode,
 } from "react";
 import { usePathname } from "next/navigation";
+import { TriangleAlert } from "lucide-react";
+import { statusTones } from "@/components/ui/status-tones";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -87,6 +89,13 @@ function PageConfirmations({ children }: { children: ReactNode }) {
           }}
         >
           <DialogHeader>
+            {prompt?.destructive && (
+              <span
+                className={`mb-1 inline-flex size-10 items-center justify-center self-center rounded-lg border sm:self-start ${statusTones.destructive}`}
+              >
+                <TriangleAlert className="size-5" aria-hidden="true" />
+              </span>
+            )}
             <DialogTitle>{prompt?.action}</DialogTitle>
             <DialogDescription className="break-words">
               {prompt?.description}

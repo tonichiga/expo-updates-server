@@ -8,7 +8,7 @@ import {
   View,
 } from "react-native";
 import type { OtaController, OtaUpdatesProps } from "../types";
-import { manifestDetails } from "../types";
+import { manifestDetails, requiresImmediateReload } from "../types";
 import { useOtaUpdates } from "../model/hooks/useOtaUpdates";
 
 /** Mount once beside navigation. No context or application wrapper is required. */
@@ -35,8 +35,10 @@ export function OtaUpdates({
   );
 }
 
-interface OverlayProps
-  extends Pick<OtaUpdatesProps, "renderBlocked" | "renderAvailable"> {
+interface OverlayProps extends Pick<
+  OtaUpdatesProps,
+  "renderBlocked" | "renderAvailable"
+> {
   controller: OtaController;
   showAvailable?: boolean;
 }
@@ -61,6 +63,8 @@ export function OtaUpdateOverlay({
     controller.available &&
     controller.policy?.delivery !== "background" &&
     dismissed !== noticeId;
+  if (requiresImmediateReload(controller.policy) && !controller.error)
+    return null;
   if (!controller.blocked && !optional) return null;
 
   let content = <UpdateNotice controller={controller} dismiss={dismiss} />;
@@ -108,7 +112,7 @@ function UpdateNotice({
       label = "Open store";
       action = controller.openStore;
     } else if (controller.blockReason === "ota-force-update") {
-      if (controller.pending) {
+      if (controller.pending && !requiresImmediateReload(controller.policy)) {
         description =
           "The update is ready. Restart the application to continue.";
         label = "Restart";

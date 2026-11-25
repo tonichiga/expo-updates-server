@@ -27,8 +27,23 @@ import UpdatePolicyEditor from "@/src/client/update-policy-editor";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useContext, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, FileJson, Radio, Users } from "lucide-react";
+import {
+  ArrowLeft,
+  FileJson,
+  Radio,
+  Users,
+  Undo2,
+  ShieldAlert,
+  Trash2,
+} from "lucide-react";
 import { AdminRoleContext } from "@/components/admin/admin-role";
+import {
+  PlatformBadge,
+  ChannelBadge,
+  ReleaseStatusBadge,
+  AudienceBadge,
+  DeliveryBadge,
+} from "@/components/admin/release-badges";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -227,6 +242,7 @@ export default function UpdateDetailsPage() {
       t(
         "Вы действительно хотите начать распространение предыдущей версии обновления?",
       ),
+      true,
     );
     if (!confirmed) {
       return;
@@ -335,22 +351,19 @@ export default function UpdateDetailsPage() {
                   ? t("Version {0}", [detail.appVersion])
                   : t("Детали обновления"))}
             </h1>
-            {detail && (
-              <Badge
-                variant={detail.status === "active" ? "default" : "secondary"}
-              >
-                {detail.policyEditable ? t("draft") : t(detail.status)}
-              </Badge>
-            )}
-            {detail?.isLatest && <Badge variant="outline">{t("Latest")}</Badge>}
-            {!canWrite && <Badge variant="outline">{t("Read only")}</Badge>}
+            {detail && <ReleaseStatusBadge release={detail} />}
+            {detail?.isLatest && <Badge variant="info">{t("Latest")}</Badge>}
+            {!canWrite && <Badge variant="neutral">{t("Read only")}</Badge>}
           </div>
           {detail && (
-            <p className="break-words text-sm text-muted-foreground">
-              {detail.platform === "ios" ? "iOS" : "Android"} · {detail.channel}{" "}
-              · {t("Runtime {0}", [detail.runtimeVersion])} ·{" "}
-              {fullDate(detail.createdAt)}
-            </p>
+            <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              <PlatformBadge platform={detail.platform} />
+              <ChannelBadge channel={detail.channel} />
+              <span className="break-all">
+                {t("Runtime {0}", [detail.runtimeVersion])}
+              </span>
+              <span>· {fullDate(detail.createdAt)}</span>
+            </div>
           )}
         </header>
 
@@ -381,7 +394,8 @@ export default function UpdateDetailsPage() {
         {!loading && detail ? (
           <>
             {channelState.rollbackActive ? (
-              <Alert role="status">
+              <Alert variant="destructive" role="status">
+                <Undo2 aria-hidden="true" />
                 <AlertTitle>
                   {t("⚠️ Rollback активен в этом канале/платформе.")}
                 </AlertTitle>
@@ -398,7 +412,8 @@ export default function UpdateDetailsPage() {
             ) : null}
 
             {detail.isIgnoredByRollback ? (
-              <Alert role="status">
+              <Alert variant="warning" role="status">
+                <ShieldAlert aria-hidden="true" />
                 <AlertTitle>
                   {t("Этот апдейт сейчас не доставляется.")}
                 </AlertTitle>
@@ -414,20 +429,18 @@ export default function UpdateDetailsPage() {
               <div className="grid gap-4 p-4 sm:grid-cols-3 sm:p-5">
                 <Info
                   label={t("Audience")}
-                  value={
-                    detail.audienceMode === "devices"
-                      ? t("Выбранные устройства")
-                      : t("Все совместимые устройства")
-                  }
+                  value={<AudienceBadge mode={detail.audienceMode} />}
                 />
                 <Info
                   label={t("Доставка")}
                   value={
-                    detail.isIgnoredByRollback
-                      ? t("Ignored by rollback")
-                      : detail.deliveryMode === "background"
-                        ? t("Background")
-                        : t("Manual")
+                    detail.isIgnoredByRollback ? (
+                      <Badge variant="warning">
+                        {t("Ignored by rollback")}
+                      </Badge>
+                    ) : (
+                      <DeliveryBadge mode={detail.deliveryMode} />
+                    )
                   }
                 />
                 <Info label={t("Update ID")} value={detail.updateId} />
@@ -437,12 +450,13 @@ export default function UpdateDetailsPage() {
                   <div className="flex flex-wrap items-center gap-2 border-t bg-muted/20 px-4 py-3 sm:px-5">
                     {canRollback ? (
                       <Button
-                        variant="outline"
+                        variant="destructive"
                         size="sm"
                         type="button"
                         onClick={handleRollback}
                         disabled={saving}
                       >
+                        <Undo2 aria-hidden="true" />
                         {t("Rollback")}
                       </Button>
                     ) : null}
@@ -482,7 +496,8 @@ export default function UpdateDetailsPage() {
             >
               <TabsList
                 aria-label={t("Release sections")}
-                className="max-w-full"
+                variant="line"
+                className="max-w-full justify-start border-b"
               >
                 <TabsTrigger value="audience">
                   <Users className="hidden size-4 sm:block" />
@@ -644,15 +659,21 @@ export default function UpdateDetailsPage() {
                   />
                 </Card>
                 {canWrite && canDelete ? (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    type="button"
-                    onClick={handleDelete}
-                    disabled={saving}
-                  >
-                    {t("Удалить апдейт")}
-                  </Button>
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/35 bg-destructive/5 p-4">
+                    <p className="text-sm text-foreground">
+                      {t("Delete this release and its files from storage.")}
+                    </p>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      type="button"
+                      onClick={handleDelete}
+                      disabled={saving}
+                    >
+                      <Trash2 aria-hidden="true" />
+                      {t("Удалить апдейт")}
+                    </Button>
+                  </div>
                 ) : null}
               </TabsContent>
             </Tabs>
@@ -669,7 +690,7 @@ function Info({
   className,
 }: {
   label: string;
-  value: string;
+  value: React.ReactNode;
   className?: string;
 }) {
   return (

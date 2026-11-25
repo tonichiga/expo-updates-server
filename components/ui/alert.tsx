@@ -1,5 +1,6 @@
 import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
+import { statusTones } from "./status-tones";
 import { cn } from "@/lib/utils";
 
 const alertVariants = cva(
@@ -8,8 +9,14 @@ const alertVariants = cva(
     variants: {
       variant: {
         default: "bg-card text-card-foreground",
-        destructive:
-          "bg-card text-destructive *:data-[slot=alert-description]:text-destructive/90 [&>svg]:text-current",
+        destructive: [
+          statusTones.destructive,
+          "*:data-[slot=alert-description]:text-current",
+        ],
+        warning: [
+          statusTones.warning,
+          "*:data-[slot=alert-description]:text-current",
+        ],
       },
     },
     defaultVariants: {
@@ -38,7 +45,7 @@ function AlertTitle({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="alert-title"
       className={cn(
-        "col-start-2 line-clamp-1 min-h-4 font-medium tracking-tight",
+        "col-start-2 min-h-4 font-medium tracking-tight",
         className,
       )}
       {...props}

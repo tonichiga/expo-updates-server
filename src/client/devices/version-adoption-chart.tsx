@@ -8,13 +8,12 @@ import {
   CollapsibleContent,
 } from "@/components/ui/collapsible";
 import { useState } from "react";
+import { ChevronDown, ChevronUp, BarChart3, Layers } from "lucide-react";
 import {
-  ChevronDown,
-  ChevronUp,
-  BarChart3,
-  Layers,
-  GitBranch,
-} from "lucide-react";
+  PlatformBadge,
+  ChannelBadge,
+  launchKindTone,
+} from "@/components/admin/release-badges";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -56,12 +55,10 @@ function ScopeChart({ scope }: { scope: VersionScope }) {
     >
       <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <GitBranch className="size-4 shrink-0 text-muted-foreground" />
-          <span className="text-xs text-muted-foreground">{t("Канал")}</span>
-          <h4 className="break-all text-sm font-semibold">{scope.channel}</h4>
-          <Badge variant="outline">
-            {scope.platform === "ios" ? "iOS" : "Android"}
-          </Badge>
+          <h4 className="min-w-0 max-w-full">
+            <ChannelBadge channel={scope.channel} />
+          </h4>
+          <PlatformBadge platform={scope.platform} />
         </div>
         <span className="text-xs text-muted-foreground">
           {t("Активных установок:")}{" "}
@@ -93,8 +90,8 @@ function ScopeChart({ scope }: { scope: VersionScope }) {
                   {version.appVersion || t("Версия не указана")}
                 </p>
                 <Badge
-                  variant="secondary"
-                  className="font-mono text-[10px]"
+                  variant={launchKindTone[version.kind]}
+                  className="font-mono text-[11px]"
                   title={version.updateId || undefined}
                 >
                   {kindLabels[version.kind]}
@@ -124,7 +121,7 @@ function ScopeChart({ scope }: { scope: VersionScope }) {
               )}
             </div>
             <div
-              className="col-span-2 row-start-2 flex h-3 items-center @min-[32rem]:col-span-1 @min-[32rem]:col-start-2 @min-[32rem]:row-start-1 overflow-hidden rounded-full bg-muted"
+              className="col-span-2 row-start-2 flex h-3 items-center @min-[32rem]:col-span-1 @min-[32rem]:col-start-2 @min-[32rem]:row-start-1 overflow-hidden rounded-sm bg-muted"
               role="img"
               aria-label={t(
                 "{0}, {1} {2}: {3} установок, {4} внутри канала {5}, {6}",
@@ -140,7 +137,7 @@ function ScopeChart({ scope }: { scope: VersionScope }) {
               )}
             >
               <div
-                className="h-full rounded-full"
+                className="h-full rounded-sm"
                 style={{
                   width: `${scope.total ? (version.installations / scope.total) * 100 : 0}%`,
                   minWidth: version.installations ? 2 : 0,
@@ -201,7 +198,7 @@ export function VersionAdoptionChart({ report }: { report: DevicesReport }) {
           <CardTitle id="version-adoption-title">
             <h2>{t("Активные установки по версиям")}</h2>
           </CardTitle>
-          <Badge variant="secondary">
+          <Badge variant="info">
             {t("Всего: ")}
             {number(report.total)}
           </Badge>
@@ -246,7 +243,7 @@ export function VersionAdoptionChart({ report }: { report: DevicesReport }) {
                         {runtime.runtime}
                       </span>
                     </h3>
-                    <Badge variant="secondary">
+                    <Badge variant="info">
                       {t("Установок: ")}
                       {number(runtime.total)}
                     </Badge>

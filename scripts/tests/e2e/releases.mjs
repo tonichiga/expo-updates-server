@@ -8,12 +8,26 @@ export async function exerciseReleaseConsole(page, password) {
   const go = (path) => page.goto(origin + path);
   await go("/updates");
   const search = page.getByRole("searchbox", { name: "Search releases" });
+  await expect(page.getByRole("button", { name: "Apply", exact: true })).toHaveCount(0);
   await search.fill("Candidate");
   await page.getByRole("combobox", { name: "All platforms" }).click();
-  await page.getByRole("option", { name: "iOS", exact: true }).click();
+  await Promise.all([
+    page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return response.ok() && url.pathname === "/api/admin/updates" &&
+        url.searchParams.get("platform") === "ios" && url.searchParams.get("q") === "Candidate";
+    }),
+    page.getByRole("option", { name: "iOS", exact: true }).click(),
+  ]);
   await page.getByRole("combobox", { name: "All channels" }).click();
-  await page.getByRole("option", { name: "production", exact: true }).click();
-  await page.getByRole("button", { name: "Apply", exact: true }).click();
+  await Promise.all([
+    page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return response.ok() && url.pathname === "/api/admin/updates" &&
+        url.searchParams.get("channel") === "production" && url.searchParams.get("platform") === "ios";
+    }),
+    page.getByRole("option", { name: "production", exact: true }).click(),
+  ]);
   const release = page.getByRole("table").getByRole("link", {
     name: "Candidate release",
     exact: true,
@@ -25,7 +39,6 @@ export async function exerciseReleaseConsole(page, password) {
       .getByRole("link", { name: "Initial public build", exact: true }),
   ).toHaveCount(0);
   await search.fill("no such release");
-  await page.getByRole("button", { name: "Apply", exact: true }).click();
   await expect(
     page.getByText("No matching releases", { exact: true }),
   ).toBeVisible();
@@ -34,7 +47,6 @@ export async function exerciseReleaseConsole(page, password) {
     .first()
     .click();
   await search.fill("Initial public build");
-  await page.getByRole("button", { name: "Apply", exact: true }).click();
   const old = page.getByRole("table").getByRole("link", {
     name: "Initial public build",
     exact: true,
@@ -51,7 +63,6 @@ export async function exerciseReleaseConsole(page, password) {
   ).toBeVisible();
   await go("/updates");
   await search.fill("Candidate release");
-  await page.getByRole("button", { name: "Apply", exact: true }).click();
   await release.click();
   await page.getByRole("button", { name: "Promote", exact: true }).click();
   await page

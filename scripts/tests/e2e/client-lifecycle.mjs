@@ -24,7 +24,13 @@ export async function exerciseClientLifecycle({
   const fixtures = {};
   for (const platform of ["ios", "android"]) {
     fixtures[platform] = {};
-    for (const kind of ["manual", "background", "required", "store"]) {
+    for (const kind of [
+      "manual",
+      "background",
+      "required",
+      "immediate",
+      "store",
+    ]) {
       const channel = suite + "-" + kind;
       const scoped = { channel };
       const release = await seedPublication(
@@ -36,10 +42,13 @@ export async function exerciseClientLifecycle({
         scoped,
       );
       const policy = {
-        delivery: kind === "background" ? "background" : "manual",
+        delivery:
+          kind === "background" || kind === "immediate"
+            ? "background"
+            : "manual",
         expectedPolicyVersion: 1,
         guard:
-          kind === "required"
+          kind === "required" || kind === "immediate"
             ? { action: "ota-force-update" }
             : kind === "store"
               ? {

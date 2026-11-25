@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { useConfirmAction } from "@/components/admin/confirm-action";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
+import { ChannelBadge, PlatformBadge } from "@/components/admin/release-badges";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -130,6 +130,7 @@ export default function DistributionHistory({
           target.comment || target.updateId,
           scopeName,
         ]),
+        true,
       ))
     )
       return;
@@ -228,7 +229,7 @@ export default function DistributionHistory({
       )}
       {!data && !loadError && <Skeleton className="mx-5 mb-4 h-16" />}
       {data && !scopes.length && (
-        <Empty className="gap-2 rounded-none border-t border-solid py-6">
+        <Empty className="gap-2 rounded-none border-t border-solid p-4 md:p-5">
           <EmptyHeader>
             <EmptyMedia variant="icon">
               <Layers />
@@ -276,13 +277,9 @@ export default function DistributionHistory({
                 className="grid min-w-0 gap-3 border-t px-4 py-3.5 sm:px-5 lg:grid-cols-[1fr_1.15fr_1.15fr_auto] lg:items-center lg:gap-4 lg:first-of-type:border-t-0"
               >
                 <div className="min-w-0">
-                  <div className="break-all text-sm font-semibold">
-                    {scope.channel}
-                  </div>
+                  <ChannelBadge channel={scope.channel} />
                   <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-                    <Badge variant="outline">
-                      {scope.platform === "ios" ? "iOS" : "Android"}
-                    </Badge>
+                    <PlatformBadge platform={scope.platform} />
                     {t("Runtime {0}", [scope.runtimeVersion])}
                   </div>
                 </div>
@@ -314,7 +311,7 @@ export default function DistributionHistory({
                 <div className="lg:min-w-24 lg:text-right">
                   {scope.previous && data?.canWrite && (
                     <Button
-                      variant="outline"
+                      variant="destructive"
                       size="sm"
                       disabled={blocked || busy || !!loadError}
                       onClick={() => void restore(scope)}

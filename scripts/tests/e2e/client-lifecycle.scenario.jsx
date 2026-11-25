@@ -291,6 +291,38 @@ describe.each(["ios", "android"])(
       expect(phone.state.running.id).toBe(phone.state.cached.manifest.id);
     });
 
+    it("silently fetches and applies a signed immediate required update, and offers retry after failure", async () => {
+      const phone = device(platform, scopes.immediate.channel);
+      const app = phone.launch();
+      await screen(app);
+      phone.state.failAsset = true;
+      await act(async () => {
+        await expect(app.check()).rejects.toThrow("Connection lost");
+      });
+      expect(text()).toContain("Retry");
+      expect(text()).not.toContain("Later");
+      expect(phone.state.reloads).toBe(0);
+      phone.state.failAsset = false;
+      await press("Retry", app);
+      expect(phone.state.reloads).toBe(1);
+      expect(phone.state.running.id).toBe(phone.state.cached.manifest.id);
+      const reopened = phone.launch();
+      await screen(reopened);
+      await check(reopened);
+      expect(text()).toBe("");
+      expect(phone.state.reloads).toBe(1);
+      const automatic = device(platform, scopes.immediate.channel);
+      const healthy = automatic.launch();
+      await screen(healthy);
+      await act(async () => {
+        healthy.automaticCheck();
+        await waitForIdle(healthy);
+      });
+      expect(automatic.state.downloads).toBe(1);
+      expect(automatic.state.reloads).toBe(1);
+      expect(text()).toBe("");
+    });
+
     it("checks required Guard behavior before download, across a failed fetch, a stop and a replacement", async () => {
       const phone = device(platform, scopes.required.channel);
       const app = phone.launch();

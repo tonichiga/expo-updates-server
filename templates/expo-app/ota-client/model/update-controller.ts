@@ -1,4 +1,4 @@
-import { manifestDetails } from "../types";
+import { manifestDetails, requiresImmediateReload } from "../types";
 import type {
   OtaCandidate,
   OtaCheckResult,
@@ -46,6 +46,7 @@ export function createUpdateController(deps: Dependencies) {
   let identityReady: Promise<void> | undefined;
   let pendingKey: string | undefined;
   let pendingGeneration = 0;
+  let requestedReloadId: string | undefined;
   const now = deps.now || Date.now;
   function patch(value: Partial<OtaState>) {
     state = Object.freeze({ ...state, ...value });
@@ -162,14 +163,44 @@ export function createUpdateController(deps: Dependencies) {
     patch({ status: "downloading" });
     const result = await deps.fetch();
     if (result.isNew || result.isRollBackToEmbedded) {
-      const candidate = target(result);
-      pendingKey = key(candidate);
-      pendingGeneration += 1;
-      // Fetch performs another manifest request: its policy can differ from check's.
-      patch({ pending: true, available: true });
-      await inspect(candidate);
+      await acceptPending(target(result));
+    } else if (requiresImmediateReload(state.policy)) {
+      throw new Error(
+        "The required update is no longer available. Check again.",
+      );
     }
     return result;
+  }
+  async function acceptPending(candidate: OtaCandidate) {
+    const id = key(candidate);
+    const fetchedPolicy = manifestDetails(candidate.manifest)?.extra
+      ?.updatePolicy;
+    if (
+      requiresImmediateReload(fetchedPolicy) ||
+      requiresImmediateReload(state.policy)
+    ) {
+      if (candidate.type === "new" && !id) {
+        pendingKey = undefined;
+        pendingGeneration += 1;
+        patch({ pending: false });
+        if (requiresImmediateReload(fetchedPolicy)) await inspect(candidate);
+        throw new Error("The downloaded update has no update ID. Check again.");
+      }
+      if (
+        candidate.type === "new" &&
+        id === manifestDetails(deps.runningCandidate?.()?.manifest)?.id
+      ) {
+        pendingGeneration += 1;
+        pendingKey = undefined;
+        patch({ pending: false, available: false });
+        await inspectRunning();
+        return;
+      }
+    }
+    pendingKey = id;
+    pendingGeneration += 1;
+    patch({ pending: true, available: true });
+    await inspect(candidate);
   }
   async function reloadInternal() {
     if (!state.pending) throw new Error("No downloaded update is ready");
@@ -177,7 +208,17 @@ export function createUpdateController(deps: Dependencies) {
     if (!deps.isActive())
       throw new Error("Reload is only allowed while the app is active");
     patch({ status: "reloading" });
-    return deps.reload();
+    if (!requiresImmediateReload(state.policy)) return deps.reload();
+    if (!pendingKey)
+      throw new Error("The downloaded update has no update ID. Check again.");
+    if (requestedReloadId === pendingKey) return;
+    requestedReloadId = pendingKey;
+    try {
+      await deps.reload();
+    } catch (error) {
+      requestedReloadId = undefined;
+      throw error;
+    }
   }
   async function automate(allowDownload = true) {
     const settings = options();
@@ -192,12 +233,12 @@ export function createUpdateController(deps: Dependencies) {
     ) {
       await downloadInternal();
     }
-    // A background policy always wins over autoReload. Guards are re-evaluated after fetch.
+    // Only the downloaded policy can authorize an immediate restart.
     if (
       state.pending &&
       canDownload() &&
-      settings.autoReload &&
-      state.policy?.delivery !== "background" &&
+      (requiresImmediateReload(state.policy) ||
+        (settings.autoReload && state.policy?.delivery !== "background")) &&
       deps.isActive()
     )
       await reloadInternal();
@@ -208,7 +249,21 @@ export function createUpdateController(deps: Dependencies) {
       if (result.isAvailable || result.isRollBackToEmbedded) {
         patch({ available: true });
         // Never replace the policy governing an already downloaded bundle with a different candidate.
-        if (!state.pending) await inspect(target(result));
+        if (!state.pending) {
+          const candidate = target(result);
+          const fetched = manifestDetails(candidate.manifest);
+          if (
+            requiresImmediateReload(fetched?.extra?.updatePolicy) &&
+            fetched?.id &&
+            fetched.id ===
+              manifestDetails(deps.runningCandidate?.()?.manifest)?.id
+          ) {
+            patch({ available: false });
+            await inspectRunning();
+          } else {
+            await inspect(candidate);
+          }
+        }
       } else if (!state.pending) {
         patch({ available: false });
         await inspectRunning();
@@ -219,6 +274,19 @@ export function createUpdateController(deps: Dependencies) {
     });
   }
   function automaticCheck() {
+    // A required bundle may have finished downloading while inactive. Its restart
+    // needs neither a network check nor another minute of foreground time.
+    if (state.pending && requiresImmediateReload(state.policy)) {
+      if (
+        deps.isActive() &&
+        !flight &&
+        !state.error &&
+        requestedReloadId !== pendingKey
+      ) {
+        void run("reloading", reloadInternal).catch(() => undefined);
+      }
+      return;
+    }
     if (
       !deps.enabled ||
       !options().autoCheck ||
@@ -252,7 +320,13 @@ export function createUpdateController(deps: Dependencies) {
         return result;
       }),
     reload: () => run("reloading", reloadInternal),
-    retry: () => check(),
+    retry: () =>
+      state.pending && requiresImmediateReload(state.policy)
+        ? run("reloading", reloadInternal).then(() => ({
+            isAvailable: true,
+            manifest: state.candidate?.manifest,
+          }))
+        : check(),
     openStore: () =>
       run("opening-store", async () => {
         if (state.blockReason !== "ota-force-store-update")
@@ -260,7 +334,8 @@ export function createUpdateController(deps: Dependencies) {
         await deps.openStore(state.policy?.guard?.payload);
       }),
     syncPending(candidate: OtaCandidate | null): Promise<void> {
-      if (!candidate || key(candidate) === pendingKey) return Promise.resolve();
+      if (!candidate || (state.pending && key(candidate) === pendingKey))
+        return Promise.resolve();
       if (flight) {
         const observedGeneration = pendingGeneration;
         return flight
@@ -271,11 +346,13 @@ export function createUpdateController(deps: Dependencies) {
           });
       }
       return run("checking", async () => {
-        pendingKey = key(candidate);
-        pendingGeneration += 1;
-        patch({ pending: true, available: true });
-        await inspect(candidate);
-        // Synchronizing native state never implicitly reloads a restored bundle.
+        await acceptPending(candidate);
+        if (
+          state.pending &&
+          requiresImmediateReload(state.policy) &&
+          deps.isActive()
+        )
+          await reloadInternal();
       });
     },
   };
@@ -287,7 +364,7 @@ function target(result: OtaCheckResult | OtaFetchResult): OtaCandidate {
   return { type: "new", manifest: result.manifest };
 }
 function key(candidate: OtaCandidate) {
-  return candidate.type === "rollback"
-    ? "rollback"
-    : manifestDetails(candidate.manifest)?.id;
+  if (candidate.type === "rollback") return "rollback";
+  const id = manifestDetails(candidate.manifest)?.id;
+  return typeof id === "string" && id.trim() ? id : undefined;
 }

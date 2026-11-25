@@ -8,6 +8,8 @@ import { Field, FieldLabel } from "@/components/ui/field";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 
+import { statusTones } from "@/components/ui/status-tones";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -190,11 +192,16 @@ export default function DistributionControl({
   };
 
   return (
-    <Card className="gap-0 overflow-hidden py-0 shadow-none">
+    <Card
+      className={cn(
+        "gap-0 overflow-hidden py-0 shadow-none",
+        (state?.blocked || error) && "border-l-4 border-l-destructive",
+      )}
+    >
       <div className="flex flex-wrap items-center justify-between gap-4 p-4">
         <div className="flex items-start gap-3">
           <div
-            className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${state?.blocked || error ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground"}`}
+            className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${state?.blocked || error ? statusTones.destructive : state && !loading ? statusTones.positive : "bg-muted text-muted-foreground"}`}
           >
             {loading ? (
               <RefreshCw className="size-4 animate-spin" />
@@ -210,11 +217,12 @@ export default function DistributionControl({
                 {t("Распространение OTA")}
               </h2>
               <Badge
-                variant="secondary"
-                className={
-                  state?.blocked || error
-                    ? "bg-destructive/10 text-destructive"
-                    : ""
+                variant={
+                  loading
+                    ? "neutral"
+                    : state?.blocked || error || !state
+                      ? "destructive"
+                      : "positive"
                 }
               >
                 {loading
@@ -247,13 +255,16 @@ export default function DistributionControl({
             />
           </Button>
         ) : state ? (
-          <Badge variant="outline">{t("Read only · updates:write")}</Badge>
+          <Badge variant="neutral">{t("Read only · updates:write")}</Badge>
         ) : null}
       </div>
       {expanded && state?.canWrite && (
         <div
           id="distribution-controls"
-          className="space-y-3 border-t bg-muted/20 p-4"
+          className={cn(
+            "space-y-3 border-t p-4",
+            state.blocked ? "bg-muted/20" : statusTones.destructive,
+          )}
         >
           <p className="text-xs text-muted-foreground">
             {t("Изменено: ")}
@@ -277,7 +288,7 @@ export default function DistributionControl({
                 placeholder={t(
                   "Обязательная причина остановки (до 500 символов)",
                 )}
-                className="min-h-20 max-w-2xl"
+                className="min-h-20 max-w-2xl bg-background text-foreground"
               />
             </Field>
           )}
@@ -298,7 +309,7 @@ export default function DistributionControl({
       {(error || actionError) && (
         <p
           role="alert"
-          className="border-t bg-destructive/5 px-4 py-3 text-sm text-destructive"
+          className={cn("border-t px-4 py-3 text-sm", statusTones.destructive)}
         >
           {t(error || actionError)}
         </p>
@@ -306,7 +317,10 @@ export default function DistributionControl({
       {message && (
         <p
           role="status"
-          className="border-t px-4 py-3 text-sm text-emerald-700 dark:text-emerald-400"
+          className={cn(
+            "border-t px-4 py-3 text-sm",
+            state?.blocked ? statusTones.destructive : statusTones.positive,
+          )}
         >
           {t(message)}
         </p>

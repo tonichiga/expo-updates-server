@@ -8,7 +8,7 @@ The admin panel uses a shared shadcn/ui (Radix) UI kit, Tailwind CSS 4, Lucide a
 - **Installations** (`/updates/devices`) has Overview, Versions, Cohorts and Registry tabs. Shared filters apply across tabs. Daily values distinguish missing history, zero activity and a partial UTC day. Version shares use the installations in each displayed platform and channel.
 - **Embedded builds** and **Emergency redirects** retain the existing role restrictions and management actions.
 
-Apply filters to the entire selection with Apply. A failed request keeps the previous result with an explicit message. If the last page disappears after a refresh, the registry moves to the last available page. Analytics count installations, not unique people.
+Changing a selection or resetting filters updates results immediately. Text search updates after a short pause in typing. A failed request keeps the previous result with an explicit message. If the last page disappears after a refresh, the registry moves to the last available page. Analytics count installations, not unique people.
 
 For daily data, cohort and retention semantics and database migration, see [installation telemetry](./installation-telemetry.md). Existing databases require `2026-10-22-device-analytics.sql`; new databases receive it from the canonical `schema.sql`.
 

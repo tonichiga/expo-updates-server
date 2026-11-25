@@ -80,6 +80,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   host.remove();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
@@ -89,20 +90,19 @@ describe("release workflows", () => {
     await act(async () => root.render(<UpdatesPage />));
     expect(host.textContent).toContain(draft.comment);
     const search = host.querySelector<HTMLInputElement>("input[type=search]")!;
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(
-        HTMLInputElement.prototype,
-        "value",
-      )!.set!.call(search, "First");
+    vi.useFakeTimers();
+    const typeSearch = (value: string) => act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(search, value);
       search.dispatchEvent(new Event("input", { bubbles: true }));
     });
-    const form = host.querySelector("form")!;
+    const initialSignal = api.getUpdates.mock.lastCall![1] as AbortSignal;
+    await typeSearch("Fi");
+    await typeSearch("First");
+    expect(initialSignal.aborted).toBe(true);
+    await act(async () => vi.advanceTimersByTimeAsync(299));
+    expect(api.getUpdates).toHaveBeenCalledTimes(1);
     api.getUpdates.mockRejectedValueOnce(new Error("Temporary outage"));
-    await act(async () =>
-      form.dispatchEvent(
-        new Event("submit", { bubbles: true, cancelable: true }),
-      ),
-    );
+    await act(async () => vi.advanceTimersByTimeAsync(1));
     expect(api.getUpdates).toHaveBeenLastCalledWith(
       expect.objectContaining({ page: 1, q: "First" }),
       expect.any(AbortSignal),

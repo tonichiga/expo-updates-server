@@ -25,8 +25,7 @@ Catalog membership is advisory and is not required to save or serve an action.
 - `Updates.manifest` contains the policy of the update that is **currently
   running**. Do not use it as the candidate policy before downloading.
 - `manual` is the default and leaves fetch/reload behavior to the application.
-- `background` means fetch the candidate silently, do not reload immediately,
-  and apply it on the next cold start.
+- An unguarded `background` release downloads silently and applies on the next cold start.
 - Legacy clients safely ignore the additional `extra` value.
 
 An inactive upload is a draft, even though its initial `disabled_at` value is
@@ -89,15 +88,13 @@ root layout/App, with `OtaUpdateGate` around application content. See the
 The hook evaluates the candidate policy from `check()`, then validates the fetched
 manifest again because the selected release may change between checking and downloading.
 
-- `ota-force-update` requires a compatible **OTA**: the gate blocks interaction, the
-  hook downloads the update and shows a restart action when ready.
+- With `manual` delivery, `ota-force-update` downloads a compatible OTA and shows a required restart action when ready.
+- With `background` delivery, `ota-force-update` downloads silently and automatically reloads once the signed update is ready and the app is active, even with `autoReload: false`. If the app is inactive it resumes on foreground. A failed download or reload shows a required retry action. Earlier generated clients show a restart button for this combination.
 - `ota-force-store-update` requires a **new native binary**: the gate opens the platform
   store URL; it does not download this OTA candidate. OTA cannot change runtime or add
   native modules. Payload supports `androidUrl`, `iosUrl`, or a shared `url` fallback.
 - Unknown/custom actions remain blocked until an explicit `guardHandlers[action]`
   returns `allow`. Catalog entries alone do not implement guard behavior.
-- `delivery: background` downloads silently and waits for a cold launch or a manual
-  reload. It does not immediately reload because `autoReload` is enabled.
 - A manual candidate is displayed for explicit download/reload unless root options
   enable `autoUpdate`/`autoReload`. The generated root enables automatic checks only.
 

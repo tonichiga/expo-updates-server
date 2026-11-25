@@ -27,8 +27,9 @@ Expo Go, web and disabled-updates builds leave automation off.
 | autoCheck | Check on mount and foreground, minimum interval 60 seconds |
 | autoUpdate | Also download eligible manual candidates |
 | autoReload | Reload a pending non-background bundle while app is active |
-| delivery=background | Download silently; apply on next cold launch or manual reload |
-| guard=ota-force-update | Block with gate, download automatically; restart button when ready |
+| delivery=background, guard=∅ | Download silently; apply on next cold launch or manual reload |
+| manual + ota-force-update | Block with gate, download automatically; restart button when ready |
+| background + ota-force-update | Download silently and restart the active app as soon as the update is ready, even with autoReload disabled |
 | guard=ota-force-store-update | Block with gate; open store, never download this candidate |
 | custom/unknown guard | Block until guardHandlers[action] explicitly returns `allow` |
 
@@ -241,7 +242,7 @@ export function OtaControls() {
 The gate supplies required-update actions while these ordinary screen controls are
 blocked. To download ordinary updates automatically, set `autoUpdate: true` in the
 root; add `autoReload: true` only when automatic foreground restarts suit your app.
-Server `background` delivery still prevents an automatic immediate restart. Custom
+An unguarded `background` release waits for the next launch. Custom
 guards need an explicit `guardHandlers[action]` decision; returning `allow` should
 follow your actual application condition, not simply silence an unknown action.
 

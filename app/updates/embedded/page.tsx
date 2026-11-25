@@ -8,6 +8,7 @@ import { AdminRoleContext } from "@/components/admin/admin-role";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { PlatformBadge, ChannelBadge } from "@/components/admin/release-badges";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -107,7 +108,7 @@ export default function EmbeddedUpdatesPage() {
               {t("Встроенные версии приложения и регистрация нативных сборок.")}
             </p>
           </div>
-          <Badge variant="secondary" className="px-3 py-1">
+          <Badge variant="info" className="px-3 py-1">
             {t("Builds: {0}", [items.length])}
           </Badge>
         </header>
@@ -202,10 +203,10 @@ export default function EmbeddedUpdatesPage() {
                           {item.appVersion || "—"}
                         </TableCell>
                         <TableCell className="px-4 py-3">
-                          {item.platform}
+                          <PlatformBadge platform={item.platform} />
                         </TableCell>
                         <TableCell className="px-4 py-3">
-                          <Badge variant="outline">{item.channel}</Badge>
+                          <ChannelBadge channel={item.channel} />
                         </TableCell>
                         <TableCell className="px-4 py-3 font-mono text-xs">
                           <span
@@ -218,7 +219,7 @@ export default function EmbeddedUpdatesPage() {
                         <TableCell className="px-4 py-3">
                           {canWrite ? (
                             <Button
-                              variant="outline"
+                              variant="destructive"
                               size="sm"
                               type="button"
                               onClick={() =>

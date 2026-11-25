@@ -30,6 +30,20 @@ describe("policy editor draft", () => {
       }
     },
   );
+  it("selects required delivery explicitly and retains the existing force payload", () => {
+    const required = draftFromPolicy({
+      delivery: "manual",
+      guard: { action: "ota-force-update", payload: { reason: 1 } },
+    });
+    expect(required.behavior).toBe("required");
+    const immediate = chooseBehavior(required, "immediate");
+    expect(policyFromDraft(immediate)).toEqual({
+      delivery: "background",
+      guard: { action: "ota-force-update", payload: { reason: 1 } },
+    });
+    expect(draftFromPolicy(policyFromDraft(immediate))).toEqual(immediate);
+    expect(chooseBehavior(immediate, "required")).toEqual(required);
+  });
   it("switches off the previous guard when choosing background delivery", () => {
     const original = draftFromPolicy({
       delivery: "manual",

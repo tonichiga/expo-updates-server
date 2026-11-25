@@ -72,7 +72,7 @@ export function Overview({ report }: { report: DevicesReport }) {
   ];
   return (
     <>
-      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border bg-border xl:grid-cols-4">
         {[
           {
             icon: Smartphone,
@@ -106,12 +106,12 @@ export function Overview({ report }: { report: DevicesReport }) {
             detail: t("Distinct version combinations"),
           },
         ].map((kpi) => (
-          <Card key={kpi.label} className="min-w-0 gap-2.5 py-4 shadow-none">
+          <Card key={kpi.label} className="min-w-0 gap-2 rounded-none border-0 py-4 sm:py-5">
             <CardHeader className="gap-3 px-4">
               <CardDescription className="flex items-center justify-between gap-1 text-xs font-medium">
                 {kpi.label}
                 <kpi.icon
-                  className="size-4 shrink-0 text-primary"
+                  className="size-4 shrink-0 text-muted-foreground"
                   aria-hidden="true"
                 />
               </CardDescription>
@@ -125,7 +125,7 @@ export function Overview({ report }: { report: DevicesReport }) {
           </Card>
         ))}
       </div>
-      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.65fr)_minmax(14rem,1fr)]">
+      <div className="grid min-w-0 gap-4">
         <Card className="min-w-0 shadow-none">
           <CardHeader>
             <CardTitle>
@@ -147,7 +147,7 @@ export function Overview({ report }: { report: DevicesReport }) {
                   color: "var(--chart-2)",
                 },
               }}
-              className="aspect-auto h-56 w-full"
+              className="aspect-auto h-52 w-full sm:h-64 lg:h-72"
               aria-label={t("График ежедневных активных и новых установок")}
             >
               <AreaChart
@@ -155,7 +155,7 @@ export function Overview({ report }: { report: DevicesReport }) {
                 data={report.activity}
                 margin={{ top: 12, right: 16, left: 0, bottom: 0 }}
               >
-                <CartesianGrid vertical={false} strokeDasharray="3 4" />
+                <CartesianGrid vertical={false} stroke="var(--border)" />
                 <XAxis
                   dataKey="date"
                   tickFormatter={date}
@@ -311,9 +311,9 @@ export function Overview({ report }: { report: DevicesReport }) {
               {t("Текущее состояние активных установок")}
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-5">
+          <CardContent className="space-y-4">
             <div
-              className="flex h-3 overflow-hidden rounded-full bg-muted"
+              className="flex h-2 overflow-hidden rounded-sm bg-muted"
               role="img"
               aria-label={kinds.map((k) => `${k.label}: ${k.value}`).join(", ")}
             >
@@ -329,11 +329,11 @@ export function Overview({ report }: { report: DevicesReport }) {
                 />
               ))}
             </div>
-            <div className="divide-y">
+            <div className="grid divide-y sm:grid-cols-3 sm:divide-x sm:divide-y-0">
               {kinds.map((k) => (
                 <div
                   key={k.label}
-                  className="flex items-center justify-between gap-3 py-3"
+                  className="flex flex-wrap items-center justify-between gap-2 py-2 sm:px-4 sm:first:pl-0 sm:last:pr-0"
                 >
                   <p className="text-xs text-muted-foreground">
                     <i
@@ -351,7 +351,10 @@ export function Overview({ report }: { report: DevicesReport }) {
                 </div>
               ))}
             </div>
-            <div className="flex items-center justify-between gap-3 rounded-md bg-muted/50 px-3 py-2 text-xs">
+            <div className={
+                "flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-xs " +
+                (s.emergencyInstallations ? "border-destructive/40 bg-destructive/10" : "bg-muted/40")
+              }>
               <span>{t("Аварийный запуск")}</span>
               <strong
                 className={

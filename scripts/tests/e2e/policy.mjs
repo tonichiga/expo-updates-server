@@ -134,16 +134,29 @@ export async function exercisePolicyEditor(page, { db, storage, password }) {
   expect((await (await page.request.get(api)).json()).guard).toEqual({
     action: "ota-force-update",
   });
-  await radio("Background update").click();
+  const manualRequired = await (await page.request.get(api)).json();
+  expect(manualRequired.delivery).toBe("manual");
+  await radio("Immediate required update").click();
   await save.click();
   await expect(
     tab.getByRole("status").filter({ hasText: "Policy saved as version 5." }),
+  ).toBeVisible();
+  const immediate = await (await page.request.get(api)).json();
+  expect(immediate.delivery).toBe("background");
+  expect(immediate.guard).toEqual({ action: "ota-force-update" });
+  await page.reload();
+  await page.getByRole("tab", { name: "Policy", exact: true }).click();
+  await expect(radio("Immediate required update")).toBeChecked();
+  await radio("Background update").click();
+  await save.click();
+  await expect(
+    tab.getByRole("status").filter({ hasText: "Policy saved as version 6." }),
   ).toBeVisible();
   expect((await (await page.request.get(api)).json()).guard).toBeNull();
   await radio("Optional update").click();
   await save.click();
   await expect(
-    tab.getByRole("status").filter({ hasText: "Policy saved as version 6." }),
+    tab.getByRole("status").filter({ hasText: "Policy saved as version 7." }),
   ).toBeVisible();
 
   const catalogKey = "app.catalog-demo";
@@ -174,7 +187,7 @@ export async function exercisePolicyEditor(page, { db, storage, password }) {
     tab.getByText("No matching actions", { exact: true }),
   ).toBeVisible();
   await expect(save).toBeDisabled();
-  expect((await (await page.request.get(api)).json()).policyVersion).toBe(6);
+  expect((await (await page.request.get(api)).json()).policyVersion).toBe(7);
 
   const viewer = await page.context().browser().newContext();
   try {
