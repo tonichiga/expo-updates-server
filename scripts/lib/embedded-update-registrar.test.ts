@@ -27,12 +27,15 @@ function createIosRegistrarFixture() {
   const iosRegistrar = path.join(registrarDirectory, "register-ios.sh");
   const jsRegistrar = path.join(registrarDirectory, "index.mjs");
   fs.mkdirSync(registrarDirectory, { recursive: true });
-  fs.copyFileSync(
-    path.resolve(
-      "templates/expo-app/scripts/ota-register-embedded/register-ios.sh",
-    ),
-    iosRegistrar,
+  // Confine the Xcode/Homebrew fallback paths to this simulated build host.
+  const registrar = fs.readFileSync(
+    path.resolve("templates/expo-app/scripts/ota-register-embedded/register-ios.sh"),
+    "utf8",
   );
+  fs.writeFileSync(iosRegistrar, registrar.replace(
+    /"(\/(?:opt\/homebrew|usr\/local)\/bin\/node)"/g,
+    (_, absolutePath) => JSON.stringify(projectRoot + absolutePath),
+  ));
   fs.writeFileSync(jsRegistrar, "// Fake registrar; fake Node must run this.\n");
 
   const targetBuildDirectory = path.join(projectRoot, "build");
@@ -61,7 +64,9 @@ fi
   );
   fs.chmodSync(fakeNode, 0o755);
 
-  const pathWithoutNode = "/usr/bin:/bin";
+  const pathWithoutNode = path.join(projectRoot, "bin");
+  fs.mkdirSync(pathWithoutNode);
+  fs.symlinkSync("/usr/bin/dirname", path.join(pathWithoutNode, "dirname"));
   const env = {
     ...process.env,
     PATH: pathWithoutNode,
