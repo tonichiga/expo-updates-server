@@ -119,8 +119,9 @@ export default function DistributionControl({
 }) {
   const confirmAction = useConfirmAction();
   const { t, formatLocale } = useI18n();
-  const { state, setState, loading, error, setError, refresh } =
+  const { state, setState, loading, error, refresh } =
     useDistributionControlState();
+  const [actionError, setActionError] = useState("");
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<TranslationMessage>("");
@@ -137,7 +138,7 @@ export default function DistributionControl({
 
     const normalizedReason = reason.trim();
     if (blocked && !normalizedReason) {
-      setError("Укажите причину аварийной блокировки.");
+      setActionError("Укажите причину аварийной блокировки.");
       return;
     }
 
@@ -155,7 +156,7 @@ export default function DistributionControl({
     }
 
     setSaving(true);
-    setError("");
+    setActionError("");
     setMessage("");
     try {
       const updated = await setDistributionControl({
@@ -173,11 +174,11 @@ export default function DistributionControl({
     } catch (saveError: unknown) {
       if (saveError instanceof AdminApiError && saveError.status === 409) {
         await refresh();
-        setError(
+        setActionError(
           "Состояние уже изменил другой оператор. Данные обновлены; проверьте их и повторите действие.",
         );
       } else {
-        setError(
+        setActionError(
           saveError instanceof Error
             ? saveError.message
             : "Не удалось изменить глобальный статус OTA",
@@ -267,7 +268,10 @@ export default function DistributionControl({
               <Textarea
                 id="stop-reason"
                 value={reason}
-                onChange={(event) => setReason(event.target.value)}
+                onChange={(event) => {
+                  setReason(event.target.value);
+                  setActionError("");
+                }}
                 maxLength={500}
                 aria-label={t("Причина аварийной блокировки OTA")}
                 placeholder={t(
@@ -291,12 +295,12 @@ export default function DistributionControl({
           </Button>
         </div>
       )}
-      {error && (
+      {(error || actionError) && (
         <p
           role="alert"
           className="border-t bg-destructive/5 px-4 py-3 text-sm text-destructive"
         >
-          {t(error)}
+          {t(error || actionError)}
         </p>
       )}
       {message && (

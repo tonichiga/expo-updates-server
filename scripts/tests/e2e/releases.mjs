@@ -129,6 +129,12 @@ export async function exercisePublicRestore(page, { origin, db, storage }) {
   await expect(row.getByText("No active release")).toBeVisible();
   await expect(row.getByRole("link", { name: previous.comment })).toBeVisible();
   const restore = row.getByRole("button", { name: "Restore", exact: true });
+  await page.getByRole("button", { name: "Management", exact: true }).click();
+  await page.getByRole("button", { name: "Stop all OTA", exact: true }).click();
+  await expect(
+    page.getByText("Enter a reason for the emergency stop.", { exact: true }),
+  ).toBeVisible();
+  await expect(restore).toBeEnabled();
   await restore.click();
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: "Cancel" }).click();
