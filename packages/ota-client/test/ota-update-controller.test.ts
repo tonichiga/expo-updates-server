@@ -1,6 +1,6 @@
-import type { OtaCheckResult, OtaFetchResult, OtaOptions } from '../../templates/expo-app/ota-client/types';
+import type { OtaCheckResult, OtaFetchResult, OtaOptions } from '../src/types';
 import { describe, expect, it, vi } from 'vitest';
-import { createUpdateController } from '../../templates/expo-app/ota-client/model/update-controller';
+import { createUpdateController } from '../src/model/update-controller';
 
 function manifest(id = 'update-a', delivery = 'manual', action?: string) {
   return { id, extra: { updatePolicy: { schemaVersion: 1, policyVersion: 1, delivery,

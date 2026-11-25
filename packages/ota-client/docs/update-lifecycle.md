@@ -1,6 +1,6 @@
 # Update lifecycle
 
-`configure-app` generates a formatted TypeScript client and renders `<OtaUpdates />`
+`configure-app` installs the SDK and renders `<OtaUpdates />`
 beside navigation in the root layout/App. The component calls `useOtaUpdates`
 internally; it does not wrap the app or provide React context. Mount it once in a
 persistent root, including loading/early-return paths.

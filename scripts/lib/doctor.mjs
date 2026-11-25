@@ -5,6 +5,7 @@ import { createRequire } from 'node:module';
 import { execFile } from 'node:child_process';
 import { createHash, X509Certificate } from 'node:crypto';
 import { probeServer } from './doctor-probes.mjs';
+import { bootstrapCode, clientPackage, nativeClientDependencies } from './ota-client-package.mjs';
 
 const exec = util.promisify(execFile);
 const present = (value) => typeof value === 'string' && Boolean(value.trim()) && !/(?:<[^>]+>|replace-with|YOUR_|choose-a-|:\/\/USER:PASSWORD@HOST|:\/\/user:password@host|updates\.example\.com|storage\.example\.com)/.test(value);
@@ -58,15 +59,15 @@ async function inspectApplication(appRoot, serverUrl, add) {
     return {};
   }
   const require = createRequire(path.join(appRoot, 'package.json'));
-  const dependencies = ['expo', 'expo-updates', 'expo-application', 'expo-crypto', 'expo-secure-store', '@react-native-async-storage/async-storage'];
+  const dependencies = ['expo', ...nativeClientDependencies];
   const missing = dependencies.filter((name) => {
     if (!pkg.dependencies?.[name]) return true;
     try { require.resolve(name); return false; } catch { return true; }
   });
   add('app.dependencies', missing.length ? 'fail' : 'pass', missing.length ? `Missing client dependencies: ${missing.join(', ')}.` : 'Client dependencies are declared and resolvable.', missing.length ? 'Run configure-app or install the documented Expo-compatible client dependencies in the app.' : undefined);
-  const clientFiles = ['index.ts', 'types.ts', 'runtime.ts', 'controller.ts', 'device-identity.ts', 'model/update-controller.ts', 'model/hooks/useOtaUpdates.ts', 'ui/ota-updates.tsx', 'ui/ota-update-gate.tsx'];
-  const clientFilesPresent = (await Promise.all(clientFiles.map((file) => exists(path.join(appRoot, 'ota-client', file))))).every(Boolean);
-  add('app.client', clientFilesPresent ? 'pass' : 'fail', clientFilesPresent ? 'Generated client implementation files are present.' : 'Generated client implementation files are incomplete.', clientFilesPresent ? undefined : 'Run configure-app or copy the complete ota-client directory using the manual integration guide.');
+  let sdkInstalled = false;
+  try { sdkInstalled = Boolean(pkg.dependencies?.[clientPackage] && await exists(require.resolve(clientPackage))); } catch { /* Report unresolved SDK below. */ }
+  add('app.client', sdkInstalled ? 'pass' : 'fail', sdkInstalled ? 'Client SDK is declared and resolvable.' : `Missing client SDK: ${clientPackage}.`, sdkInstalled ? undefined : 'Run configure-app to install the client SDK and migrate generated files.');
   const updates = expo.updates || {};
   const channel = updates.requestHeaders?.['expo-channel-name'];
   const runtime = expo.runtimeVersion?.policy === 'appVersion' ? expo.version : expo.runtimeVersion;
@@ -93,16 +94,18 @@ async function inspectApplication(appRoot, serverUrl, add) {
     let originalEntry = pkg.main || '__platform_default__';
     if (['ota-entry.js', './ota-entry.js'].includes(originalEntry)) {
       originalEntry = (await readJson(path.join(appRoot, 'ota-client-entry.json'))).originalEntry;
-      if (!(await fs.readFile(path.join(appRoot, 'ota-entry.js'), 'utf8')).includes('.start()')) throw new Error('entry');
+      const entrySource = (await fs.readFile(path.join(appRoot, 'ota-entry.js'), 'utf8')).replace(/\r\n/g, '\n');
+      if (typeof originalEntry !== 'string' || !entrySource.includes(bootstrapCode(originalEntry))) throw new Error('entry');
     }
     const { planOtaRootHook } = await import('./ota-root-hook-patcher.mjs');
     const plan = planOtaRootHook({ appRoot, originalEntry });
     if (!plan.files.length) {
-      add('app.root', 'warn', 'Custom entry/root cannot be verified automatically.', 'Verify one unconditional useOtaUpdates call and a mounted OtaUpdateGate in the actual root.');
+      add('app.root', 'warn', 'Custom entry/root cannot be verified automatically.', 'Verify SDK initialization before the original entry and a mounted OtaUpdates in your root.');
     } else {
       const changes = await Promise.all(plan.files.map(async ([file, content]) => content !== await fs.readFile(path.join(appRoot, file), 'utf8')));
       if (changes.some(Boolean)) throw new Error('root');
-      add('app.root', 'pass', 'Recognized root OTA component wiring is present (source inspection only).');
+      if (['ota-entry.js', './ota-entry.js'].includes(pkg.main)) add('app.root', 'pass', 'SDK bootstrap and root OTA component wiring are present (source inspection only).');
+      else add('app.root', 'warn', 'Root OTA component wiring is present but the manual SDK bootstrap needs verification.', 'Verify initializeOtaClient and start run before loading your root.');
     }
   } catch {
     add('app.root', 'fail', 'Root OTA component or bootstrap metadata is missing or unsupported.', 'Run configure-app or review manual component integration. Doctor never applies the patch.');

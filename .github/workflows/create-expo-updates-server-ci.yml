@@ -12,7 +12,7 @@ on:
       - "docs/**"
       - "hooks/**"
       - "lib/**"
-      - "packages/create-expo-updates-server/**"
+      - "packages/**"
       - "public/**"
       - "scripts/**"
       - "src/**"
@@ -46,6 +46,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Test the OTA client and configurator
+        run: npm test
 
       - name: Build and test installer
         run: npm run installer:check

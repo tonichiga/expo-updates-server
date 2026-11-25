@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createHash, randomUUID } from 'node:crypto';
-import { createDeviceIdentity } from '../../templates/expo-app/ota-client/device-identity';
+import { createDeviceIdentity } from '../src/device-identity';
 const digest = async (v: string) => createHash('sha256').update(v).digest('hex');
 function options(platform = 'android', store = new Map<string, string>()) {
   return { platform, scope: 'com.example:https://updates.example.com', androidId: () => 'abc123', digest,

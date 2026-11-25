@@ -394,8 +394,7 @@ Fresh installations use only `schema.sql`, which includes these changes. Reapply
 these migrations preserves collection start, installation records and release audiences.
 The activation migration adds the separate `ota-force-update` catalog entry. The next two migrations enable personal device favorites and record public activations. Existing scopes start with their observed public release. Where older configurations allowed several public releases to remain active, the history migration keeps the one preferred by the anonymous manifest selector.
 
-Rerun the stock app configurator to install the generated identity/telemetry client and
-root `useOtaUpdates`/`OtaUpdateGate` integration. Adding SecureStore or the other native
+Run the app configurator to install `expo-updates-server-client`, initialize telemetry and mount `<OtaUpdates />` in the app root. Adding SecureStore or the other native
 client dependencies requires a native rebuild with a compatible runtime; do not publish
 JavaScript that imports unavailable native modules to an older runtime. Existing clients
 already sending heartbeats can populate analytics without a native rebuild, but the new

@@ -29,7 +29,7 @@ Required:
 Optional:
   --platform         all, ios or android (default: all)
   --server-env       Local Docker env file (default: server .env)
-  --force            Replace generated client, publisher and certificate files
+  --force            Replace generated files and back up customized legacy client code
   --help             Show this message
 `);
 }

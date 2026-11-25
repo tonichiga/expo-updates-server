@@ -82,16 +82,15 @@ Catalog action keys are trimmed when created, contain 1–100 characters, and
 cannot contain control characters. Viewers can list catalog entries but cannot
 create or delete them.
 
-## Generated client hook
+## Client hook {#generated-client-hook}
 
-The configurator installs `useOtaUpdates(options)` and automatically connects it in the
-root layout/App, with `OtaUpdateGate` around application content. See the
+The configurator imports `OtaUpdates` from `expo-updates-server-client` and mounts it beside navigation. The component uses `useOtaUpdates(options)` to enforce the release policy. See the
 [client lifecycle guide](./ota-client-lifecycle.md) for configuration and methods.
 The hook evaluates the candidate policy from `check()`, then validates the fetched
 manifest again because the selected release may change between checking and downloading.
 
 - With `manual` delivery, `ota-force-update` downloads a compatible OTA and shows a required restart action when ready.
-- With `background` delivery, `ota-force-update` downloads silently and automatically reloads once the signed update is ready and the app is active, even with `autoReload: false`. If the app is inactive it resumes on foreground. A failed download or reload shows a required retry action. Earlier generated clients show a restart button for this combination.
+- With `background` delivery, `ota-force-update` downloads silently and automatically reloads once the signed update is ready and the app is active, even with `autoReload: false`. If the app is inactive it resumes on foreground. A failed download or reload shows a required retry action.
 - `ota-force-store-update` requires a **new native binary**: the gate opens the platform
   store URL; it does not download this OTA candidate. OTA cannot change runtime or add
   native modules. Payload supports `androidUrl`, `iosUrl`, or a shared `url` fallback.

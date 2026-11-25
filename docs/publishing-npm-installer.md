@@ -1,7 +1,6 @@
 # Publishing `create-expo-updates-server`
 
-The root Next.js package stays private. Only the
-`packages/create-expo-updates-server` workspace is published.
+This guide covers the `create-expo-updates-server` initializer. Before publishing an initializer that installs a new `expo-updates-server-client` version, verify that the exact client version is available on npm.
 
 ## One-time npm configuration
 
@@ -63,8 +62,8 @@ publication must use the tag-triggered Trusted Publishing workflow.
    create-expo-updates-server-v<version>
    ```
 
-   For example, package version `0.2.0` requires
-   `create-expo-updates-server-v0.2.0`.
+   For example, package version `0.6.0` requires
+   `create-expo-updates-server-v0.6.0`.
 
 The tag-only workflow validates the tag against the package version, rebuilds
 and tests the deterministic template, and verifies that the tagged commit is

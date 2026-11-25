@@ -45,11 +45,11 @@ export default function Layout() { useOtaUpdates(${options}); return null; }`;
     roots.push(directory);
     const layout = path.join(directory, "src/app/_layout.tsx");
     fs.mkdirSync(path.dirname(layout), { recursive: true });
-    fs.mkdirSync(path.join(directory, "ota-client"));
+    fs.mkdirSync(path.join(directory, "node_modules/expo-updates-server-client"), { recursive: true });
     fs.writeFileSync(layout, result);
     fs.writeFileSync(
-      path.join(directory, "ota-client/index.ts"),
-      "export function OtaUpdates(props: { autoCheck?: boolean; autoUpdate?: boolean; autoReload?: boolean }) { return null; }",
+      path.join(directory, "node_modules/expo-updates-server-client/index.d.ts"),
+      "export declare function OtaUpdates(props: { autoCheck?: boolean; autoUpdate?: boolean; autoReload?: boolean }): null;",
     );
     const program = ts.createProgram([layout], {
       noEmit: true,
@@ -101,7 +101,7 @@ export default function Layout() {
 }`);
     expect(result).not.toContain("index.js");
     expect(result).toContain(
-      "import { getInstallationId } from '../../ota-client';",
+      "import { getInstallationId } from 'expo-updates-server-client';",
     );
     expect(patch(result)).toBe(result);
   });
@@ -110,7 +110,7 @@ export default function Layout() {
     const result = patch(source);
     expect(result).toContain("'use client';");
     expect(result).toContain("// Keep this check.");
-    expect(result).toContain("from '../../ota-client'");
+    expect(result).toContain("from 'expo-updates-server-client'");
     expect(result.match(/<OtaUpdates /g)).toHaveLength(2);
     expect(result).toContain("autoCheck autoUpdate={false} autoReload={false}");
     expect(result).not.toContain("createElement");
@@ -181,7 +181,26 @@ export default function Root() { return createElement(AppTabs); }`);
   it("supports an aliased existing component without adding a second instance", () => {
     const source = `import { OtaUpdates as Updates } from '../../ota-client';
 export default () => <><Updates autoUpdate /><Stack /></>;`;
-    expect(patch(source)).toBe(source);
+    expect(patch(source)).toBe(source.replace("../../ota-client", "expo-updates-server-client"));
+    expect(patch(patch(source))).toBe(patch(source));
+  });
+  it("retains namespace imports, existing SDK mounts and component options", () => {
+    const source = `import * as Client from '../../ota-client';
+export default () => <><Client.OtaUpdates autoCheck={false} /><Stack /></>;`;
+    const migrated = patch(source);
+    expect(migrated).toBe(source.replace("../../ota-client", "expo-updates-server-client"));
+    expect(patch(migrated)).toBe(migrated);
+  });
+  it("migrates namespace-qualified legacy hooks and gate without duplicating a mount", () => {
+    const result = patch(`import * as Client from '../../ota-client';
+export default function App() {
+  const ota = Client.useOtaUpdates({ autoCheck: false });
+  return <Client.OtaUpdateGate controller={ota}><Stack /></Client.OtaUpdateGate>;
+}`);
+    expect(result.match(/<Client\.OtaUpdates /g)).toHaveLength(1);
+    expect(result).not.toContain("Client.useOtaUpdates");
+    expect(result).not.toContain("OtaUpdateGate");
+    expect(patch(result)).toBe(result);
   });
   it("avoids collisions with local component names", () => {
     const result = patch(

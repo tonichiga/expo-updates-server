@@ -2,12 +2,12 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { OtaController } from "../../templates/expo-app/ota-client/types";
-import { OtaUpdates } from "../../templates/expo-app/ota-client/ui/ota-updates";
+import type { OtaController } from "../src/types";
+import { OtaUpdates } from "../src/ui/ota-updates";
 
 const mocked = vi.hoisted(() => ({ hook: vi.fn() }));
 vi.mock(
-  "../../templates/expo-app/ota-client/model/hooks/useOtaUpdates",
+  "../src/model/hooks/useOtaUpdates",
   () => ({ useOtaUpdates: mocked.hook }),
 );
 

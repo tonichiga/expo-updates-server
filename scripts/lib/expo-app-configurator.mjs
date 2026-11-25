@@ -1,4 +1,5 @@
-import { planOtaClient } from './ota-client-configurator.mjs';
+import { planOtaClient } from "./ota-client-configurator.mjs";
+import { clientPackage, clientVersion, nativeClientDependencies } from "./ota-client-package.mjs";
 import { execFileSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -139,6 +140,7 @@ function detectPackageManager(appRoot) {
 }
 
 function getPackageCommands(packageManager, platform) {
+  const clientInstallArgs = ["expo", "install", ...nativeClientDependencies, `${clientPackage}@${clientVersion}`];
   const prebuildArgs = ["expo", "prebuild"];
   if (platform !== "all") {
     prebuildArgs.push("--platform", platform);
@@ -146,7 +148,7 @@ function getPackageCommands(packageManager, platform) {
 
   if (packageManager === "pnpm") {
     return {
-      installExpoUpdates: ["pnpm", ["exec", "expo", "install", "expo-updates", "expo-application", "expo-crypto", "expo-secure-store", "@react-native-async-storage/async-storage"]],
+      installExpoUpdates: ["pnpm", ["exec", ...clientInstallArgs]],
       installPublisherDependencies: [
         "pnpm",
         ["add", "--save-dev", ...PUBLISHER_DEPENDENCIES],
@@ -157,7 +159,7 @@ function getPackageCommands(packageManager, platform) {
 
   if (packageManager === "yarn") {
     return {
-      installExpoUpdates: ["yarn", ["expo", "install", "expo-updates", "expo-application", "expo-crypto", "expo-secure-store", "@react-native-async-storage/async-storage"]],
+      installExpoUpdates: ["yarn", clientInstallArgs],
       installPublisherDependencies: [
         "yarn",
         ["add", "--dev", ...PUBLISHER_DEPENDENCIES],
@@ -168,7 +170,7 @@ function getPackageCommands(packageManager, platform) {
 
   if (packageManager === "bun") {
     return {
-      installExpoUpdates: ["bunx", ["expo", "install", "expo-updates", "expo-application", "expo-crypto", "expo-secure-store", "@react-native-async-storage/async-storage"]],
+      installExpoUpdates: ["bunx", clientInstallArgs],
       installPublisherDependencies: [
         "bun",
         ["add", "--dev", ...PUBLISHER_DEPENDENCIES],
@@ -178,7 +180,7 @@ function getPackageCommands(packageManager, platform) {
   }
 
   return {
-    installExpoUpdates: ["npx", ["expo", "install", "expo-updates", "expo-application", "expo-crypto", "expo-secure-store", "@react-native-async-storage/async-storage"]],
+    installExpoUpdates: ["npx", clientInstallArgs],
     installPublisherDependencies: [
       "npm",
       ["install", "--save-dev", ...PUBLISHER_DEPENDENCIES],
@@ -554,7 +556,7 @@ export function configureExpoApp(
   validateCertificate(certificatePath);
   const manifestUrl = resolveManifestUrl(rawOptions.serverUrl);
   const project = validateProject(appRoot);
-  const clientPlan = planOtaClient({ appRoot, templateRoot, packageJson: project.packageJson, manifestUrl, channel, force });
+  const clientPlan = planOtaClient({ appRoot, packageJson: project.packageJson, manifestUrl, channel, force });
   const packageManager = detectPackageManager(appRoot);
   const commands = getPackageCommands(packageManager, platform);
   const certificateDestination = path.join(
@@ -762,9 +764,11 @@ export function configureExpoApp(
     );
   }
 
+  commandRunner(...commands.installExpoUpdates, appRoot);
+
   writeJson(
     project.appJsonPath,
-    patchAppJson(project.appJson, {
+    patchAppJson(readJson(project.appJsonPath), {
       channel,
       runtimeVersion,
       manifestUrl,
@@ -792,8 +796,6 @@ export function configureExpoApp(
     );
   }
   appendGitignore(appRoot);
-
-  commandRunner(...commands.installExpoUpdates, appRoot);
 
   const installedPackageJson = readJson(project.packagePath);
   writeJson(

@@ -3,7 +3,10 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { mkdir, writeFile, readFile, symlink } from "node:fs/promises";
 import { planOtaClient } from "../../lib/ota-client-configurator.mjs";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
+import { clientPackage, clientVersion } from "../../lib/ota-client-package.mjs";
 import { once } from "node:events";
 import { fileURLToPath } from "node:url";
 import { seedPublication } from "./delivery.mjs";
@@ -116,6 +119,20 @@ export async function exerciseClientLifecycle({
     path.join(appRoot, "node_modules"),
     "dir",
   );
+  // Run the policy scenarios against the files that a mobile app receives from npm.
+  const sdkWorkspace = path.join(root, "packages/ota-client");
+  const sdkSpec = existsSync(path.join(sdkWorkspace, "package.json"))
+    ? sdkWorkspace
+    : `${clientPackage}@${clientVersion}`;
+  const [{ filename, version }] = JSON.parse(execFileSync("npm", [
+    "pack", sdkSpec, "--json", "--pack-destination", scratch,
+  ], { encoding: "utf8", cwd: scratch }));
+  assert.equal(version, clientVersion);
+  const packedDirectory = path.join(appRoot, "sdk");
+  await mkdir(packedDirectory);
+  execFileSync("tar", ["-xzf", path.join(scratch, filename), "-C", packedDirectory, "--strip-components=1"]);
+  const resolveSdk = createRequire(path.join(packedDirectory, "package.json"));
+  const sdkSource = path.dirname(resolveSdk.resolve(clientPackage));
   const child = spawn(
     process.execPath,
     [
@@ -129,7 +146,7 @@ export async function exerciseClientLifecycle({
       stdio: "inherit",
       env: {
         ...process.env,
-        OTA_E2E_CLIENT_DIRECTORY: path.join(appRoot, "ota-client"),
+        OTA_E2E_CLIENT_DIRECTORY: sdkSource,
         OTA_LIFECYCLE_FIXTURE: JSON.stringify({
           origin,
           cookie,

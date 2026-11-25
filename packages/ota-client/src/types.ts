@@ -1,5 +1,12 @@
 import type { ReactNode } from "react";
 
+export interface OtaClientConfig {
+  channel: string;
+  heartbeatUrl: string;
+  /** Keep stable across server URL and channel changes to preserve device identity. */
+  identityNamespace: string;
+}
+
 export interface OtaPolicy {
   schemaVersion: number;
   delivery: "manual" | "background";

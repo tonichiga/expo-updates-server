@@ -1,10 +1,10 @@
 # Create a server with NPX
 
 The npm initializer is the quickest way to create a standalone copy of Expo
-Updates Server. Node.js 20.9 or newer is required.
+Updates Server. Node.js 20.9 or newer is required. Version 0.6.0 creates a server whose `configure-app` command installs `expo-updates-server-client@0.1.0` in your Expo application.
 
 ```bash
-npx create-expo-updates-server@latest my-server
+npx create-expo-updates-server@0.6.0 my-server
 cd my-server
 ```
 
@@ -13,7 +13,7 @@ You can also initialize an empty current directory:
 ```bash
 mkdir my-server
 cd my-server
-npx create-expo-updates-server@latest .
+npx create-expo-updates-server@0.6.0 .
 ```
 
 `npx` downloads the published initializer package from npm. After it starts,

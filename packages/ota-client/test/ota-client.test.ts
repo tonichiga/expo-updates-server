@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createInstallationClient } from '../../templates/expo-app/ota-client/controller';
+import { createInstallationClient } from '../src/controller';
 function fixture() {
   let stored: string | null = null;
   let counter = 0;

@@ -1,9 +1,6 @@
-# Generated OTA client lifecycle
+# OTA client lifecycle {#generated-ota-client-lifecycle}
 
-`configure-app` generates a formatted TypeScript client and renders `<OtaUpdates />`
-beside navigation in the root layout/App. The component calls `useOtaUpdates`
-internally; it does not wrap the app or provide React context. Mount it once in a
-persistent root, including loading/early-return paths.
+`configure-app` installs `expo-updates-server-client` and mounts its `<OtaUpdates />` component beside navigation. The component calls `useOtaUpdates` internally. Mount it once in a persistent root, including loading and early-return paths.
 
 By default it checks automatically and shows **Download / Later** for an ordinary
 update, then **Restart / Later** when downloaded. `autoUpdate={false}` disables
@@ -67,7 +64,7 @@ Native crash recovery depends on the bundles retained by Expo Updates. In the SD
 ## Integration and customization
 
 Use the stock `npm run configure-app -- ...` command from the server project. It
-preserves the original app entry, generates the client and inserts the standalone component in
+preserves the original app entry, installs the npm package and inserts the standalone component in
 supported root components. For Expo Router this is `src/app/_layout` (preferred when
 `src/app` exists) or `app/_layout`, including platform variants. For the default entry
 it is `App`, provided no custom `index` registers a different root. Synchronous function
@@ -85,54 +82,21 @@ return (
 );
 ```
 
-Adjust these options in the root component. Use `useOtaUpdates()` in other screens for
-manual controls and shared state. The configurator selects the appropriate import path;
-no database or admin credentials belong in the application. Generated source includes
-`ota-client/docs/update-lifecycle.md` with this contract for application developers.
-
-Rerun `npm run configure-app` with the original settings to upgrade an unmodified 0.4.0 or earlier 0.5.0 TypeScript client. The patch keeps the existing root options. Deliver the updated JavaScript in a compatible OTA or a new binary before using immediate required updates.
-
-For a legacy JavaScript client, review generated-file changes and rerun with
-`--force`. This replaces the legacy JavaScript files with TypeScript, removes stale
-`.js`/`.d.ts` copies that could shadow the new modules, and migrates the stock root
-hook/gate while preserving its options. Custom code that uses the old root controller
-or a custom gate must be migrated manually; the preflight stops before any writes.
-Use `.tsx` for TypeScript JSX roots. Existing `OtaUpdateGate` consumers remain supported. Native dependencies need a new binary;
-use a new runtime when older installed binaries lack those modules. Publishing remains
-the generated `npm run ota:publish` workflow. See [device targeting](./device-targeting.md)
-for selecting a smoke-test audience and [installation telemetry](./installation-telemetry.md)
-for receipt/analytics semantics.
+Configure automation in the root component. Other screens can use `useOtaUpdates()` for manual controls and shared state. Rebuild the native app after adding native modules and use a compatible runtime for OTA releases.
 
 ## Manual integration
 
-Use this path when `configure-app` cannot patch your root component, your project
-uses dynamic `app.config.*`, or you want to integrate the client yourself. The hook
-is source code supplied by this repository, **not an npm package**. Do not import
-it from `expo-updates`.
+Use this path for a custom root or dynamic `app.config.*` project. If the configurator already installed the package, configured the native app and created the bootstrap, continue with step 2.
 
 ### 1. Prepare the client and native configuration
 
-If `ota-client/index.ts`, `ota-client/types.ts` and `ota-client/config.json` already
-exist after configuration, keep them and continue with step 2. A warning about an
-unidentified custom root means the bootstrap/client were installed; an unsupported
-root error stops configuration before writes, so check which files actually exist.
-
-For an application with no generated client, run from the application directory:
+From the Expo application directory, install the package and its native dependencies.
 
 ```bash
-npx expo install expo-updates expo-application expo-crypto expo-secure-store @react-native-async-storage/async-storage
+npx expo install expo-updates-server-client@0.1.0 expo-updates expo-application expo-crypto expo-secure-store @react-native-async-storage/async-storage
 ```
 
-Copy the **whole** `templates/expo-app/ota-client/` directory from the OTA server
-repository to `<application>/ota-client/`. Keep its nested `model/`, `ui/`, runtime,
-identity, telemetry and type declaration files together. For example, when the
-application does not already contain that directory:
-
-```bash
-cp -R /full/path/to/expo-updates-server/templates/expo-app/ota-client ./ota-client
-```
-
-Create `<application>/ota-client/config.json`:
+Create `ota-client/config.json` in the application with your public server settings.
 
 ```json
 {
@@ -154,6 +118,17 @@ Set `updates.checkAutomatically` to `NEVER`; checks must wait for identity setup
 Keep the signing private key and publisher credentials outside the mobile bundle.
 A dynamic config must resolve the same channel used in `ota-client/config.json`.
 
+Initialize the client before loading your existing app entry. For Expo Router, create `app-bootstrap.js` at the application root and set `main` in `package.json` to `app-bootstrap.js`. If you use a custom entry, replace the last line with a call to load your original entry or register your root component.
+
+```js
+const { initializeOtaClient, start } = require('expo-updates-server-client');
+const config = require('./ota-client/config.json');
+
+initializeOtaClient(config);
+start();
+require('expo-router/entry');
+```
+
 ### 2. Connect the root layout or App
 
 For Expo Router, render the component beside navigation in the existing
@@ -163,7 +138,7 @@ such as `Stack.Screen`/`Tabs.Screen`.
 
 ```tsx
 import { Stack } from 'expo-router';
-import { OtaUpdates } from '../../ota-client';
+import { OtaUpdates } from 'expo-updates-server-client';
 
 export default function RootLayout() {
   return (
@@ -175,30 +150,11 @@ export default function RootLayout() {
 }
 ```
 
-Adjust the relative import to the file location:
-
-| Root file | Import from |
-| --- | --- |
-| `src/app/_layout.tsx` | `../../ota-client` |
-| `app/_layout.tsx` | `../ota-client` |
-| `App.tsx` at the application root | `./ota-client` |
-
 For a non-Router application, render the same component beside the existing app
 content. It can be a sibling of a class component too. Mount one instance, including
 loading/early-return paths. A custom entry still registers the original root.
 
-Keep an existing generated `ota-entry.js` and its `package.json.main` setting.
-When integrating entirely by hand, changing the entry is **not required**: the
-mounted hook calls the idempotent telemetry `start()` itself. Identity is persisted
-before hook update requests; heartbeat network failures do not block rendering or
-checks. Do not add another heartbeat implementation or call Expo checks at module
-initialization. For an app that needs registration before its root mounts, the
-public `start()` can also be called in its existing entry without replacing the
-original registration code.
-
-`OtaUpdates` supplies the default force-update UI. Using the hook without it
-requires your own UI to enforce `blocked`. A custom gate view is supported through
-`renderBlocked`; this does not change the controller's guard decision.
+For a headless integration, call `useOtaUpdates({ autoCheck: true })` in the persistent root. The hook provides state and actions. Your UI must handle `blocked`, required-update actions and any download or restart prompts. With `OtaUpdates`, you can customize the supplied UI through `renderBlocked` and `renderAvailable`.
 
 ### 3. Add manual update controls
 
@@ -208,7 +164,7 @@ optional and can subscribe without enabling another automatic workflow. For exam
 ```tsx
 import { useState } from 'react';
 import { Button, Text, View } from 'react-native';
-import { useOtaUpdates } from '../../ota-client';
+import { useOtaUpdates } from 'expo-updates-server-client';
 
 export function OtaControls() {
   const ota = useOtaUpdates();
@@ -264,7 +220,7 @@ exercise this client's telemetry/update lifecycle.
    Device ID persistence has the [platform limitations](./device-targeting.md).
 6. Check background delivery, force OTA, store upgrade and your custom guards separately.
 
-Copying `ota-client/` and adding the hook does not install publisher scripts or
+Installing the client package does not install publisher scripts or
 embedded-build registration. Those are separate setup steps in the
 [application guide](./expo-app-setup.md#_6-register-embedded-updates). If the automatic
 configurator already installed them, keep using its `npm run ota:publish` command.
