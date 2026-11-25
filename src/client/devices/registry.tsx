@@ -146,6 +146,11 @@ export function Registry({
                       {d.installation_id.slice(0, 8)}…
                       {d.installation_id.slice(-4)}
                     </Button>
+                    {d.device_id && (
+                      <p className="font-mono text-xs text-muted-foreground">
+                        {t("Device ID")} · {d.device_id.slice(0, 12)}
+                      </p>
+                    )}
                     <p className="mt-1 text-xs text-muted-foreground">
                       {t("С ")}
                       {calendarDate(d.first_seen_at)}

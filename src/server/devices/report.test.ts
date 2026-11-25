@@ -14,8 +14,12 @@ describe("device analytics filters", () => {
     expect(rpc).toHaveBeenCalledWith("ota_devices_report_v2", filters);
   });
 
-  it.each(["days=7&days=30", "platform=ios&platform=android", "launchKind=all", "search=%25", "search=abcdef_", `search=${"a".repeat(37)}`, "search=%00", "runtime=%09", "offset=Infinity"])("rejects invalid or nonscalar filters: %s", (query) => {
+  it.each(["days=7&days=30", "platform=ios&platform=android", "launchKind=all", "search=%25", "search=abcdef_", `search=${"a".repeat(65)}`, "search=%00", "runtime=%09", "offset=Infinity"])("rejects invalid or nonscalar filters: %s", (query) => {
     expect(() => parseDeviceFilters(new URLSearchParams(query))).toThrow("Invalid filters");
+  });
+
+  it("accepts a full Device ID copied from the registry", () => {
+    expect(parseDeviceFilters(new URLSearchParams({ search: "AB".repeat(32) })).p_search).toBe("ab".repeat(32));
   });
 
   it("keeps empty optional controls unfiltered", () => {

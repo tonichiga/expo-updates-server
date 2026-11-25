@@ -50,6 +50,19 @@ export default function RootLayout() {
 
 `getInstallationId()` returns the persisted installation UUID. `getDeviceId()` returns the scoped device ID when available. Identity-aware `checkForUpdateAsync()` and `fetchUpdateAsync()` wait for identity registration before calling Expo. The SDK disables telemetry on web and in development or updates-disabled builds.
 
+Show a searchable prefix in Settings after client initialization. You can also read the same full ID with `await getDeviceId()`.
+
+```tsx
+import { Text } from "react-native";
+import { useOtaUpdates } from "expo-updates-server-client";
+
+export function SettingsDeviceId() {
+  const { deviceId } = useOtaUpdates();
+  if (!deviceId) return null;
+  return <Text selectable>Device ID · {deviceId.slice(0, 12)}</Text>;
+}
+```
+
 The SDK preserves the generated client's AsyncStorage keys, heartbeat sequence, pending event and iOS Keychain seed. When migrating, pass the existing `identityNamespace` from `ota-client/config.json`. Keeping the namespace stable preserves device targeting across server URL and channel changes. Android derives the device ID from the app-scoped Android ID. iOS uses a seed stored in SecureStore. Both identifiers serve telemetry and targeting.
 
 Active apps report the running bundle up to once per minute. One pending snapshot survives offline operation and retries with up to five minutes of backoff. The app entry and update checks can proceed while the heartbeat request is in flight.

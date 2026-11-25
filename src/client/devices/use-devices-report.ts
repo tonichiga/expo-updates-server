@@ -1,5 +1,6 @@
 "use client";
 
+import { registryIdSearchPattern } from "@/lib/audience-ids";
 import { useFilteredResults } from "@/src/client/use-filtered-results";
 import type { DevicesReport } from "@/src/server/devices/report-types";
 export type Filters = {
@@ -24,8 +25,8 @@ async function loadReport(
   query: typeof initialQuery,
   signal: AbortSignal,
 ): Promise<DevicesReport> {
-  if (!/^[a-f0-9-]{0,36}$/i.test(query.search.trim()))
-    throw new Error("Часть UUID: цифры, буквы a–f и дефисы");
+  if (query.search.trim() && !registryIdSearchPattern.test(query.search.trim()))
+    throw new Error("Enter a Device ID prefix or part of an Installation ID");
 
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {

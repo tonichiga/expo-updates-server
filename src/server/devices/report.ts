@@ -1,3 +1,4 @@
+import { registryIdSearchPattern } from "@/lib/audience-ids";
 import { supabase } from "../lib/supabase.js";
 import type { DevicesReport } from "./report-types";
 
@@ -17,7 +18,7 @@ export function parseDeviceFilters(params: URLSearchParams) {
     (channel !== null && (channel.length > 64 || !/^[a-z0-9][a-z0-9._-]*$/.test(channel))) ||
     (runtime !== null && (runtime.length > 100 || runtime.trim() !== runtime || /[\x00-\x1f\x7f]/.test(runtime))) ||
     (launchKind !== null && !["ota", "embedded", "unknown"].includes(launchKind)) ||
-    (search !== null && !/^[a-f0-9-]{1,36}$/.test(search))) throw new Error("Invalid filters");
+    (search !== null && !registryIdSearchPattern.test(search))) throw new Error("Invalid filters");
   return { p_days: days, p_platform: platform, p_channel: channel, p_runtime: runtime, p_offset: offset, p_launch_kind: launchKind, p_search: search };
 }
 export async function getDevicesReport(filters: ReturnType<typeof parseDeviceFilters>): Promise<DevicesReport> {

@@ -53,7 +53,7 @@ afterEach(() => {
 describe("OTA SDK bootstrap", () => {
   it("reports missing configuration and lets the caller initialize after a validation error", async () => {
     vi.stubGlobal("__DEV__", true);
-    const { start, getInstallationId, initializeOtaClient } =
+    const { start, getInstallationId, getDeviceId, initializeOtaClient } =
       await import("../src/runtime");
     expect(start).toThrow("initializeOtaClient(config)");
     await expect(getInstallationId()).rejects.toThrow(
@@ -65,6 +65,7 @@ describe("OTA SDK bootstrap", () => {
     initializeOtaClient(settings);
     start();
     expect(await getInstallationId()).toBeNull();
+    expect(await getDeviceId()).toBeNull();
     expect(native.addListener).not.toHaveBeenCalled();
   });
 
@@ -82,7 +83,7 @@ describe("OTA SDK bootstrap", () => {
         pending: null,
       }),
     );
-    const { start, initializeOtaClient } = await import("../src/runtime");
+    const { start, getDeviceId, initializeOtaClient } = await import("../src/runtime");
     const config = { ...settings };
     initializeOtaClient(config);
     config.channel = "mutated";
@@ -104,6 +105,10 @@ describe("OTA SDK bootstrap", () => {
       "ota-device-v1:com.example.test:original-namespace",
     );
     const [url, request] = fetch.mock.calls[0];
+    const deviceId = await getDeviceId();
+    expect(deviceId).toBeTruthy();
+    expect(native.setExtraParam).toHaveBeenCalledWith("device_id", deviceId);
+    expect(JSON.parse(request.body).deviceId).toBe(deviceId);
     expect(url).toBe(settings.heartbeatUrl);
     expect(JSON.parse(request.body)).toMatchObject({
       installationId: "existing-installation",

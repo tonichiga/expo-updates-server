@@ -33,7 +33,8 @@ try {
   assert.equal(empty.activity.at(-1).activeInstallations, 0);
   assert.equal(empty.activity[0].activeInstallations, null, 'Do not manufacture activity before collection');
 
-  assert.equal(await send(), 'accepted');
+  const deviceId = 'a7b8c9d0e1f2' + '3'.repeat(52);
+  assert.equal(await send({ deviceId }), 'accepted');
   const first = await facts();
   assert.equal(first.length, 1);
   assert.equal(first[0].activity_date, empty.activity.at(-1).date, 'Use receipt UTC day, not client timestamp');
@@ -68,6 +69,14 @@ try {
   await pool.query("update ota_device_state set first_seen_at=now()-interval '50 days' where installation_id=$1", [ids[1]]);
   await send({ installationId: ids[1], sequence: 2, eventId: randomUUID() });
   assert.equal((await facts(ids[1])).length, 1);
+  for (const search of [deviceId, deviceId.slice(0, 12).toUpperCase()]) {
+    const matches = await report({ search });
+    assert.deepEqual(matches.devices.map(d => d.device_id), [deviceId]);
+    assert.equal(matches.total, 1);
+    assert.equal(matches.activity.at(-1).activeInstallations, 1);
+    assert.equal(matches.cohorts[0].installations, 1);
+    assert.equal((await report({ search, platform: 'ios' })).total, 0);
+  }
   assert.equal((await pool.query('select count(*)::int as n from ota_device_activity_cohorts where installation_id=$1', [ids[1]])).rows[0].n, 0);
   assert.equal((await report()).adoptionCohorts.reduce((sum, c) => sum + c.installations, 0), 2);
 
