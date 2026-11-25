@@ -152,24 +152,10 @@ export async function exerciseReleaseMatrix({
     assert.deepEqual(candidate.extra.updatePolicy.guard, guard);
     await request(v2.path + "/deactivate", "POST", { disabled: true });
 
-    // #27–31: clients that skipped the release stay put. A client already on
-    // the retired release gets the older bundle, its own policy, and a fresh native timestamp.
+    // Retiring v2 leaves v1 available to eligible clients but cannot downgrade a running v2.
+    await expectRelease(v1, deviceHeaders);
     await expectNone(platform, originalRuntime, running(first));
-    const fallback = await expectRelease(v1, {
-      ...deviceHeaders,
-      ...running(candidate),
-    });
-    assert.notEqual(fallback.id, candidate.id);
-    assert.ok(
-      Date.parse(fallback.createdAt) > Date.parse(candidate.createdAt),
-      "fallback must be newer to Expo",
-    );
-    assert.equal(fallback.extra.updatePolicy.delivery, "manual");
-    assert.equal(fallback.extra.updatePolicy.guard, undefined);
-    await expectNone(platform, originalRuntime, {
-      ...deviceHeaders,
-      ...running(fallback),
-    });
+    await expectNone(platform, originalRuntime, { ...deviceHeaders, ...running(candidate) });
 
     const embedded = randomUUID();
     await request(
@@ -186,20 +172,14 @@ export async function exerciseReleaseMatrix({
     );
     await expectNone(platform, originalRuntime, {
       ...deviceHeaders,
-      ...running(candidate),
       "expo-embedded-update-id": embedded,
     });
     await request("/api/admin/embedded-updates/" + embedded, "DELETE");
 
     // #25–26, #32–33: reactivation, ignored draft, and a direct jump to the latest eligible patch.
     await request(v2.path + "/deactivate", "POST", { disabled: false });
-    const reactivated = await expectRelease(v2, {
-      ...deviceHeaders,
-      ...running(fallback),
-    });
-    assert.ok(
-      Date.parse(reactivated.createdAt) > Date.parse(fallback.createdAt),
-    );
+    await expectRelease(v2, { ...deviceHeaders, ...running(first) });
+    await expectNone(platform, originalRuntime, { ...deviceHeaders, ...running(candidate) });
     const v3 = await publish(platform, originalRuntime, 3, {
       active: false,
       targeted: true,
@@ -231,6 +211,18 @@ export async function exerciseReleaseMatrix({
   const iosLatest = await expectRelease(iosV2);
   const androidSecond = await expectRelease(androidV2);
   assert.notEqual(iosLatest.launchAsset.hash, androidSecond.launchAsset.hash);
+  // #28–30: only an explicit rollback offers public v1 to a device running public v2.
+  for (const [v2, current] of [[iosV2, iosLatest], [androidV2, androidSecond]]) {
+    const v1 = releases[v2.platform];
+    await request(v1.path + "/rollback", "POST", {});
+    const rolledBack = await expectRelease(v1, running(current));
+    assert.ok(Date.parse(rolledBack.createdAt) > Date.parse(current.createdAt));
+    assert.equal(rolledBack.extra.updatePolicy.delivery, "manual");
+    assert.equal(rolledBack.extra.updatePolicy.guard, undefined);
+    await expectNone(v2.platform, upgradedRuntime, running(rolledBack));
+    await request(v2.path + "/promote", "POST", {});
+    await expectRelease(v2, running(rolledBack));
+  }
   let androidLatest = androidV2;
   for (const number of [3, 4, 5])
     androidLatest = await publish("android", upgradedRuntime, number);
@@ -298,10 +290,14 @@ export async function exerciseReleaseMatrix({
   const restored = await historyScope();
   assert.equal(restored.current.updateId, publicA.id);
   assert.equal(restored.previous.updateId, publicB.id);
-  await expectRelease(publicA, running(runningB));
+  await expectRelease(publicA);
+  await expectNone("android", originalRuntime, {
+    "expo-channel-name": historyChannel,
+    ...running(runningB),
+  });
   await restore(publicA.id, stopped.revision, 409);
 
   console.log(
-    "PASS signed HTTP release matrix: both platform stacks, active/draft selection, scoped retired-build fallback, embedded floor, skipped versions, native runtime transition, normalized/empty/unknown channels and targeted channel isolation",
+    "PASS signed HTTP release matrix: both platform stacks, active/draft selection, disabled-release downgrade protection, explicit rollback, embedded floor, skipped versions, native runtime transition, normalized/empty/unknown channels and targeted channel isolation",
   );
 }

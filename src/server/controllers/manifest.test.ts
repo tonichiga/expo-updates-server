@@ -1046,6 +1046,8 @@ describe("GET /api/manifest", () => {
   });
 
   it.each([
+    ["a disabled newer OTA in the same scope", {}],
+    ["a disabled later OTA with the same app version", { manifest: { expoClient: { version: "2.1.0" } } }],
     ["a still-active OTA", { is_active: true }],
     ["a disabled OTA on another channel", { channel: "beta" }],
     ["a disabled OTA on another runtime", { runtime_version: "2.0.0" }],

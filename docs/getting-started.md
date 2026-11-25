@@ -13,7 +13,7 @@ SDK or macOS/Xcode. The server's Docker image does not provide the mobile toolch
 Create the server files, or use an existing source checkout:
 
 ```bash
-npx create-expo-updates-server@0.6.0 my-server
+npx create-expo-updates-server@0.6.1 my-server
 cd my-server
 ```
 
