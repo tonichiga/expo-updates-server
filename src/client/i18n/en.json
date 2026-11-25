@@ -587,6 +587,8 @@
   "Delivery changed. Review the refreshed scope before restoring.": "Delivery changed. Review the refreshed scope before restoring.",
   "Could not restore release.": "Could not restore release.",
   "Unable to load delivery history.": "Unable to load delivery history.",
+  "Download on postpone": "Download on postpone",
+  "Offer the update first. If the user postpones it, download silently and apply it on the next full launch.": "Offer the update first. If the user postpones it, download silently and apply it on the next full launch.",
   "Immediate required update": "Immediate required update",
   "The app silently downloads this update and restarts as soon as it is active and ready. Users can retry if the update fails.": "The app silently downloads this update and restarts as soon as it is active and ready. Users can retry if the update fails.",
   "Delete this release and its files from storage.": "Delete this release and its files from storage."

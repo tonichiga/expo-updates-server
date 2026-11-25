@@ -24,7 +24,7 @@ export type UpdateItem = {
   policyEditable: boolean;
 };
 
-export type UpdateDeliveryMode = "manual" | "background";
+export type UpdateDeliveryMode = "manual" | "background" | "manual-postpone";
 export type UpdatePolicyGuard = {
   action: string;
   payload?: unknown;

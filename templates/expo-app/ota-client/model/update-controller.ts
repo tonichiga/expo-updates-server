@@ -1,4 +1,8 @@
-import { manifestDetails, requiresImmediateReload } from "../types";
+import {
+  downloadsOnPostpone,
+  manifestDetails,
+  requiresImmediateReload,
+} from "../types";
 import type {
   OtaCandidate,
   OtaCheckResult,
@@ -19,6 +23,8 @@ interface Dependencies {
   reload(): Promise<void>;
   isActive(): boolean;
   openStore(payload: unknown): Promise<void>;
+  readPostponedId?(): Promise<string | null>;
+  writePostponedId?(id: string | null): Promise<void>;
   runningCandidate?(): OtaCandidate | null;
   now?(): number;
 }
@@ -31,6 +37,7 @@ export function createUpdateController(deps: Dependencies) {
     installationId: null,
     deviceId: null,
     available: false,
+    postponedUpdateId: null,
     pending: false,
     candidate: null,
     policy: null,
@@ -44,6 +51,7 @@ export function createUpdateController(deps: Dependencies) {
   let flightKind: OtaState["status"] | undefined;
   let lastAutomaticCheck = -Infinity;
   let identityReady: Promise<void> | undefined;
+  let acceptedId: string | undefined;
   let pendingKey: string | undefined;
   let pendingGeneration = 0;
   let requestedReloadId: string | undefined;
@@ -70,10 +78,19 @@ export function createUpdateController(deps: Dependencies) {
     deps.start();
     if (!deps.enabled) return Promise.resolve();
     if (!identityReady)
-      identityReady = deps
-        .identity()
-        .then(async (identity) => {
-          patch(identity);
+      identityReady = Promise.all([
+        deps.identity(),
+        deps.readPostponedId?.().catch(() => null),
+      ])
+        .then(async ([identity, storedId]) => {
+          const applied =
+            storedId && storedId === key(deps.runningCandidate?.());
+          if (applied)
+            await deps.writePostponedId?.(null).catch(() => undefined);
+          patch({
+            ...identity,
+            postponedUpdateId: applied ? null : (storedId ?? null),
+          });
           await inspectRunning();
         })
         .catch((error) => {
@@ -153,6 +170,13 @@ export function createUpdateController(deps: Dependencies) {
       return inspect(null);
     return inspect(running || null);
   }
+  function isPostponed() {
+    return (
+      downloadsOnPostpone(state.policy) &&
+      state.postponedUpdateId !== null &&
+      state.postponedUpdateId === key(state.candidate)
+    );
+  }
   function canDownload() {
     return !state.blocked || state.blockReason === "ota-force-update";
   }
@@ -227,7 +251,8 @@ export function createUpdateController(deps: Dependencies) {
       !state.pending &&
       state.available &&
       canDownload() &&
-      (settings.autoUpdate ||
+      ((settings.autoUpdate && !downloadsOnPostpone(state.policy)) ||
+        isPostponed() ||
         state.policy?.delivery === "background" ||
         state.blockReason === "ota-force-update")
     ) {
@@ -238,7 +263,12 @@ export function createUpdateController(deps: Dependencies) {
       state.pending &&
       canDownload() &&
       (requiresImmediateReload(state.policy) ||
-        (settings.autoReload && state.policy?.delivery !== "background")) &&
+        (settings.autoReload &&
+          state.policy?.delivery !== "background" &&
+          (!downloadsOnPostpone(state.policy) ||
+            (!isPostponed() &&
+              Boolean(acceptedId) &&
+              pendingKey === acceptedId)))) &&
       deps.isActive()
     )
       await reloadInternal();
@@ -270,6 +300,36 @@ export function createUpdateController(deps: Dependencies) {
       }
       if (state.pending) await inspect(state.candidate);
       await automate();
+      return result;
+    });
+  }
+  async function postpone() {
+    const id = key(state.candidate);
+    if (
+      !id ||
+      !downloadsOnPostpone(state.policy) ||
+      state.blocked ||
+      !state.available
+    )
+      return;
+    patch({ postponedUpdateId: id });
+    acceptedId = undefined;
+    const saved = deps.writePostponedId?.(id).catch(() => undefined);
+    if (flight) await flight;
+    if (
+      state.pending ||
+      !state.available ||
+      !isPostponed() ||
+      key(state.candidate) !== id
+    ) {
+      await saved;
+      return;
+    }
+    await run("downloading", async () => {
+      await saved;
+      const result = await downloadInternal();
+      // A different fetched manifest may carry a new mandatory guard.
+      if (requiresImmediateReload(state.policy)) await automate(false);
       return result;
     });
   }
@@ -313,8 +373,10 @@ export function createUpdateController(deps: Dependencies) {
     },
     automaticCheck,
     check,
+    postpone,
     download: () =>
       run("downloading", async () => {
+        acceptedId = key(state.candidate);
         const result = await downloadInternal();
         await automate(false);
         return result;
@@ -363,7 +425,8 @@ function target(result: OtaCheckResult | OtaFetchResult): OtaCandidate {
   if (result.isRollBackToEmbedded) return { type: "rollback", manifest: null };
   return { type: "new", manifest: result.manifest };
 }
-function key(candidate: OtaCandidate) {
+function key(candidate: OtaCandidate | null | undefined) {
+  if (!candidate) return undefined;
   if (candidate.type === "rollback") return "rollback";
   const id = manifestDetails(candidate.manifest)?.id;
   return typeof id === "string" && id.trim() ? id : undefined;

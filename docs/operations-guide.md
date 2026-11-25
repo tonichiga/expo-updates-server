@@ -386,7 +386,8 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
   -f docs/migrations/2026-10-22-device-targeting.sql \
   -f docs/migrations/2026-10-22-device-targeting-activation.sql \
   -f docs/migrations/2026-11-25-device-favorites.sql \
-  -f docs/migrations/2026-11-25-public-distribution-history.sql
+  -f docs/migrations/2026-11-25-public-distribution-history.sql \
+  -f docs/migrations/2026-11-25-download-on-postpone.sql
 ```
 
 Fresh installations use only `schema.sql`, which includes these changes. Reapplying

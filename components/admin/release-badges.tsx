@@ -85,6 +85,8 @@ export function AudienceBadge({
 
 export function DeliveryBadge({ mode }: { mode: UpdateItem["deliveryMode"] }) {
   const { t } = useI18n();
+  if (mode === "manual-postpone")
+    return <Badge variant="teal">{t("Download on postpone")}</Badge>;
   return (
     <Badge variant={mode === "background" ? "info" : "neutral"}>
       {mode === "background" ? t("Background") : t("Manual")}

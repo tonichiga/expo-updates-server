@@ -14,6 +14,8 @@ Every served update manifest includes `extra.updatePolicy`:
 }
 ```
 
+**Download on postpone** sends `delivery: "manual"` with `onPostpone: "download"` in the signed manifest. A patched client asks first, downloads silently after Postpone, and keeps the current session running. Older clients use their existing manual behavior. Upgrade the client before enabling the new profile. Existing databases require `2026-11-25-download-on-postpone.sql`.
+
 The `guard` property is omitted when no Guard is configured. A configured
 Guard is unconditional: it is included for every client to which the existing
 runtime, channel, platform, audience and update selection logic serves that OTA.

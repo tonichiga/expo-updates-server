@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 export interface OtaPolicy {
   schemaVersion: number;
   delivery: "manual" | "background";
+  onPostpone?: "download";
   guard?: { action: string; payload?: unknown };
 }
 
@@ -51,6 +52,7 @@ export interface OtaState {
   status: "idle" | "checking" | "downloading" | "reloading" | "opening-store";
   installationId: string | null;
   deviceId: string | null;
+  postponedUpdateId: string | null;
   available: boolean;
   pending: boolean;
   candidate: OtaCandidate | null;
@@ -64,6 +66,7 @@ export interface OtaController extends OtaState {
   isBusy: boolean;
   check(): Promise<OtaCheckResult>;
   download(): Promise<OtaFetchResult>;
+  postpone(): Promise<void>;
   reload(): Promise<void>;
   retry(): Promise<OtaCheckResult>;
   openStore(): Promise<void>;
@@ -82,6 +85,17 @@ export function manifestDetails(manifest: unknown): OtaManifest | null {
   return manifest && typeof manifest === "object"
     ? (manifest as OtaManifest)
     : null;
+}
+
+export function downloadsOnPostpone(
+  policy: OtaPolicy | null | undefined,
+): boolean {
+  return (
+    policy?.schemaVersion === 1 &&
+    policy.delivery === "manual" &&
+    !policy.guard &&
+    policy.onPostpone === "download"
+  );
 }
 
 /** A background force-OTA policy applies its downloaded manifest on the active app. */

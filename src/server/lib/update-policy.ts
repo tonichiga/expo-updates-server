@@ -1,6 +1,6 @@
 export const UPDATE_POLICY_SCHEMA_VERSION = 1 as const;
 
-export type UpdateDeliveryMode = "manual" | "background";
+export type UpdateDeliveryMode = "manual" | "background" | "manual-postpone";
 export type UpdatePolicyGuard = {
   action: string;
   payload?: unknown;
@@ -12,7 +12,8 @@ export type UpdatePolicyInput = {
 export type ManifestUpdatePolicy = {
   schemaVersion: 1;
   policyVersion: number;
-  delivery: UpdateDeliveryMode;
+  delivery: "manual" | "background";
+  onPostpone?: "download";
   guard?: UpdatePolicyGuard;
 };
 
@@ -36,11 +37,7 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function validateJsonValue(
-  value: unknown,
-  path: string,
-  depth = 0,
-): void {
+function validateJsonValue(value: unknown, path: string, depth = 0): void {
   if (depth > MAX_PAYLOAD_DEPTH) {
     fail(path, `JSON depth must not exceed ${MAX_PAYLOAD_DEPTH}`);
   }
@@ -88,8 +85,12 @@ function validatePayload(payload: unknown): void {
 
 export function validateUpdatePolicy(value: unknown): UpdatePolicyInput {
   if (!isObject(value)) fail("policy", "must be an object");
-  if (value.delivery !== "manual" && value.delivery !== "background") {
-    fail("policy.delivery", "must be manual or background");
+  if (
+    value.delivery !== "manual" &&
+    value.delivery !== "background" &&
+    value.delivery !== "manual-postpone"
+  ) {
+    fail("policy.delivery", "must be manual, manual-postpone or background");
   }
 
   if (value.guard === null) {
@@ -108,6 +109,12 @@ export function validateUpdatePolicy(value: unknown): UpdatePolicyInput {
       fail("policy.guard.payload", "must be absent when action is empty");
     }
     return { delivery: value.delivery, guard: null };
+  }
+  if (value.delivery === "manual-postpone") {
+    fail(
+      "policy.guard",
+      "manual-postpone requires an optional update without a guard",
+    );
   }
   if (
     action !== action.trim() ||
@@ -154,7 +161,13 @@ export function createManifestUpdatePolicy({
     return {
       schemaVersion: UPDATE_POLICY_SCHEMA_VERSION,
       policyVersion: policyVersion as number,
-      delivery: validated.delivery,
+      delivery:
+        validated.delivery === "manual-postpone"
+          ? "manual"
+          : validated.delivery,
+      ...(validated.delivery === "manual-postpone"
+        ? { onPostpone: "download" as const }
+        : {}),
       ...(validated.guard ? { guard: validated.guard } : {}),
     };
   } catch (error: unknown) {

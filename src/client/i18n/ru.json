@@ -587,6 +587,8 @@
   "Delivery changed. Review the refreshed scope before restoring.": "Условия раздачи изменились. Проверьте актуальное состояние перед восстановлением.",
   "Could not restore release.": "Не удалось восстановить релиз.",
   "Unable to load delivery history.": "Не удалось загрузить историю раздачи.",
+  "Download on postpone": "Скачать при откладывании",
+  "Offer the update first. If the user postpones it, download silently and apply it on the next full launch.": "Сначала предложить обновление. Если пользователь нажмёт «Отложить», скачать OTA в фоне и применить при следующем полном запуске.",
   "Immediate required update": "Обязательное обновление с автоперезапуском",
   "The app silently downloads this update and restarts as soon as it is active and ready. Users can retry if the update fails.": "Приложение скачает обновление в фоне и автоматически перезапустится, когда будет открыто и обновление будет готово. При ошибке пользователь сможет повторить попытку.",
   "Delete this release and its files from storage.": "Удаление релиза также удалит его файлы из хранилища."

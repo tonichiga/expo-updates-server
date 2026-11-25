@@ -32,6 +32,7 @@ import {
   behaviors,
   chooseBehavior,
   draftFromPolicy,
+  isDeliveryProfile,
   policyFromDraft,
   setStoreLink,
   storePayloadObject,
@@ -70,6 +71,12 @@ const profiles = {
     description:
       "Users can download the update, restart to apply it, or continue with their current version.",
     icon: MousePointer2,
+  },
+  "manual-postpone": {
+    label: "Download on postpone",
+    description:
+      "Offer the update first. If the user postpones it, download silently and apply it on the next full launch.",
+    icon: Download,
   },
   background: {
     label: "Background update",
@@ -200,8 +207,7 @@ export default function UpdatePolicyEditor({
   const catalogWritable = canWriteGuardActions && !isViewer;
   const dirty =
     JSON.stringify(draft) !== JSON.stringify(draftFromPolicy(policy));
-  const guarded =
-    draft.behavior !== "manual" && draft.behavior !== "background";
+  const guarded = !isDeliveryProfile(draft.behavior);
   const storeFields = storePayloadObject(draft.payload);
   const profile = profiles[draft.behavior];
   const guardActionOptions = mergeGuardActionOptions(guardActions, [

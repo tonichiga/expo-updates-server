@@ -53,6 +53,7 @@ function device(platform, channel, runtime = "1.0.0") {
     checks: 0,
     downloads: 0,
     requests: 0,
+    postponedId: null,
     reloads: 0,
     store: null,
     now: 0,
@@ -107,6 +108,8 @@ function device(platform, channel, runtime = "1.0.0") {
       enabled: true,
       start() {},
       identity: async () => ({ installationId: null, deviceId: null }),
+      readPostponedId: async () => state.postponedId,
+      writePostponedId: async (id) => { state.postponedId = id; },
       now: () => state.now,
       isActive: () => true,
       runningCandidate: () =>
@@ -262,6 +265,46 @@ describe.each(["ios", "android"])(
       expect(text()).toBe("");
     });
 
+    it("downloads after Postpone, retries quietly, and launches cached bytes offline on the next cold start", async () => {
+      const phone = device(platform, scopes["manual-postpone"].channel);
+      const app = phone.launch();
+      app.configure(Symbol(), { autoUpdate: true, autoReload: true });
+      await screen(app);
+      await check(app);
+      expect(phone.state.downloads).toBe(0);
+      expect(text()).toContain("Postpone");
+      phone.state.failAsset = true;
+      await press("Postpone", app);
+      expect(host.querySelector("[role=dialog]")).toBeNull();
+      expect(phone.state.cached).toBeNull();
+      phone.state.failAsset = false;
+      const resumed = phone.launch();
+      resumed.configure(Symbol(), { autoUpdate: true, autoReload: true });
+      await screen(resumed);
+      await check(resumed);
+      expect(phone.state.cached.manifest.id).toBe(phone.state.postponedId);
+      await check(resumed);
+      expect(host.querySelector("[role=dialog]")).toBeNull();
+      expect(phone.state.downloads).toBe(2);
+      expect(phone.state.reloads).toBe(0);
+      expect(phone.state.running).toBeNull();
+      phone.state.online = false;
+      phone.launchCached();
+      await phone.launch().initialize();
+      expect(phone.state.postponedId).toBeNull();
+      expect(phone.state.running.id).toBe(phone.state.cached.manifest.id);
+    });
+    it("keeps Download and Restart available to a user who accepts instead", async () => {
+      const phone = device(platform, scopes["manual-postpone"].channel);
+      const model = phone.launch();
+      await screen(model);
+      await check(model);
+      await press("Download", model);
+      expect(phone.state.downloads).toBe(1);
+      await press("Restart", model);
+      expect(phone.state.reloads).toBe(1);
+      expect(phone.state.running.id).toBe(phone.state.cached.manifest.id);
+    });
     it("keeps background delivery silent, prevents a fresh download during a stop, and retains a cached candidate", async () => {
       const phone = device(platform, scopes.background.channel);
       const app = phone.launch();

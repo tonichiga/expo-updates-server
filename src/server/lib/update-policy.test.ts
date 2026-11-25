@@ -41,6 +41,26 @@ describe("simple update policy", () => {
     },
   );
 
+  it("keeps manual delivery compatible and only attaches the postpone hint to unguarded updates", () => {
+    expect(
+      createManifestUpdatePolicy({
+        delivery: "manual-postpone",
+        guard: null,
+        policyVersion: 2,
+      }),
+    ).toEqual({
+      schemaVersion: 1,
+      policyVersion: 2,
+      delivery: "manual",
+      onPostpone: "download",
+    });
+    expect(() =>
+      validateUpdatePolicy({
+        delivery: "manual-postpone",
+        guard: { action: "ota-force-update" },
+      }),
+    ).toThrow();
+  });
   it("rejects payload without an action", () => {
     expect(() =>
       validateUpdatePolicy({

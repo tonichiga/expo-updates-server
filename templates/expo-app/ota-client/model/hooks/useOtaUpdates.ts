@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { OtaOptions, OtaController } from "../../types";
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import * as Updates from "expo-updates";
@@ -19,6 +20,11 @@ const controller = createUpdateController({
     installationId: await getInstallationId(),
     deviceId: await getDeviceId(),
   }),
+  readPostponedId: () => AsyncStorage.getItem("@ota-client/postponed-update"),
+  writePostponedId: (id) =>
+    id === null
+      ? AsyncStorage.removeItem("@ota-client/postponed-update")
+      : AsyncStorage.setItem("@ota-client/postponed-update", id),
   check: checkForUpdateAsync,
   fetch: fetchUpdateAsync,
   runningCandidate: () => ({ type: "new", manifest: Updates.manifest }),
@@ -92,6 +98,7 @@ export function useOtaUpdates(
     download: controller.download,
     reload: controller.reload,
     retry: controller.retry,
+    postpone: controller.postpone,
     openStore: controller.openStore,
   };
 }

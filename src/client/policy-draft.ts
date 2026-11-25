@@ -2,6 +2,7 @@ import type { UpdatePolicy, UpdatePolicyGuard } from "./admin-types";
 
 export const behaviors = [
   "manual",
+  "manual-postpone",
   "background",
   "required",
   "immediate",
@@ -45,6 +46,16 @@ export function draftFromPolicy(
   };
 }
 
+export function isDeliveryProfile(
+  behavior: PolicyBehavior,
+): behavior is UpdatePolicy["delivery"] {
+  return (
+    behavior === "manual" ||
+    behavior === "background" ||
+    behavior === "manual-postpone"
+  );
+}
+
 export function chooseBehavior(
   current: PolicyDraft,
   behavior: PolicyBehavior,
@@ -58,10 +69,10 @@ export function chooseBehavior(
       payload: current.action === required ? current.payload : "",
     };
   }
+  if (isDeliveryProfile(behavior))
+    return { behavior, delivery: behavior, action: "", payload: "" };
   const delivery =
-    behavior === "manual" || behavior === "background"
-      ? behavior
-      : current.delivery;
+    current.delivery === "manual-postpone" ? "manual" : current.delivery;
   const action = behavior === "store" ? store : "";
   return { behavior, delivery, action, payload: "" };
 }
@@ -70,7 +81,7 @@ export function policyFromDraft(
   draft: PolicyDraft,
 ): Pick<UpdatePolicy, "delivery" | "guard"> {
   let guard: UpdatePolicyGuard | null = null;
-  if (draft.behavior !== "manual" && draft.behavior !== "background") {
+  if (!isDeliveryProfile(draft.behavior)) {
     if (!draft.action) throw new Error("Select or create a Guard action.");
     try {
       guard = {

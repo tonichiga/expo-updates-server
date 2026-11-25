@@ -27,6 +27,7 @@ Expo Go, web and disabled-updates builds leave automation off.
 | autoCheck | Check on mount and foreground, minimum interval 60 seconds |
 | autoUpdate | Also download eligible manual candidates |
 | autoReload | Reload a pending non-background bundle while app is active |
+| Download on postpone | Offer Download or Postpone even with autoUpdate enabled. Postpone silently caches the update for the next full launch and suppresses autoReload. An interrupted download retries at the next successful check. |
 | delivery=background, guard=∅ | Download silently; apply on next cold launch or manual reload |
 | manual + ota-force-update | Block with gate, download automatically; restart button when ready |
 | background + ota-force-update | Download silently and restart the active app as soon as the update is ready, even with autoReload disabled |

@@ -568,9 +568,11 @@ export default function UpdateDetailsPage() {
                     value={
                       detail.isIgnoredByRollback
                         ? t("Ignored by rollback")
-                        : detail.deliveryMode === "background"
-                          ? t("Background")
-                          : t("Manual")
+                        : detail.deliveryMode === "manual-postpone"
+                          ? t("Download on postpone")
+                          : detail.deliveryMode === "background"
+                            ? t("Background")
+                            : t("Manual")
                     }
                   />
                   <Info

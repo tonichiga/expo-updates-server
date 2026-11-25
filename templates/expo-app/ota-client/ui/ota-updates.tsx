@@ -8,7 +8,11 @@ import {
   View,
 } from "react-native";
 import type { OtaController, OtaUpdatesProps } from "../types";
-import { manifestDetails, requiresImmediateReload } from "../types";
+import {
+  downloadsOnPostpone,
+  manifestDetails,
+  requiresImmediateReload,
+} from "../types";
 import { useOtaUpdates } from "../model/hooks/useOtaUpdates";
 
 /** Mount once beside navigation. No context or application wrapper is required. */
@@ -35,10 +39,8 @@ export function OtaUpdates({
   );
 }
 
-interface OverlayProps extends Pick<
-  OtaUpdatesProps,
-  "renderBlocked" | "renderAvailable"
-> {
+interface OverlayProps
+  extends Pick<OtaUpdatesProps, "renderBlocked" | "renderAvailable"> {
   controller: OtaController;
   showAvailable?: boolean;
 }
@@ -56,12 +58,24 @@ export function OtaUpdateOverlay({
     "update";
   const noticeId = `${candidateId}:${controller.pending}`;
   const dismiss = () => {
-    if (!controller.blocked) setDismissed(noticeId);
+    if (controller.blocked) return;
+    if (
+      downloadsOnPostpone(controller.policy) &&
+      manifestDetails(controller.candidate?.manifest)?.id
+    ) {
+      void controller.postpone().catch(() => undefined);
+    } else {
+      setDismissed(noticeId);
+    }
   };
   const optional =
     showAvailable &&
     controller.available &&
     controller.policy?.delivery !== "background" &&
+    !(
+      downloadsOnPostpone(controller.policy) &&
+      controller.postponedUpdateId === candidateId
+    ) &&
     dismissed !== noticeId;
   if (requiresImmediateReload(controller.policy) && !controller.error)
     return null;
@@ -101,6 +115,12 @@ function UpdateNotice({
     description = "The update is ready. Restart the application to apply it.";
     label = "Restart";
     action = controller.reload;
+  }
+  const downloadLater = downloadsOnPostpone(controller.policy);
+  if (downloadLater) {
+    description = controller.pending
+      ? "Restart now or postpone until the next full launch."
+      : "Download now, or postpone to download in the background and use the update on your next full launch.";
   }
   if (controller.blocked) {
     title = "Update required";
@@ -170,7 +190,9 @@ function UpdateNotice({
           accessibilityRole="button"
           onPress={dismiss}
         >
-          <Text style={styles.buttonText}>Later</Text>
+          <Text style={styles.buttonText}>
+            {downloadLater ? "Postpone" : "Later"}
+          </Text>
         </Pressable>
       )}
     </View>

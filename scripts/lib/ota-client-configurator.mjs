@@ -8,19 +8,35 @@ const META = "ota-client-entry.json";
 const previousClientFiles = new Map([
   [
     "ota-client/model/update-controller.ts",
-    "130bcfa37864383143b0f1fb2b0789e94e5f3e2b7f4fe3d22e168a55643b7e03",
+    [
+      "130bcfa37864383143b0f1fb2b0789e94e5f3e2b7f4fe3d22e168a55643b7e03",
+      "60ebb33895cbe7d7b12c0c8d9f443669e4955de1f9d0c528f3d7578e2c9f1349",
+    ],
   ],
   [
     "ota-client/types.ts",
-    "29c4894ed1f7cbd61f59f2f62319748f3555f9e2d883d858e3b64100d8940c64",
+    [
+      "29c4894ed1f7cbd61f59f2f62319748f3555f9e2d883d858e3b64100d8940c64",
+      "dedae48ece515569c4a4509fbcfde5f88ee20adc949484f03cff869f22572679",
+    ],
   ],
   [
     "ota-client/ui/ota-updates.tsx",
-    "e2a710f41e9ab2f33fbd8b7948f25c43a601324703b7f714bf34f4fdc9099f2c",
+    [
+      "e2a710f41e9ab2f33fbd8b7948f25c43a601324703b7f714bf34f4fdc9099f2c",
+      "839fa62ee9583ee41983e003492cdd76c03ecbff7e9cf7d038743389e3a9f21d",
+    ],
   ],
   [
     "ota-client/docs/update-lifecycle.md",
-    "f16381c3884675c0278968a5980c869af909b89ba61dfcaf8cdc3febe97604b4",
+    [
+      "f16381c3884675c0278968a5980c869af909b89ba61dfcaf8cdc3febe97604b4",
+      "2cb7ced11ee8c1a2952644e0ae9d1e883476d3967e990a25bec69f2b3b814446",
+    ],
+  ],
+  [
+    "ota-client/model/hooks/useOtaUpdates.ts",
+    ["01aec47eb8197039beb8895ce3b25e726518bd31c18838656967deb55b025eae"],
   ],
 ]);
 const extensions = ["tsx", "ts", "jsx", "js", "mjs", "cjs"];
@@ -147,12 +163,13 @@ export function planOtaClient({
     if (force || !fs.existsSync(destination)) continue;
     const current = fs.readFileSync(destination, "utf8");
     if (current === content) continue;
-    const previousHash = previousClientFiles.get(name);
+    const hashes = previousClientFiles.get(name);
     if (
-      !previousHash ||
-      createHash("sha256")
-        .update(current.replace(/\r\n/g, "\n"))
-        .digest("hex") !== previousHash
+      !hashes?.includes(
+        createHash("sha256")
+          .update(current.replace(/\r\n/g, "\n"))
+          .digest("hex"),
+      )
     ) {
       throw new Error(
         `Refusing to overwrite ${destination}. Re-run with --force.`,

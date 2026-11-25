@@ -17,6 +17,8 @@ assert.ok(schema.includes(versionMigration.trim()), 'Canonical version metadata 
 const targetingMigration = readFileSync(new URL('../../docs/migrations/2026-10-22-device-targeting.sql', import.meta.url), 'utf8');
 const activationMigration = readFileSync(new URL('../../docs/migrations/2026-10-22-device-targeting-activation.sql', import.meta.url), 'utf8');
 const favoritesMigration = readFileSync(new URL('../../docs/migrations/2026-11-25-device-favorites.sql', import.meta.url), 'utf8');
+const postponeMigration = readFileSync(new URL('../../docs/migrations/2026-11-25-download-on-postpone.sql', import.meta.url), 'utf8');
+assert.ok(schema.includes(postponeMigration.trim()));
 const historyMigration = readFileSync(new URL('../../docs/migrations/2026-11-25-public-distribution-history.sql', import.meta.url), 'utf8');
 assert.ok(schema.includes(favoritesMigration.trim()), 'Canonical favorites SQL must match migration');
 assert.ok(schema.includes(historyMigration.trim()), 'Canonical public distribution SQL must match migration');
@@ -38,6 +40,8 @@ try {
     'Refusing a nonempty OTA database: use an empty disposable database');
   await pool.query(fresh ? schema : schema.split(marker)[0]);
   installed = true;
+  await pool.query(postponeMigration);
+  await pool.query(postponeMigration);
   let original;
   if (!fresh) {
     await send(event);

@@ -311,7 +311,8 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
   -f docs/migrations/2026-10-22-device-targeting.sql \
   -f docs/migrations/2026-10-22-device-targeting-activation.sql \
   -f docs/migrations/2026-11-25-device-favorites.sql \
-  -f docs/migrations/2026-11-25-public-distribution-history.sql
+  -f docs/migrations/2026-11-25-public-distribution-history.sql \
+  -f docs/migrations/2026-11-25-download-on-postpone.sql
 ```
 
 Нові встановлення використовують лише `schema.sql`, який уже містить зміни. Повторне застосування зберігає початок збору, записи встановлень та аудиторії релізів. Міграція адресної активації додає дію `ota-force-update`. Наступні дві міграції вмикають особисте обране та історію публічних активацій. Для наявних каналів початковою точкою стає поточний публічний реліз. Якщо раніше були активні кілька публічних релізів, зберігається той, який сервер вибирав для анонімного запиту маніфесту.

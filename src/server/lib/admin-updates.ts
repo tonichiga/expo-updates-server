@@ -296,7 +296,7 @@ export function mapRowToRecord(
     isIgnoredByRollback,
     launchAssetPath: row.launch_asset_path,
     assetsCount: row.assets_count,
-    deliveryMode: row.delivery_mode === "background" ? "background" : "manual",
+    deliveryMode: row.delivery_mode === "background" || row.delivery_mode === "manual-postpone" ? row.delivery_mode : "manual",
     hasGuard:
       typeof row.guard_action === "string" && row.guard_action.length > 0,
     policyVersion:

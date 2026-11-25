@@ -166,6 +166,14 @@ export async function exercisePolicyEditor(page, { db, storage, password }) {
     tab.getByRole("status").filter({ hasText: "Policy saved as version 7." }),
   ).toBeVisible();
 
+  await radio("Download on postpone").click();
+  await save.click();
+  await expect(tab.getByRole("status")).toContainText("Policy saved as version 8.");
+  await page.reload();
+  await page.getByRole("tab", { name: "Policy", exact: true }).click();
+  await expect(radio("Download on postpone")).toBeChecked();
+  expect((await (await page.request.get(api)).json()).delivery).toBe("manual-postpone");
+
   const catalogKey = "app.catalog-demo";
   await tab
     .getByRole("button", { name: "Action catalog", exact: true })
@@ -194,7 +202,7 @@ export async function exercisePolicyEditor(page, { db, storage, password }) {
     tab.getByText("No matching actions", { exact: true }),
   ).toBeVisible();
   await expect(save).toBeDisabled();
-  expect((await (await page.request.get(api)).json()).policyVersion).toBe(7);
+  expect((await (await page.request.get(api)).json()).policyVersion).toBe(8);
 
   const viewer = await page.context().browser().newContext();
   try {

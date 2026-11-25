@@ -30,6 +30,7 @@ export async function exerciseClientLifecycle({
     fixtures[platform] = {};
     for (const kind of [
       "manual",
+      "manual-postpone",
       "background",
       "required",
       "immediate",
@@ -49,7 +50,7 @@ export async function exerciseClientLifecycle({
         delivery:
           kind === "background" || kind === "immediate"
             ? "background"
-            : "manual",
+            : kind === "manual-postpone" ? kind : "manual",
         expectedPolicyVersion: 1,
         guard:
           kind === "required" || kind === "immediate"
