@@ -35,7 +35,7 @@
   "exclude": [
     "node_modules",
     "packages/create-expo-updates-server/dist",
-    "templates/expo-app/ota-client",
-    "scripts/lib/ota-updates-ui.test.tsx"
+    "packages/ota-client/src",
+    "packages/ota-client/test/ota-updates-ui.test.tsx"
   ]
 }

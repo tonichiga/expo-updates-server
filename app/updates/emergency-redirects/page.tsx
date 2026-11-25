@@ -1,4 +1,10 @@
 "use client";
+import { Siren, Trash2 } from "lucide-react";
+import { ChannelBadge, PlatformBadge } from "@/components/admin/release-badges";
+import { statusTones } from "@/components/ui/status-tones";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Switch } from "@/components/ui/switch";
+import { useConfirmAction } from "@/components/admin/confirm-action";
 import type { TranslationMessage } from "@/src/client/i18n/messages";
 import { useI18n } from "@/src/client/i18n/provider";
 
@@ -43,9 +49,11 @@ const EMPTY_FORM: EmergencyRedirectInput = {
 };
 
 export default function EmergencyRedirectsPage() {
+  const confirmAction = useConfirmAction();
   const { t } = useI18n();
   const [items, setItems] = useState<EmergencyRedirectItem[]>([]);
   const [form, setForm] = useState<EmergencyRedirectInput>(EMPTY_FORM);
+  const [showEditor, setShowEditor] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [canWrite, setCanWrite] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -80,6 +88,7 @@ export default function EmergencyRedirectsPage() {
   const resetForm = () => {
     setEditingId(null);
     setForm(EMPTY_FORM);
+    setShowEditor(false);
   };
 
   const handleSubmit = async (event: FormEvent) => {
@@ -116,6 +125,7 @@ export default function EmergencyRedirectsPage() {
 
   const edit = (item: EmergencyRedirectItem) => {
     setEditingId(item.id);
+    setShowEditor(true);
     setForm({
       name: item.name,
       enabled: item.enabled,
@@ -138,15 +148,17 @@ export default function EmergencyRedirectsPage() {
       setSuccess(item.enabled ? "Redirect отключён" : "Redirect включён");
       await load();
     } catch (toggleError: unknown) {
-      setError(
-        (toggleError as Error).message || "Не удалось изменить статус",
-      );
+      setError((toggleError as Error).message || "Не удалось изменить статус");
     }
   };
 
   const remove = async (item: EmergencyRedirectItem) => {
     if (
-      !window.confirm(t('Удалить emergency redirect "{0}"?', [item.name]))
+      !(await confirmAction(
+        t("Удалить"),
+        t('Удалить emergency redirect "{0}"?', [item.name]),
+        true,
+      ))
     ) {
       return;
     }
@@ -161,9 +173,7 @@ export default function EmergencyRedirectsPage() {
       }
       await load();
     } catch (deleteError: unknown) {
-      setError(
-        (deleteError as Error).message || "Не удалось удалить redirect",
-      );
+      setError((deleteError as Error).message || "Не удалось удалить redirect");
     }
   };
 
@@ -172,7 +182,12 @@ export default function EmergencyRedirectsPage() {
       <div className="space-y-6">
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-1">
-            <h1 className="text-2xl font-semibold tracking-tight">
+            <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+              <span
+                className={`inline-flex rounded-md border p-1.5 ${statusTones.destructive}`}
+              >
+                <Siren aria-hidden="true" className="size-5" />
+              </span>
               {t("Emergency redirects")}
             </h1>
             <p className="text-sm text-muted-foreground">
@@ -181,46 +196,58 @@ export default function EmergencyRedirectsPage() {
               )}
             </p>
           </div>
-          <Badge variant="secondary" className="px-3 py-1">
-            {t("Rules: {0}", [items.length])}
-          </Badge>
+          <div className="flex items-center gap-3">
+            {canWrite && !showEditor && (
+              <Button
+                size="sm"
+                onClick={() => {
+                  setError("");
+                  setShowEditor(true);
+                }}
+              >
+                {t("Новое правило")}
+              </Button>
+            )}
+            <Badge variant="info" className="px-3 py-1">
+              {t("Rules: {0}", [items.length])}
+            </Badge>
+          </div>
         </header>
 
         {error ? (
-          <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
-            {t(error)}
-          </div>
+          <Alert variant="destructive">
+            <AlertDescription>{t(error)}</AlertDescription>
+          </Alert>
         ) : null}
         {success ? (
-          <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300">
-            {t(success)}
-          </div>
+          <Alert role="status">
+            <AlertDescription>{t(success)}</AlertDescription>
+          </Alert>
         ) : null}
 
-        {canWrite ? (
+        {canWrite && showEditor ? (
           <form
             onSubmit={handleSubmit}
             className="space-y-4 rounded-xl border border-border bg-card p-5 "
           >
             <div className="flex items-center justify-between">
               <h2 className="font-semibold">
-                {editingId
-                  ? t("Редактирование правила")
-                  : t("Новое правило")}
+                {editingId ? t("Редактирование правила") : t("Новое правило")}
               </h2>
-              {editingId ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  type="button"
-                  onClick={resetForm}
-                >
-                  {t("Отменить")}
-                </Button>
-              ) : null}
+              <Button
+                variant="outline"
+                size="sm"
+                type="button"
+                onClick={resetForm}
+              >
+                {t("Отменить")}
+              </Button>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+            <fieldset className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+              <legend className="mb-3 text-sm font-medium">
+                {t("Matching build")}
+              </legend>
               <Input
                 label={t("Название")}
                 value={form.name}
@@ -259,10 +286,13 @@ export default function EmergencyRedirectsPage() {
               <Input
                 label={t("From channel")}
                 value={form.fromChannel}
-                onChange={(value) =>
-                  setForm({ ...form, fromChannel: value })
-                }
+                onChange={(value) => setForm({ ...form, fromChannel: value })}
               />
+            </fieldset>
+            <fieldset className="grid gap-3 border-t pt-3 md:grid-cols-3">
+              <legend className="pr-2 text-sm font-medium">
+                {t("Destination release")}
+              </legend>
               <Input
                 label={t("To channel")}
                 value={form.toChannel}
@@ -296,22 +326,22 @@ export default function EmergencyRedirectsPage() {
                   setForm({ ...form, expectedUpdateId: value || null })
                 }
               />
-            </div>
+            </fieldset>
 
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                className="size-4 rounded border-input accent-primary"
-                type="checkbox"
+            <label
+              className={`flex items-center gap-3 rounded-md border p-3 text-sm ${form.enabled ? statusTones.warning : "bg-muted/25"}`}
+            >
+              <Switch
                 checked={form.enabled}
-                onChange={(event) =>
-                  setForm({ ...form, enabled: event.target.checked })
+                onCheckedChange={(checked) =>
+                  setForm({ ...form, enabled: checked })
                 }
               />
               {t("Включить правило сразу после сохранения")}
             </label>
 
             <Button
-              variant="default"
+              variant={form.enabled ? "destructive" : "default"}
               size="sm"
               type="submit"
               disabled={saving}
@@ -381,28 +411,30 @@ export default function EmergencyRedirectsPage() {
                         className="border-t border-border "
                       >
                         <TableCell className="px-4 py-3">
-                          <Badge
-                            variant="secondary"
-                            className={
-                              item.enabled
-                                ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-                                : ""
-                            }
-                          >
+                          <Badge variant={item.enabled ? "warning" : "neutral"}>
                             {item.enabled ? t("Enabled") : t("Disabled")}
                           </Badge>
                         </TableCell>
+                        <TableCell className="px-4 py-3">{item.name}</TableCell>
                         <TableCell className="px-4 py-3">
-                          {item.name}
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <PlatformBadge platform={item.platform} />
+                            <span>{item.runtimeVersion}</span>
+                          </div>
                         </TableCell>
                         <TableCell className="px-4 py-3">
-                          {item.runtimeVersion} / {item.platform}
+                          <div className="flex max-w-72 flex-wrap items-center gap-1">
+                            <ChannelBadge channel={item.fromChannel} />
+                            <span>→</span>
+                            <ChannelBadge channel={item.toChannel} />
+                          </div>
                         </TableCell>
                         <TableCell className="px-4 py-3">
-                          {item.fromChannel} → {item.toChannel}
-                        </TableCell>
-                        <TableCell className="px-4 py-3">
-                          <Badge variant="outline">
+                          <Badge
+                            variant={
+                              item.targetMode === "pinned" ? "violet" : "info"
+                            }
+                          >
                             {item.targetMode === "pinned"
                               ? t("Pinned update")
                               : t("Follow channel")}
@@ -436,7 +468,9 @@ export default function EmergencyRedirectsPage() {
                                 {t("Edit")}
                               </Button>
                               <Button
-                                variant="outline"
+                                variant={
+                                  item.enabled ? "outline" : "destructive"
+                                }
                                 size="sm"
                                 type="button"
                                 onClick={() => void toggle(item)}
@@ -449,6 +483,7 @@ export default function EmergencyRedirectsPage() {
                                 type="button"
                                 onClick={() => void remove(item)}
                               >
+                                <Trash2 aria-hidden="true" />
                                 {t("Delete")}
                               </Button>
                             </div>

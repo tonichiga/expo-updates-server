@@ -31,9 +31,7 @@ export function mergeGuardActionOptions(
       actionKey: item.actionKey,
       persisted: true,
     }))
-    .sort((left, right) =>
-      left.actionKey.localeCompare(right.actionKey, "en"),
-    );
+    .sort((left, right) => left.actionKey.localeCompare(right.actionKey, "en"));
   const exactValues = new Set(options.map((option) => option.actionKey));
 
   for (const actionKey of currentPolicyValues) {
@@ -47,10 +45,10 @@ export function mergeGuardActionOptions(
   return options;
 }
 
-export function filterGuardActionOptions(
-  options: GuardActionOption[],
+export function filterGuardActionOptions<T extends { actionKey: string }>(
+  options: T[],
   query: string,
-): GuardActionOption[] {
+): T[] {
   const normalizedQuery = query.toLocaleLowerCase();
   return options.filter((option) =>
     option.actionKey.toLocaleLowerCase().includes(normalizedQuery),

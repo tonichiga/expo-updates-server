@@ -75,8 +75,8 @@ mismatch with the selected env file.
 | PostgreSQL | Connection, read access to core OTA/telemetry/targeting columns, required table/function signatures and enabled audience-activation trigger |
 | Supabase | Read access to core REST tables/columns and storage bucket; SQL function bodies are not inspected |
 | Storage | Existing accessible bucket via S3 HEAD or Supabase bucket GET; no writes |
-| Expo app | Static config, installed client dependencies, implementation files, URL/channel/runtime, native check mode, identity namespace and telemetry URL |
-| Root | Recognized root hook/gate wiring and generated bootstrap metadata; custom roots need manual verification |
+| Expo app | Static config, client package, native dependencies, URL/channel/runtime, native check mode, identity namespace and telemetry URL |
+| Root | Recognized `OtaUpdates` mount and generated bootstrap metadata; custom roots need manual verification |
 | Publisher/registrar | Presence and basic shape of `.env.ota` credentials, publisher command, channel and registration URL consistency |
 
 Without `--app`, app checks are skipped. Without an app certificate or an explicit

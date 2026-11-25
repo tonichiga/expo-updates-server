@@ -4,7 +4,7 @@ Create a standalone, self-hosted Expo Updates Server project from the
 versioned template bundled in this npm package.
 
 ```bash
-npx create-expo-updates-server@latest my-server
+npx create-expo-updates-server@0.6.0 my-server
 cd my-server
 ```
 
@@ -13,7 +13,7 @@ To scaffold into an empty current directory instead:
 ```bash
 mkdir my-server
 cd my-server
-npx create-expo-updates-server@latest .
+npx create-expo-updates-server@0.6.0 .
 ```
 
 The initializer performs no network requests, dependency installation, Git
@@ -28,6 +28,8 @@ than recursively deleting the current directory.
 Successful output provides numbered Docker and npm paths. When `.` is used,
 those steps start directly with configuration or installation instead of
 asking you to change into the directory again.
+
+After setting up the server, run `npm ci` and `npm run configure-app` in the server directory. The configurator installs `expo-updates-server-client@0.1.0` and its Expo-compatible native dependencies in your application, initializes the client and mounts its update component in supported roots. Follow the [Expo application setup guide](https://github.com/tonichiga/expo-updates-server/blob/main/docs/expo-app-setup.md).
 
 See the
 [installer documentation](https://github.com/tonichiga/expo-updates-server/blob/main/docs/npm-installer.md)

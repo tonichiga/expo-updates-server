@@ -16,6 +16,12 @@ const versionMigration = readFileSync(new URL('../../docs/migrations/2026-10-22-
 assert.ok(schema.includes(versionMigration.trim()), 'Canonical version metadata SQL must match migration');
 const targetingMigration = readFileSync(new URL('../../docs/migrations/2026-10-22-device-targeting.sql', import.meta.url), 'utf8');
 const activationMigration = readFileSync(new URL('../../docs/migrations/2026-10-22-device-targeting-activation.sql', import.meta.url), 'utf8');
+const favoritesMigration = readFileSync(new URL('../../docs/migrations/2026-11-25-device-favorites.sql', import.meta.url), 'utf8');
+const postponeMigration = readFileSync(new URL('../../docs/migrations/2026-11-25-download-on-postpone.sql', import.meta.url), 'utf8');
+assert.ok(schema.includes(postponeMigration.trim()));
+const historyMigration = readFileSync(new URL('../../docs/migrations/2026-11-25-public-distribution-history.sql', import.meta.url), 'utf8');
+assert.ok(schema.includes(favoritesMigration.trim()), 'Canonical favorites SQL must match migration');
+assert.ok(schema.includes(historyMigration.trim()), 'Canonical public distribution SQL must match migration');
 assert.ok(schema.includes(targetingMigration.trim()), 'Canonical targeting SQL must match migration');
 assert.ok(schema.includes(activationMigration.trim()), 'Canonical activation SQL must match migration');
 const marker = '-- Daily device analytics (2026-10-22).';
@@ -34,12 +40,14 @@ try {
     'Refusing a nonempty OTA database: use an empty disposable database');
   await pool.query(fresh ? schema : schema.split(marker)[0]);
   installed = true;
+  await pool.query(postponeMigration);
+  await pool.query(postponeMigration);
   let original;
   if (!fresh) {
     await send(event);
     original = (await pool.query('select to_jsonb(s) as state from ota_device_state s where installation_id=$1', [event.installationId])).rows[0].state;
     await pool.query(migration);
-  await pool.query(versionMigration);
+    await pool.query(versionMigration);
   }
   const coverage = (await pool.query('select collection_started_at from ota_device_analytics_metadata')).rows[0].collection_started_at.toISOString();
   await pool.query(migration);
@@ -59,6 +67,9 @@ try {
   await pool.query(targetingMigration);
   await pool.query(activationMigration);
   await pool.query(activationMigration);
+  await pool.query(favoritesMigration);
+  await pool.query(historyMigration);
+  await pool.query(historyMigration);
   console.log(`PASS: ${fresh ? 'fresh canonical schema' : 'upgrade preserving existing state without backfill'}, SQL parity, and repeat migration preserving collection start.`);
 } finally {
   if (installed) {

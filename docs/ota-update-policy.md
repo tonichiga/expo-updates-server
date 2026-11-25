@@ -14,6 +14,8 @@ Every served update manifest includes `extra.updatePolicy`:
 }
 ```
 
+**Download on postpone** sends `delivery: "manual"` with `onPostpone: "download"` in the signed manifest. A patched client asks first, downloads silently after Postpone, and keeps the current session running. Older clients use their existing manual behavior. Upgrade the client before enabling the new profile. Existing databases require `2026-11-25-download-on-postpone.sql`.
+
 The `guard` property is omitted when no Guard is configured. A configured
 Guard is unconditional: it is included for every client to which the existing
 runtime, channel, platform, audience and update selection logic serves that OTA.
@@ -25,8 +27,7 @@ Catalog membership is advisory and is not required to save or serve an action.
 - `Updates.manifest` contains the policy of the update that is **currently
   running**. Do not use it as the candidate policy before downloading.
 - `manual` is the default and leaves fetch/reload behavior to the application.
-- `background` means fetch the candidate silently, do not reload immediately,
-  and apply it on the next cold start.
+- An unguarded `background` release downloads silently and applies on the next cold start.
 - Legacy clients safely ignore the additional `extra` value.
 
 An inactive upload is a draft, even though its initial `disabled_at` value is
@@ -34,11 +35,7 @@ equal to `created_at`. Its delivery mode and simple Guard remain editable until
 activation. `disabled_at` by itself is not evidence that an update was
 published.
 
-`ota_update_channels.latest_update_id` identifies the newest upload and may
-therefore point to an inactive draft. That pointer is not publication evidence;
-manifest selection falls back to the latest active update. An
-`active_update_id` rollback pointer or an `ota_served_manifest_log` row is
-publication evidence.
+Uploading a draft leaves the serving pointers unchanged. The console updates them when an operator activates, stops, promotes, rolls back or restores a release. On an older database a historical pointer can identify an inactive upload. Only activation or evidence of a served manifest establishes publication.
 
 Activation is the publication event. Once activated, promoted, used as a
 rollback target, or demonstrably served, a policy remains immutable even if the
@@ -74,12 +71,7 @@ installations should apply only the canonical
 
 ## Guard action catalog
 
-The policy editor loads reusable action names from `ota_guard_actions`. New
-installations receive the separate `ota-force-update` and `ota-force-store-update`
-actions. Operators can create
-an action by typing it in the action combobox or through the catalog-only form,
-which remains available while viewing an immutable policy and never changes
-that policy.
+Choose a policy profile for the draft, configure its fields and save the changes. Custom Guard actions can be selected from the catalog or created in the picker. The catalog can also be edited independently while viewing an immutable policy.
 
 Persisted catalog entries can be removed with the trash control. Catalog
 deletion does not modify an existing policy. Its action remains visible as a
@@ -90,23 +82,20 @@ Catalog action keys are trimmed when created, contain 1–100 characters, and
 cannot contain control characters. Viewers can list catalog entries but cannot
 create or delete them.
 
-## Generated client hook
+## Client hook {#generated-client-hook}
 
-The configurator installs `useOtaUpdates(options)` and automatically connects it in the
-root layout/App, with `OtaUpdateGate` around application content. See the
+The configurator imports `OtaUpdates` from `expo-updates-server-client` and mounts it beside navigation. The component uses `useOtaUpdates(options)` to enforce the release policy. See the
 [client lifecycle guide](./ota-client-lifecycle.md) for configuration and methods.
 The hook evaluates the candidate policy from `check()`, then validates the fetched
 manifest again because the selected release may change between checking and downloading.
 
-- `ota-force-update` requires a compatible **OTA**: the gate blocks interaction, the
-  hook downloads the update and shows a restart action when ready.
+- With `manual` delivery, `ota-force-update` downloads a compatible OTA and shows a required restart action when ready.
+- With `background` delivery, `ota-force-update` downloads silently and automatically reloads once the signed update is ready and the app is active, even with `autoReload: false`. If the app is inactive it resumes on foreground. A failed download or reload shows a required retry action.
 - `ota-force-store-update` requires a **new native binary**: the gate opens the platform
   store URL; it does not download this OTA candidate. OTA cannot change runtime or add
   native modules. Payload supports `androidUrl`, `iosUrl`, or a shared `url` fallback.
 - Unknown/custom actions remain blocked until an explicit `guardHandlers[action]`
   returns `allow`. Catalog entries alone do not implement guard behavior.
-- `delivery: background` downloads silently and waits for a cold launch or a manual
-  reload. It does not immediately reload because `autoReload` is enabled.
 - A manual candidate is displayed for explicit download/reload unless root options
   enable `autoUpdate`/`autoReload`. The generated root enables automatic checks only.
 

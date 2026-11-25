@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { generateKeyPairSync } from "node:crypto";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { createServedManifestId } from "../manifest/manifest-identity";
 
@@ -196,6 +197,7 @@ function seedCurrentUpdate() {
 }
 
 describe("GET /api/manifest", () => {
+  afterEach(() => vi.unstubAllEnvs());
   beforeEach(() => {
     vi.resetModules();
     database.channels = [];
@@ -366,8 +368,9 @@ describe("GET /api/manifest", () => {
   it("returns signed noUpdateAvailable before redirect or update selection when globally blocked", async () => {
     distributionControl.blocked = true;
     vi.stubEnv(
-      "CODE_SIGNING_PRIVATE_KEY_PATH",
-      `${process.cwd()}/src/server/cert/codeSigningPrivateKey.pem`,
+      "CODE_SIGNING_PRIVATE_KEY",
+      generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey
+        .export({ type: "pkcs8", format: "pem" }).toString(),
     );
     database.emergencyRedirects.push({
       id: "redirect-id",
@@ -1040,6 +1043,23 @@ describe("GET /api/manifest", () => {
     Object.assign(database.updates[0], { audience_mode: 'devices', audience_device_ids: ['a'.repeat(64)] });
     const body = await (await requestManifest(makeRequest({ 'expo-extra-params': 'device_id="' + 'a'.repeat(64) + '"' }))).text();
     expect(body).toContain(createServedManifestId(servedManifestId, previousUpdateId));
+  });
+
+  it.each([
+    ["a still-active OTA", { is_active: true }],
+    ["a disabled OTA on another channel", { channel: "beta" }],
+    ["a disabled OTA on another runtime", { runtime_version: "2.0.0" }],
+  ])("preserves the installed version floor for %s", async (_label, overrides) => {
+    seedCurrentUpdate();
+    database.updates.push(makeUpdate({
+      update_id: previousUpdateId,
+      is_active: false,
+      created_at: "2026-08-29T08:00:00Z",
+      manifest: { expoClient: { version: "3.0.0" } },
+      ...overrides,
+    }));
+    const response = await requestManifest(makeRequest({ "expo-current-update-id": previousUpdateId }));
+    expect(await response.text()).toContain('{"type":"noUpdateAvailable"}');
   });
 
   it("does not grant rollback downgrade privileges to a device outside its audience", async () => {

@@ -28,20 +28,9 @@ npm run configure-app -- \
   --runtime-version 1.0.0
 ```
 
-The command patches `app.json` and `package.json`, copies the public
-certificate, installs `expo-updates` and the identity/telemetry dependencies, adds the portable publisher and runs
-`expo prebuild`. It supports npm, pnpm, Yarn and Bun lockfiles.
+The configurator runs `expo install` for `expo-updates-server-client@0.1.0` and its native dependencies. It updates `app.json` and `package.json`, copies the public signing certificate, installs the publisher and runs `expo prebuild`. It supports npm, pnpm, Yarn and Bun lockfiles.
 
-It also generates `ota-client/` and starts identity/installation telemetry from
-`ota-entry.js`, preserving the original application entry. For Expo Router,
-the configurator renders `<OtaUpdates />` beside navigation in `src/app/_layout`
-(or `app/_layout`). The generated TypeScript component owns the hook internally;
-it does not wrap the application or require context. Standard `App`
-entry components are supported too, including platform variants. No manual
-Installation ID, Device ID, or heartbeat wiring is needed. The component starts with automatic checks and manual download/restart prompts;
-customized options are preserved on later configurations. See the generated
-[OTA client lifecycle](./ota-client-lifecycle.md) for update modes and the hook API.
-If generation is unavailable, follow [manual hook integration](./ota-client-lifecycle.md#manual-integration).
+It writes the public settings to `ota-client/config.json`. The generated `ota-entry.js` calls `initializeOtaClient(config)` and `start()` before loading the original entry. In a supported root, the configurator adds an import from `expo-updates-server-client` and mounts `<OtaUpdates />` beside navigation. It recognizes Expo Router’s `src/app/_layout` or `app/_layout`, and standard `App` components, including platform variants. The component checks automatically and prompts the user to download or restart. You can change its options in the root. See the [client lifecycle guide](./ota-client-lifecycle.md).
 
 The source patch uses syntax-tree locations and keeps existing imports, comments,
 directives, component code and nested callbacks. Unsupported root exports
@@ -51,9 +40,6 @@ function identifier to make the patch possible. A custom entry whose root
 cannot be identified keeps its existing startup behavior and prints a warning
 that update orchestration still needs integration in its root component;
 identity and telemetry remain connected through the generated bootstrap.
-An existing `useOtaUpdates` import must use a relative path to `ota-client`.
-Unresolved aliases such as `@/ota-client` stop the patch before writing, so a
-second hook cannot silently override an existing automation configuration.
 
 Options:
 
@@ -66,7 +52,7 @@ Options:
 The CLI intentionally refuses dynamic `app.config.*` projects and refuses to
 replace generated files unless `--force` is provided. The sections below
 document native configuration; [manual hook integration](./ota-client-lifecycle.md#manual-integration)
-covers client files, dependencies, root wiring and controls. `--force` permits generated
+covers the client package, dependencies, root wiring and controls. `--force` permits generated
 file replacement; it does not bypass unsupported dynamic configs or root shapes.
 `--server-env` selects the local server environment used to prepare publisher settings.
 For an isolated test stand, explicitly pass its `.env.ota-test`.
@@ -113,15 +99,11 @@ Inspect the resulting diff before building:
 | `app.json` | Correct HTTPS URL, certificate, runtime, channel; native automatic checks disabled |
 | `package.json` | Client dependencies, `main: "ota-entry.js"`, publisher and selected platform build scripts |
 | `ota-client-entry.json` | Original application entry retained |
-| `ota-client/` | Public API, nested model/UI files and public `config.json` |
-| Root `_layout` / `App` | One unconditional hook and a gate; existing navigation/providers retained |
+| `ota-client/config.json` | Public channel, heartbeat URL and identity namespace |
+| Root `_layout` / `App` | Import from `expo-updates-server-client` and one `<OtaUpdates />` beside navigation |
 | `.env.ota` | Local publisher/build credentials; ignored by Git, never imported by app code |
 
-Before building, add the
-[manual controls example](./ota-client-lifecycle.md#_3-add-manual-update-controls)
-to a test screen, or explicitly enable download/reload automation through the hook
-options. The default root only checks; a stock Expo template has no OTA test buttons.
-These controls/options must be in the binary you install so it can receive the first OTA.
+The default component offers download and restart controls. To test a custom UI, add the [manual controls example](./ota-client-lifecycle.md#_3-add-manual-update-controls) before building the binary.
 
 From the **application directory**, run:
 
@@ -167,7 +149,7 @@ missing manual setup steps.
 For manual setup, install Expo-compatible versions of all client dependencies:
 
 ```bash
-npx expo install expo-updates expo-application expo-crypto expo-secure-store @react-native-async-storage/async-storage
+npx expo install expo-updates-server-client@0.1.0 expo-updates expo-application expo-crypto expo-secure-store @react-native-async-storage/async-storage
 ```
 
 The application does not send an admin access token when checking for an
@@ -452,7 +434,7 @@ expected URL, runtime, channel and certificate.
 
 ## 5. Check and install updates in the application
 
-Render the generated `<OtaUpdates />` component beside navigation in the root
+Render `<OtaUpdates />` component beside navigation in the root
 layout. `configure-app` inserts this integration automatically. If the files or root
 patch are missing, follow [manual integration](./ota-client-lifecycle.md#manual-integration),
 including the complete Router example and manual controls.

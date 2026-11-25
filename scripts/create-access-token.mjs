@@ -78,7 +78,7 @@ async function insertToken(row) {
         row.name,
         row.token_prefix,
         row.token_hash,
-        JSON.stringify(row.scopes),
+        row.scopes,
         row.expires_at,
       ],
     );

@@ -283,12 +283,7 @@ function standaloneLock(source, generatedPackage) {
   delete root.workspaces;
 
   for (const [key, value] of Object.entries(result.packages)) {
-    if (
-      key === "packages/create-expo-updates-server" ||
-      key === "node_modules/create-expo-updates-server" ||
-      (value?.link &&
-        value.resolved === "packages/create-expo-updates-server")
-    ) {
+    if (key.startsWith("packages/") || (value?.link && value.resolved?.startsWith("packages/"))) {
       delete result.packages[key];
     }
   }

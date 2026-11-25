@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import vm from "node:vm";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -27,12 +27,15 @@ function createIosRegistrarFixture() {
   const iosRegistrar = path.join(registrarDirectory, "register-ios.sh");
   const jsRegistrar = path.join(registrarDirectory, "index.mjs");
   fs.mkdirSync(registrarDirectory, { recursive: true });
-  fs.copyFileSync(
-    path.resolve(
-      "templates/expo-app/scripts/ota-register-embedded/register-ios.sh",
-    ),
-    iosRegistrar,
+  // Confine the Xcode/Homebrew fallback paths to this simulated build host.
+  const registrar = fs.readFileSync(
+    path.resolve("templates/expo-app/scripts/ota-register-embedded/register-ios.sh"),
+    "utf8",
   );
+  fs.writeFileSync(iosRegistrar, registrar.replace(
+    /"(\/(?:opt\/homebrew|usr\/local)\/bin\/node)"/g,
+    (_, absolutePath) => JSON.stringify(projectRoot + absolutePath),
+  ));
   fs.writeFileSync(jsRegistrar, "// Fake registrar; fake Node must run this.\n");
 
   const targetBuildDirectory = path.join(projectRoot, "build");
@@ -61,7 +64,9 @@ fi
   );
   fs.chmodSync(fakeNode, 0o755);
 
-  const pathWithoutNode = "/usr/bin:/bin";
+  const pathWithoutNode = path.join(projectRoot, "bin");
+  fs.mkdirSync(pathWithoutNode);
+  fs.symlinkSync("/usr/bin/dirname", path.join(pathWithoutNode, "dirname"));
   const env = {
     ...process.env,
     PATH: pathWithoutNode,
@@ -441,4 +446,14 @@ describe("embedded update registrar", () => {
       "ci_scripts/register-embedded-update.sh",
     );
   });
+});
+
+it("executes the embedded registrar when Xcode invokes a symlinked path", () => {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "ota-cli-link-"));
+  temporaryDirectories.push(scratch);
+  const entry = path.join(scratch, "register.mjs");
+  fs.symlinkSync(fileURLToPath(registrarUrl), entry);
+  const result = spawnSync(process.execPath, [entry, "--platform", "ios"], { encoding: "utf8" });
+  expect(result.status).toBe(1);
+  expect(result.stderr).toContain("Embedded update registration failed");
 });

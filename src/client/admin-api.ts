@@ -2,12 +2,14 @@ import {
   AdminSessionResponse,
   DistributionControlResponse,
   DistributionControlState,
+  DistributionHistoryResponse,
   EmbeddedUpdatesListResponse,
   EmergencyRedirectInput,
   EmergencyRedirectItem,
   EmergencyRedirectsListResponse,
   GuardActionItem,
   GuardActionsListResponse,
+  ReleaseFilters,
   UpdateDetail,
   UpdatePolicy,
   UpdatesListResponse,
@@ -31,6 +33,26 @@ async function parseJson<T>(response: Response): Promise<T> {
   }
 
   return data as T;
+}
+
+export async function getDistributionHistory(signal?: AbortSignal) {
+  const response = await fetch("/api/admin/distribution-history", {
+    cache: "no-store",
+    signal,
+  });
+  return parseJson<DistributionHistoryResponse>(response);
+}
+
+export async function restorePreviousRelease(
+  updateId: string,
+  expectedRevision: string,
+) {
+  const response = await fetch("/api/admin/distribution-history/restore", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ updateId, expectedRevision }),
+  });
+  return parseJson<{ ok: true }>(response);
 }
 
 export async function getDistributionControl() {
@@ -73,12 +95,15 @@ export async function getAdminSession() {
   return parseJson<AdminSessionResponse>(response);
 }
 
-export async function getUpdates(params: {
-  page: number;
-  pageSize: number;
-  sortBy: string;
-  order: "asc" | "desc";
-}) {
+export async function getUpdates(
+  params: Partial<ReleaseFilters> & {
+    page: number;
+    pageSize: number;
+    sortBy: string;
+    order: "asc" | "desc";
+  },
+  signal?: AbortSignal,
+) {
   const query = new URLSearchParams({
     page: String(params.page),
     pageSize: String(params.pageSize),
@@ -86,15 +111,27 @@ export async function getUpdates(params: {
     order: params.order,
   });
 
+  for (const key of [
+    "q",
+    "platform",
+    "channel",
+    "runtime",
+    "status",
+    "audience",
+  ] as const) {
+    if (params[key]) query.set(key, params[key]);
+  }
   const response = await fetch(`/api/admin/updates?${query.toString()}`, {
+    signal,
     cache: "no-store",
   });
 
   return parseJson<UpdatesListResponse>(response);
 }
 
-export async function getUpdate(encodedKey: string) {
+export async function getUpdate(encodedKey: string, signal?: AbortSignal) {
   const response = await fetch(`/api/admin/updates/${encodedKey}`, {
+    signal,
     cache: "no-store",
   });
 
@@ -199,9 +236,7 @@ export async function getEmergencyRedirects() {
   return parseJson<EmergencyRedirectsListResponse>(response);
 }
 
-export async function createEmergencyRedirect(
-  input: EmergencyRedirectInput,
-) {
+export async function createEmergencyRedirect(input: EmergencyRedirectInput) {
   const response = await fetch("/api/admin/emergency-redirects", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

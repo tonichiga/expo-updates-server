@@ -188,9 +188,9 @@ describe('doctor read-only contract', () => {
       expect(statements.at(-1)).toContain('trg_ota_updates_activate_audience');
     } finally { vi.doUnmock('pg'); }
   });
-  it('validates a complete generated app, then detects missing client files and noncanonical scope', async () => {
+  it('validates an SDK-configured app, then detects a stale bootstrap, missing SDK and noncanonical scope', async () => {
     const cwd = await fixture(); const app = path.join(cwd, 'app'); await fs.mkdir(app);
-    const deps = ['expo', 'expo-updates', 'expo-application', 'expo-crypto', 'expo-secure-store', '@react-native-async-storage/async-storage'];
+    const deps = ['expo', 'expo-updates', 'expo-application', 'expo-crypto', 'expo-secure-store', '@react-native-async-storage/async-storage', 'expo-updates-server-client'];
     for (const name of deps) {
       const dir = path.join(app, 'node_modules', name); await fs.mkdir(dir, { recursive: true });
       await fs.writeFile(path.join(dir, 'index.js'), '');
@@ -198,9 +198,9 @@ describe('doctor read-only contract', () => {
     await fs.writeFile(path.join(app, 'package.json'), JSON.stringify({ main: 'ota-entry.js', dependencies: Object.fromEntries(deps.map((name) => [name, '1'])), scripts: { 'ota:publish': 'node scripts/ota-publish/index.mjs' } }));
     const config = { expo: { runtimeVersion: 'v1', updates: { url: 'https://ota.test/api/manifest', checkAutomatically: 'NEVER', requestHeaders: { 'expo-channel-name': 'test' }, codeSigningCertificate: certificate, codeSigningMetadata: { keyid: 'main', alg: 'rsa-v1_5-sha256' } } } };
     await fs.writeFile(path.join(app, 'app.json'), JSON.stringify(config));
-    await fs.cp(path.resolve('templates/expo-app/ota-client'), path.join(app, 'ota-client'), { recursive: true });
+    await fs.mkdir(path.join(app, 'ota-client'));
     await fs.writeFile(path.join(app, 'ota-client/config.json'), JSON.stringify({ channel: 'test', heartbeatUrl: 'https://ota.test/api/device-heartbeat', identityNamespace: 'stable-test' }));
-    await fs.writeFile(path.join(app, 'ota-entry.js'), "require('./ota-client').start(); require('expo/AppEntry');");
+    await fs.writeFile(path.join(app, 'ota-entry.js'), `const otaClient = require('expo-updates-server-client');\notaClient.initializeOtaClient(require('./ota-client/config.json'));\notaClient.start();\nrequire("expo/AppEntry");\n`);
     await fs.writeFile(path.join(app, 'ota-client-entry.json'), JSON.stringify({ originalEntry: 'expo/AppEntry' }));
     const { patchOtaRootHook } = await import('./ota-root-hook-patcher.mjs');
     const source = patchOtaRootHook('export default function App() { return null; }', path.join(app, 'App.tsx'), app);
@@ -210,7 +210,9 @@ describe('doctor read-only contract', () => {
     expect(valid.checks.filter((item) => item.status === 'fail')).toEqual([]);
     expect(check(valid, 'app.root').status).toBe('pass');
     expect(await fs.readFile(path.join(app, 'App.tsx'), 'utf8')).toBe(source);
-    await fs.unlink(path.join(app, 'ota-client/runtime.ts'));
+    await fs.writeFile(path.join(app, 'ota-entry.js'), "require('./ota-client').start(); require('expo/AppEntry');");
+    expect(check(await offline(cwd, { app }), 'app.root').status).toBe('fail');
+    await fs.unlink(path.join(app, 'node_modules/expo-updates-server-client/index.js'));
     expect(check(await offline(cwd, { app }), 'app.client').status).toBe('fail');
     config.expo.updates.requestHeaders['expo-channel-name'] = 'Test'; config.expo.runtimeVersion = ' v1 ';
     await fs.writeFile(path.join(app, 'app.json'), JSON.stringify(config));

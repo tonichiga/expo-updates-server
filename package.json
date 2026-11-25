@@ -31,7 +31,8 @@
     "installer:check": "npm run installer:build && npm run installer:test",
     "installer:pack": "npm pack --workspace create-expo-updates-server",
     "installer:pack-smoke": "node packages/create-expo-updates-server/scripts/pack-smoke.mjs",
-    "doctor": "node scripts/doctor.mjs"
+    "doctor": "node scripts/doctor.mjs",
+    "test:e2e": "node scripts/tests/e2e/run.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.888.0",
@@ -56,6 +57,7 @@
     "typescript": "^5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

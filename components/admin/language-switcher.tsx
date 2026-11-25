@@ -1,5 +1,7 @@
 "use client";
 
+import { Languages } from "lucide-react";
+import { NativeSelect } from "@/components/ui/native-select";
 import { useI18n } from "@/src/client/i18n/provider";
 import { resolveLocale } from "@/src/client/i18n/messages";
 
@@ -7,22 +9,28 @@ export function LanguageSwitcher() {
   const { locale, setLocale, t } = useI18n();
   const label = t("Interface language");
   return (
-    <select
-      aria-label={label}
-      title={label}
-      value={locale}
-      onChange={(event) => setLocale(resolveLocale(event.target.value))}
-      className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-    >
-      <option value="en" lang="en">
-        English
-      </option>
-      <option value="ru" lang="ru">
-        Русский
-      </option>
-      <option value="uk" lang="uk">
-        Українська
-      </option>
-    </select>
+    <div className="relative">
+      <Languages
+        aria-hidden="true"
+        className="pointer-events-none absolute left-2.5 top-1/2 z-10 size-4 -translate-y-1/2 text-muted-foreground"
+      />
+      <NativeSelect
+        aria-label={label}
+        title={label}
+        value={locale}
+        onChange={(event) => setLocale(resolveLocale(event.target.value))}
+        className="border-transparent bg-transparent pl-8 hover:border-input"
+      >
+        <option value="en" lang="en">
+          English
+        </option>
+        <option value="ru" lang="ru">
+          Русский
+        </option>
+        <option value="uk" lang="uk">
+          Українська
+        </option>
+      </NativeSelect>
+    </div>
   );
 }

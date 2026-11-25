@@ -24,7 +24,7 @@ export type UpdateItem = {
   policyEditable: boolean;
 };
 
-export type UpdateDeliveryMode = "manual" | "background";
+export type UpdateDeliveryMode = "manual" | "background" | "manual-postpone";
 export type UpdatePolicyGuard = {
   action: string;
   payload?: unknown;
@@ -37,7 +37,17 @@ export type UpdatePolicy = {
   editable: boolean;
 };
 
+export type ReleaseFilters = {
+  q: string;
+  platform: string;
+  channel: string;
+  runtime: string;
+  status: string;
+  audience: string;
+};
+
 export type UpdatesListResponse = {
+  filters: { channels: string[]; runtimes: string[] };
   items: UpdateItem[];
   total: number;
   page: number;
@@ -56,6 +66,7 @@ export type UpdatesListResponse = {
 };
 
 export interface UpdateDetail extends UpdateItem {
+  isNewestInScope: boolean;
   updateInfo: Record<string, unknown>;
   updateMeta: {
     isActive: boolean;
@@ -141,4 +152,27 @@ export type GuardActionItem = {
 export type GuardActionsListResponse = {
   items: GuardActionItem[];
   canWrite: boolean;
+};
+
+export type DistributionHistoryRelease = {
+  updateId: string;
+  encodedKey: string;
+  appVersion: string | null;
+  comment: string | null;
+  createdAt: string;
+  activatedAt: string | null;
+};
+
+export type DistributionHistoryScope = {
+  runtimeVersion: string;
+  platform: string;
+  channel: string;
+  revision: string;
+  current: DistributionHistoryRelease | null;
+  previous: DistributionHistoryRelease | null;
+};
+
+export type DistributionHistoryResponse = {
+  canWrite: boolean;
+  scopes: DistributionHistoryScope[];
 };

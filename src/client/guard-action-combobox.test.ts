@@ -1,26 +1,20 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { mergeGuardActionOptions } from "./guard-action-options";
+import { isBuiltInAction } from "./policy-draft";
 
-const source = readFileSync(
-  new URL("./guard-action-combobox.tsx", import.meta.url),
-  "utf8",
-);
-
-describe("Guard action combobox semantics", () => {
-  it("uses a named dialog popup instead of interactive listbox options", () => {
-    expect(source).toContain('aria-haspopup="dialog"');
-    expect(source).toContain('role="dialog"');
-    expect(source).toContain('aria-label={t("Guard action catalog")}');
-    expect(source).not.toMatch(/role="(?:listbox|option)"/);
-  });
-
-  it("keeps selection and catalog deletion as sibling buttons", () => {
-    const optionRow = source.slice(
-      source.indexOf("filteredOptions.map"),
-      source.indexOf("{showCreate ?"),
-    );
-    expect(optionRow.match(/<button/g)).toHaveLength(2);
-    expect(optionRow).toContain("chooseOption(option)");
-    expect(optionRow).toContain("void onDelete(option)");
+describe("custom action selection", () => {
+  it("offers catalog and orphaned action keys, with built-in actions in their own profiles", () => {
+    const catalog = [
+      { id: "1", actionKey: "ota-force-update", createdAt: "" },
+      { id: "2", actionKey: "app-check", createdAt: "" },
+    ];
+    const custom = mergeGuardActionOptions(catalog, [
+      "missing-from-catalog",
+      "ota-force-store-update",
+    ]).filter((option) => !isBuiltInAction(option.actionKey));
+    expect(custom.map((o) => [o.actionKey, o.persisted])).toEqual([
+      ["app-check", true],
+      ["missing-from-catalog", false],
+    ]);
   });
 });

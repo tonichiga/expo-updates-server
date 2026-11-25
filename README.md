@@ -6,8 +6,7 @@ panel, device targeting and installation analytics.
 - Publish inactive updates, review their audience, then activate them.
 - Track running app versions by runtime, channel and platform.
 - Test a release on selected devices before making it available to everyone.
-- Integrate identity, telemetry and manual/automatic updates through a generated
-  `useOtaUpdates` hook, including background delivery and required-update policies.
+- Integrate identity, telemetry and manual/automatic updates through the `expo-updates-server-client` package, including background delivery and required-update policies.
 - Run PostgreSQL and S3-compatible storage locally with Docker, or use Supabase.
 
 ## Start here
@@ -15,7 +14,7 @@ panel, device targeting and installation analytics.
 Create a server project:
 
 ```bash
-npx create-expo-updates-server@latest my-server
+npx create-expo-updates-server@0.6.0 my-server
 cd my-server
 ```
 
@@ -40,13 +39,9 @@ checkout. For initializer options and filesystem behavior, see
 ## Application integration
 
 Run `npm ci` in the **server directory** before `npm run configure-app`.
-The configurator supports static `app.json` projects and installs the client,
-root hook, publisher and embedded-build registration scripts. See
-[Expo application setup](docs/expo-app-setup.md) for supported roots and flags.
+The configurator supports static `app.json` projects. It installs `expo-updates-server-client@0.1.0` and its native dependencies with `expo install`, writes the public settings to `ota-client/config.json`, and initializes the client before loading your original entry. In supported roots it imports and mounts `<OtaUpdates />` beside navigation. It also installs publisher and embedded-build registration scripts. See [Expo application setup](docs/expo-app-setup.md).
 
-If generation cannot be used, follow [manual client integration](docs/ota-client-lifecycle.md#manual-integration).
-This fallback wires the client; publisher/build registration still require
-separate setup. Expo Go cannot validate the release OTA lifecycle.
+For a custom root or dynamic app configuration, follow [manual client integration](docs/ota-client-lifecycle.md#manual-integration). The guide covers initialization, the built-in component, and the headless hook. Configure publishing and build registration separately for a manual setup. Test the OTA lifecycle in a native release build.
 
 ## Check your setup
 

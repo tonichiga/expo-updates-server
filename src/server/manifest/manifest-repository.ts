@@ -164,8 +164,16 @@ async function resolveDeviceUpdateRow(
   return getUpdateByUpdateId(resolvedUpdateId);
 }
 
-function toEmbeddedUpdateMeta(updateRow: OtaUpdateRow): EmbeddedUpdateMeta {
+type DeviceBaselineMeta = EmbeddedUpdateMeta & {
+  ota?: Pick<OtaUpdateRow, "is_active" | "runtime_version">;
+};
+
+function toDeviceBaselineMeta(updateRow: OtaUpdateRow): DeviceBaselineMeta {
   return {
+    ota: {
+      is_active: updateRow.is_active,
+      runtime_version: updateRow.runtime_version,
+    },
     embedded_update_id: updateRow.update_id,
     created_at: updateRow.created_at,
     channel: updateRow.channel,
@@ -176,10 +184,10 @@ function toEmbeddedUpdateMeta(updateRow: OtaUpdateRow): EmbeddedUpdateMeta {
 
 export async function resolveDeviceBaselineMeta(
   deviceUpdateId: string,
-): Promise<EmbeddedUpdateMeta | null> {
+): Promise<DeviceBaselineMeta | null> {
   const otaUpdate = await resolveDeviceUpdateRow(deviceUpdateId);
   return otaUpdate
-    ? toEmbeddedUpdateMeta(otaUpdate)
+    ? toDeviceBaselineMeta(otaUpdate)
     : getEmbeddedUpdateMetaById(deviceUpdateId);
 }
 

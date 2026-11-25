@@ -6,8 +6,9 @@ import {
   UpdatePolicyValidationError,
   validateUpdatePolicy,
 } from "./update-policy";
-import { getManifestAppVersion } from "../manifest/manifest-values";
+import { getManifestAppVersion, getAppVersionFromFields } from "../manifest/manifest-values";
 import { assertOtaDistributionAllowed } from "./distribution-control";
+import { changeDistribution } from "./distribution-history";
 
 type UpdateStatus = "active" | "disabled";
 
@@ -62,6 +63,37 @@ export type OtaChannelRow = {
   modified_at: string;
 };
 
+const listColumns = [
+  "id",
+  "update_id",
+  "comment",
+  "runtime_version",
+  "channel",
+  "platform",
+  "created_at",
+  "created_at_path",
+  "storage_base_path",
+  "is_active",
+  "audience_mode",
+  "assets_count",
+  "launch_asset_path",
+  "delivery_mode",
+  "guard_action",
+  "policy_version",
+  "policy_published_at",
+] as const;
+type ListRow = Pick<OtaUpdateRow, (typeof listColumns)[number]>;
+type ListChannel = Pick<
+  OtaChannelRow,
+  | "id"
+  | "runtime_version"
+  | "channel"
+  | "platform"
+  | "latest_update_id"
+  | "active_update_id"
+>;
+type VersionProjection = { app_version: unknown; legacy_version: unknown };
+
 export type UpdateRecord = {
   key: string;
   encodedKey: string;
@@ -95,6 +127,7 @@ export type UpdateRecord = {
 };
 
 export type UpdateDetail = UpdateRecord & {
+  isNewestInScope: boolean;
   updateInfo: Record<string, unknown>;
   updateMeta: UpdateMetaState;
   metadata: Record<string, unknown> | null;
@@ -117,6 +150,12 @@ type ListOptions = {
   pageSize: number;
   sortBy: SortField;
   order: SortOrder;
+  q?: string;
+  platform?: string;
+  channel?: string;
+  runtime?: string;
+  status?: string;
+  audience?: string;
 };
 
 type Scope = {
@@ -157,7 +196,7 @@ function extractUpdateIdFromKey(key: string): string {
   return tail;
 }
 
-function makeUpdateKey(row: OtaUpdateRow): string {
+function makeUpdateKey(row: ListRow): string {
   return `${row.runtime_version}/${row.platform}/${row.channel}/${row.update_id}`;
 }
 
@@ -216,8 +255,9 @@ async function getNewestUpdateByScope(
 }
 
 export function mapRowToRecord(
-  row: OtaUpdateRow,
-  channel: OtaChannelRow | null,
+  row: ListRow & { manifest?: unknown },
+  channel: ListChannel | null,
+  appVersion = getManifestAppVersion(row.manifest),
 ): UpdateRecord {
   const key = makeUpdateKey(row);
   const isLatest = channel?.latest_update_id === row.update_id;
@@ -234,7 +274,7 @@ export function mapRowToRecord(
   return {
     key,
     encodedKey: encodeUpdateKey(row.update_id),
-    appVersion: getManifestAppVersion(row.manifest),
+    appVersion,
     comment: row.comment,
     runtimeVersion: row.runtime_version,
     platform: row.platform,
@@ -256,7 +296,7 @@ export function mapRowToRecord(
     isIgnoredByRollback,
     launchAssetPath: row.launch_asset_path,
     assetsCount: row.assets_count,
-    deliveryMode: row.delivery_mode === "background" ? "background" : "manual",
+    deliveryMode: row.delivery_mode === "background" || row.delivery_mode === "manual-postpone" ? row.delivery_mode : "manual",
     hasGuard:
       typeof row.guard_action === "string" && row.guard_action.length > 0,
     policyVersion:
@@ -496,94 +536,6 @@ async function getChannelRow(scope: Scope): Promise<OtaChannelRow | null> {
   return (data as OtaChannelRow | null) || null;
 }
 
-async function upsertChannelRow(
-  scope: Scope,
-  payload: Partial<OtaChannelRow>,
-): Promise<OtaChannelRow> {
-  // INSERT ... ON CONFLICT runs INSERT guards before checking the conflict.
-  // Update an existing scope directly so incident deactivation cleanup can be
-  // validated against OLD pointers while the global switch is blocked.
-  const existing = await supabase
-    .from("ota_update_channels")
-    .update(payload)
-    .eq("runtime_version", scope.runtimeVersion)
-    .eq("channel", scope.channel)
-    .eq("platform", scope.platform)
-    .select("*")
-    .maybeSingle();
-  if (existing.error) {
-    throw new Error(`Failed to update ota_update_channels row: ${existing.error.message}`);
-  }
-  if (existing.data) return existing.data as OtaChannelRow;
-
-  const { data, error } = await supabase
-    .from("ota_update_channels")
-    .upsert(
-      {
-        runtime_version: scope.runtimeVersion,
-        channel: scope.channel,
-        platform: scope.platform,
-        ...payload,
-      },
-      {
-        onConflict: "runtime_version,channel,platform",
-      },
-    )
-    .select("*")
-    .single();
-
-  if (error || !data) {
-    throw new Error(
-      `Failed to upsert ota_update_channels row: ${error?.message}`,
-    );
-  }
-
-  return data as OtaChannelRow;
-}
-
-async function clearRollbackForOtherRuntimes(scope: Scope) {
-  const { error } = await supabase
-    .from("ota_update_channels")
-    .update({
-      active_update_id: null,
-      active_changed_at: new Date().toISOString(),
-    })
-    .eq("channel", scope.channel)
-    .eq("platform", scope.platform)
-    .neq("runtime_version", scope.runtimeVersion)
-    .not("active_update_id", "is", null)
-    .execute();
-
-  if (error) {
-    throw new Error(
-      `Failed to clear rollback for other runtimes: ${error.message}`,
-    );
-  }
-}
-
-async function getLatestRuntimeForChannelPlatform(params: {
-  channel: string;
-  platform: "ios" | "android";
-}): Promise<string | null> {
-  const { data, error } = await supabase
-    .from("ota_update_channels")
-    .select("runtime_version, latest_created_at")
-    .eq("channel", params.channel)
-    .eq("platform", params.platform)
-    .not("latest_update_id", "is", null)
-    .order("latest_created_at", { ascending: false, nullsFirst: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(
-      `Failed to resolve latest runtime for channel/platform: ${error.message}`,
-    );
-  }
-
-  return data?.runtime_version || null;
-}
-
 async function getUpdateRowById(updateId: string): Promise<OtaUpdateRow> {
   const { data, error } = await supabase
     .from("ota_updates")
@@ -598,88 +550,12 @@ async function getUpdateRowById(updateId: string): Promise<OtaUpdateRow> {
   return data as OtaUpdateRow;
 }
 
-async function getUpdateRowsByScope(scope: Scope): Promise<OtaUpdateRow[]> {
-  const { data, error } = await supabase
-    .from("ota_updates")
-    .select("*")
-    .eq("runtime_version", scope.runtimeVersion)
-    .eq("channel", scope.channel)
-    .eq("platform", scope.platform)
-    .order("created_at", { ascending: false })
-    .order("update_id", { ascending: false })
-    .execute();
-
-  if (error) {
-    throw new Error(`Failed to load updates by scope: ${error.message}`);
-  }
-
-  return (data || []) as OtaUpdateRow[];
-}
-
-function makeScopeFromRow(row: OtaUpdateRow): Scope {
+function makeScopeFromRow(row: ListRow): Scope {
   return {
     runtimeVersion: row.runtime_version,
     channel: row.channel,
     platform: row.platform,
   };
-}
-
-async function recalculateChannelPointers(scope: Scope) {
-  const rows = await getUpdateRowsByScope(scope);
-  const latestActive = rows.find((row) => row.is_active) || null;
-
-  const existingChannelRow = await getChannelRow(scope);
-  const existingRollbackId = existingChannelRow?.active_update_id || null;
-  const hasValidRollback =
-    Boolean(existingRollbackId) &&
-    existingRollbackId !== latestActive?.update_id &&
-    rows.some((row) => row.update_id === existingRollbackId && row.is_active);
-
-  const nextRollbackId = hasValidRollback ? existingRollbackId : null;
-  const now = new Date().toISOString();
-
-  const payload: Partial<OtaChannelRow> = {
-    latest_update_id: latestActive?.update_id || null,
-    latest_created_at: latestActive?.created_at || null,
-    latest_created_at_path: latestActive?.created_at_path || null,
-    active_update_id: nextRollbackId,
-    active_changed_at:
-      nextRollbackId !== (existingChannelRow?.active_update_id || null)
-        ? now
-        : existingChannelRow?.active_changed_at || now,
-  };
-
-  const channelRow = await upsertChannelRow(scope, payload);
-  return { channelRow, latestActive, rollbackId: nextRollbackId };
-}
-
-async function assignRollbackForScope(
-  scope: Scope,
-  rollbackUpdateId: string | null,
-) {
-  const rows = await getUpdateRowsByScope(scope);
-  const latestActive = rows.find((row) => row.is_active) || null;
-
-  const validRollback =
-    rollbackUpdateId &&
-    rows.some((row) => row.update_id === rollbackUpdateId && row.is_active)
-      ? rollbackUpdateId
-      : null;
-
-  const normalizedRollback =
-    validRollback && validRollback !== latestActive?.update_id
-      ? validRollback
-      : null;
-
-  const channelRow = await upsertChannelRow(scope, {
-    latest_update_id: latestActive?.update_id || null,
-    latest_created_at: latestActive?.created_at || null,
-    latest_created_at_path: latestActive?.created_at_path || null,
-    active_update_id: normalizedRollback,
-    active_changed_at: new Date().toISOString(),
-  });
-
-  return { channelRow, latestActive, rollbackId: normalizedRollback };
 }
 
 function extractMetadataFromManifest(
@@ -690,37 +566,6 @@ function extractMetadataFromManifest(
     return metadata as Record<string, unknown>;
   }
   return null;
-}
-
-function parseUpdateMetaContent(content: Record<string, unknown>): {
-  is_active: boolean;
-  updated_at: string;
-  disabled_at: string | null;
-} {
-  const now = new Date().toISOString();
-  const nextIsActive = content.isActive !== false;
-
-  return {
-    is_active: nextIsActive,
-    updated_at: now,
-    disabled_at: nextIsActive ? null : now,
-  };
-}
-
-function buildLatestPayload(row: OtaUpdateRow, reason: string) {
-  return {
-    id: row.update_id,
-    updateId: row.update_id,
-    buildId: row.build_id,
-    runtimeVersion: row.runtime_version,
-    channel: row.channel,
-    platform: row.platform,
-    createdAt: row.created_at,
-    createdAtPath: row.created_at_path,
-    isActive: row.is_active,
-    updatedAt: row.updated_at,
-    reason,
-  };
 }
 
 export function encodeUpdateKey(value: string): string {
@@ -737,66 +582,114 @@ export function parseUpdateKey(key: string) {
   };
 }
 
-export async function getUpdatesPage(options: ListOptions) {
-  const { data, error } = await supabase
-    .from("ota_updates")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .order("update_id", { ascending: false })
-    .execute();
+// A server may cap each PostgREST response below our requested batch size.
+// Advance on the unique indexed key until the next query is empty.
+async function* readHistory<T extends { id: string | number }>(
+  table: "ota_updates" | "ota_update_channels",
+  columns: string,
+) {
+  let cursor: string | number | undefined;
+  for (;;) {
+    const query = supabase.from(table).select(columns).order("id").limit(200);
+    if (cursor !== undefined) query.gt("id", cursor);
+    const { data, error } = await query.execute();
+    if (error) throw new Error(`Failed to fetch ${table}: ${error.message}`);
+    const rows = (data ?? []) as T[];
+    if (!rows.length) return;
+    yield rows;
+    cursor = rows[rows.length - 1].id;
+  }
+}
 
-  if (error) {
-    throw new Error(`Failed to fetch ota_updates: ${error.message}`);
+function scopeKey(
+  row: Pick<OtaUpdateRow, "runtime_version" | "channel" | "platform">,
+) {
+  return JSON.stringify([row.runtime_version, row.channel, row.platform]);
+}
+
+function matchesRelease(
+  item: UpdateRecord,
+  options: ListOptions,
+  search: string,
+) {
+  if (options.platform && item.platform !== options.platform) return false;
+  if (options.channel && item.channel !== options.channel) return false;
+  if (options.runtime && item.runtimeVersion !== options.runtime) return false;
+  if (options.audience && item.audienceMode !== options.audience) return false;
+  if (options.status === "rollback") {
+    if (!item.isRollbackActive) return false;
+  } else if (
+    options.status &&
+    options.status !== (item.policyEditable ? "draft" : item.status)
+  ) {
+    return false;
+  }
+  return (
+    !search ||
+    [
+      item.comment,
+      item.updateId,
+      item.appVersion,
+      item.runtimeVersion,
+      item.channel,
+    ].some((value) => value?.toLowerCase().includes(search))
+  );
+}
+
+export async function getUpdatesPage(options: ListOptions) {
+  const search = options.q?.trim().toLowerCase() || "";
+  const channelsByScope = new Map<string, ListChannel>();
+  for await (const batch of readHistory<ListChannel>(
+    "ota_update_channels",
+    "id,runtime_version,channel,platform,latest_update_id,active_update_id",
+  )) {
+    for (const channel of batch)
+      channelsByScope.set(scopeKey(channel), channel);
   }
 
-  const rows = (data || []) as OtaUpdateRow[];
-  const scopeKeys = Array.from(
-    new Set(
-      rows.map(
-        (row) => `${row.runtime_version}::${row.channel}::${row.platform}`,
-      ),
-    ),
-  );
+  const matching: UpdateRecord[] = [];
+  const scopes = new Map<string, Scope>();
+  const channels = new Set<string>();
+  const runtimes = new Set<string>();
+  const columns = [
+    ...listColumns,
+    "app_version:manifest->extra->expoClient->version",
+    "legacy_version:manifest->expoClient->version",
+  ].join(",");
+  for await (const batch of readHistory<ListRow & VersionProjection>(
+    "ota_updates",
+    columns,
+  )) {
+    for (const row of batch) {
+      const key = scopeKey(row);
+      scopes.set(key, makeScopeFromRow(row));
+      channels.add(row.channel);
+      runtimes.add(row.runtime_version);
+      const item = mapRowToRecord(
+        row,
+        channelsByScope.get(key) ?? null,
+        getAppVersionFromFields(row.app_version, row.legacy_version),
+      );
+      if (matchesRelease(item, options, search)) matching.push(item);
+    }
+  }
 
-  const channelsByScope = new Map<string, OtaChannelRow | null>();
-  await Promise.all(
-    scopeKeys.map(async (scopeKey) => {
-      const [runtimeVersion, channel, platform] = scopeKey.split("::");
-      const channelRow = await getChannelRow({
-        runtimeVersion,
-        channel,
-        platform: platform as "ios" | "android",
-      });
-      channelsByScope.set(scopeKey, channelRow);
-    }),
-  );
-
-  const allUpdates = rows.map((row) => {
-    const scopeKey = `${row.runtime_version}::${row.channel}::${row.platform}`;
-    const channelRow = channelsByScope.get(scopeKey) || null;
-    return mapRowToRecord(row, channelRow);
-  });
-
-  const rollbackLockByScope = scopeKeys.map((scopeKey) => {
-    const [runtimeVersion, channel, platform] = scopeKey.split("::");
-    const channelRow = channelsByScope.get(scopeKey) || null;
+  const rollbackLockByScope = Array.from(scopes, ([key, scope]) => {
+    const channel = channelsByScope.get(key);
     const rollbackActive =
-      Boolean(channelRow?.active_update_id) &&
-      channelRow?.active_update_id !== channelRow?.latest_update_id;
-
+      Boolean(channel?.active_update_id) &&
+      channel?.active_update_id !== channel?.latest_update_id;
     return {
-      scopeKey,
-      runtimeVersion,
-      channel,
-      platform: platform as "ios" | "android",
+      ...scope,
+      scopeKey: `${scope.runtimeVersion}::${scope.channel}::${scope.platform}`,
       rollbackActive,
       autoDeliveryEnabled: !rollbackActive,
-      activeUpdateId: channelRow?.active_update_id || null,
-      latestUpdateId: channelRow?.latest_update_id || null,
+      activeUpdateId: channel?.active_update_id ?? null,
+      latestUpdateId: channel?.latest_update_id ?? null,
     };
   });
 
-  const sorted = sortUpdates(allUpdates, options.sortBy, options.order);
+  const sorted = sortUpdates(matching, options.sortBy, options.order);
   const total = sorted.length;
   const totalPages = Math.max(1, Math.ceil(total / options.pageSize));
   const page = Math.min(Math.max(1, options.page), totalPages);
@@ -805,6 +698,7 @@ export async function getUpdatesPage(options: ListOptions) {
 
   return {
     items: sorted.slice(start, end),
+    filters: { channels: [...channels].sort(), runtimes: [...runtimes].sort() },
     total,
     page,
     pageSize: options.pageSize,
@@ -830,6 +724,7 @@ export async function getUpdateDetailByKey(key: string): Promise<UpdateDetail> {
 
   return {
     ...record,
+    isNewestInScope: newestRow?.update_id === row.update_id,
     updateInfo: manifest,
     updateMeta: mapUpdateMeta(row),
     metadata: extractMetadataFromManifest(manifest),
@@ -846,19 +741,16 @@ export async function deleteUpdateByKey(
 ): Promise<{ removedFiles: number }> {
   const updateId = extractUpdateIdFromKey(key);
   const row = await getUpdateRowById(updateId);
-  const scope = makeScopeFromRow(row);
-
-  // Repair serving pointers before FK cleanup erases the retired target. This
-  // also keeps deletion available during a global stop with a public fallback,
-  // and stops new manifests referencing assets that are about to be removed.
-  await setUpdateDisabledByKey(updateId, true);
+  // Retire the row under the distribution lock before removing its assets,
+  // so it cannot be restored concurrently while storage cleanup is in flight.
+  await changeDistribution(updateId, "retire");
 
   let removedFiles = 0;
   const bucket = row.storage_bucket || SUPABASE_BUCKET;
   const basePath = toPosixPath(row.storage_base_path || "");
 
   if (basePath) {
-    const files = await listAllFilesRecursive(bucket, basePath).catch(() => []);
+    const files = await listAllFilesRecursive(bucket, basePath);
     removedFiles = files.length;
 
     if (files.length > 0) {
@@ -873,18 +765,7 @@ export async function deleteUpdateByKey(
     }
   }
 
-  const { error: deleteError } = await supabase
-    .from("ota_updates")
-    .delete()
-    .eq("update_id", updateId)
-    .execute();
-
-  if (deleteError) {
-    throw new Error(`Failed to delete ota_updates row: ${deleteError.message}`);
-  }
-
-  await recalculateChannelPointers(scope);
-
+  await changeDistribution(updateId, "delete");
   return { removedFiles };
 }
 
@@ -912,7 +793,6 @@ export async function updateJsonFileByKey(
 
   const updateId = extractUpdateIdFromKey(key);
   const row = await getUpdateRowById(updateId);
-  const scope = makeScopeFromRow(row);
 
   if (fileName === "update-info.json") {
     const assets = Array.isArray(content.assets) ? content.assets : [];
@@ -967,24 +847,9 @@ export async function updateJsonFileByKey(
   }
 
   if (fileName === "update-meta.json") {
-    const parsedMeta = parseUpdateMetaContent(content);
-
-    const { error } = await supabase
-      .from("ota_updates")
-      .update({
-        ...parsedMeta,
-        ...(parsedMeta.is_active && !row.policy_published_at
-          ? { policy_published_at: parsedMeta.updated_at }
-          : {}),
-      })
-      .eq("update_id", updateId)
-      .execute();
-
-    if (error) {
-      throw new Error(`Failed to update ota meta fields: ${error.message}`);
-    }
-
-    await recalculateChannelPointers(scope);
+    if (typeof content.isActive !== "boolean")
+      throw new Error("update-meta.json requires an explicit boolean isActive.");
+    await changeDistribution(updateId, content.isActive ? "activate" : "stop");
     return { path: `${row.storage_base_path}/update-meta.json` };
   }
 
@@ -1001,25 +866,9 @@ export async function updateJsonFileByKey(
   }
 
   const channelTarget = await getUpdateRowById(channelTargetIdRaw);
-  const channelScope = makeScopeFromRow(channelTarget);
-  const currentChannelRow = await getChannelRow(channelScope);
-  const rollbackActive =
-    Boolean(currentChannelRow?.active_update_id) &&
-    currentChannelRow?.active_update_id !== currentChannelRow?.latest_update_id;
-
-  if (rollbackActive) {
-    throw new Error(
-      "Rollback is active. New updates are ignored until rollback is disabled via Promote.",
-    );
-  }
-
-  await upsertChannelRow(channelScope, {
-    latest_update_id: channelTarget.update_id,
-    latest_created_at: channelTarget.created_at,
-    latest_created_at_path: channelTarget.created_at_path,
-    active_update_id: null,
-    active_changed_at: new Date().toISOString(),
-  });
+  if (scopeKey(channelTarget) !== scopeKey(row))
+    throw new Error("The channel target must belong to the same scope.");
+  await changeDistribution(channelTarget.update_id, "select-latest");
 
   return {
     path: `${channelTarget.runtime_version}/${channelTarget.platform}/channels/${channelTarget.channel}/latest.json`,
@@ -1031,241 +880,18 @@ export async function rollbackToUpdateByKey(
   options?: RollbackOptions,
 ) {
   await assertOtaDistributionAllowed();
-  const updateId = extractUpdateIdFromKey(key);
-  const row = await getUpdateRowById(updateId);
-  const scope = makeScopeFromRow(row);
-  const now = new Date().toISOString();
-
-  const latestRuntime = await getLatestRuntimeForChannelPlatform({
-    channel: row.channel,
-    platform: row.platform,
-  });
-
-  if (latestRuntime && latestRuntime !== row.runtime_version) {
-    throw new Error(
-      `Rollback is allowed only for runtimeVersion=${latestRuntime}. Selected update runtimeVersion=${row.runtime_version}`,
-    );
-  }
-
-  const currentChannel = await getChannelRow(scope);
-  const currentServedUpdateId =
-    currentChannel?.active_update_id ||
-    currentChannel?.latest_update_id ||
-    null;
-
-  if (!currentServedUpdateId) {
-    throw new Error(
-      "Rollback is not available: no active update is currently served for this scope.",
-    );
-  }
-
-  if (currentServedUpdateId === updateId) {
-    throw new Error(
-      "Rollback is not available for the currently served update.",
-    );
-  }
-
-  const currentServedRow = await getUpdateRowById(currentServedUpdateId);
-  if (!currentServedRow.is_active) {
-    throw new Error(
-      "Rollback is not available: currently served update is not active.",
-    );
-  }
-
-  const currentServedCreatedAt = parseDate(
-    currentServedRow.created_at || currentServedRow.created_at_path,
-  );
-  const targetCreatedAt = parseDate(row.created_at || row.created_at_path);
-  if (currentServedCreatedAt <= targetCreatedAt) {
-    throw new Error(
-      "Rollback is allowed only when a newer active update exists in the same scope.",
-    );
-  }
-
-  // The database atomically applies audience-aware peer deactivation.
-
-  const { error: activationError } = await supabase
-    .from("ota_updates")
-    .update({
-      is_active: true,
-      updated_at: now,
-      disabled_at: null,
-      policy_published_at: row.policy_published_at || now,
-    })
-    .eq("update_id", updateId)
-    .execute();
-
-  if (activationError) {
-    throw new Error(
-      `Failed to activate rollback target: ${activationError.message}`,
-    );
-  }
-
-  await supabase
-    .from("ota_updates")
-    .update({
-      rolled_back_from_update_id:
-        currentServedUpdateId && currentServedUpdateId !== updateId
-          ? currentServedUpdateId
-          : null,
-      updated_at: now,
-    })
-    .eq("update_id", updateId)
-    .execute();
-
-  const refreshed = await getUpdateRowById(updateId);
-  const newestRow = await getNewestUpdateByScope(scope);
-  const rollbackLatestRow = newestRow || currentServedRow;
-
-  await clearRollbackForOtherRuntimes(scope);
-
-  const channelRow = await upsertChannelRow(scope, {
-    // Keep latest pointer on the newest update in scope.
-    latest_update_id: rollbackLatestRow.update_id,
-    latest_created_at: rollbackLatestRow.created_at,
-    latest_created_at_path: rollbackLatestRow.created_at_path,
-    // Enable rollback mode by pinning active pointer to an older update.
-    active_update_id: refreshed.update_id,
-    active_changed_at: now,
-  });
-
-  return {
-    ...buildLatestPayload(refreshed, options?.reason || "rollback"),
-    activeChangedAt: channelRow.active_changed_at,
-    rollbackAssigned:
-      Boolean(channelRow.active_update_id) &&
-      channelRow.active_update_id !== channelRow.latest_update_id,
-  };
+  const result = await changeDistribution(extractUpdateIdFromKey(key), "rollback");
+  return { ...result, reason: options?.reason || "rollback" };
 }
 
 export async function promoteLatestByKey(key: string) {
   await assertOtaDistributionAllowed();
-  const updateId = extractUpdateIdFromKey(key);
-  const row = await getUpdateRowById(updateId);
-  const scope = makeScopeFromRow(row);
-
-  const channelRow = await getChannelRow(scope);
-  const latestUpdateId = channelRow?.latest_update_id || null;
-  const rollbackActive =
-    Boolean(channelRow?.active_update_id) &&
-    channelRow?.active_update_id !== channelRow?.latest_update_id;
-
-  if (!latestUpdateId) {
-    throw new Error("Cannot promote: latest update is not set for this scope.");
-  }
-
-  if (latestUpdateId !== row.update_id) {
-    throw new Error("Promote is allowed only on the latest update.");
-  }
-
-  if (!rollbackActive) {
-    throw new Error("Promote is not available because rollback is not active.");
-  }
-
-  const promoteNow = new Date().toISOString();
-
-  // Keep audience selection and peer deactivation in the activation statement.
-
-  const { error: activateLatestError } = await supabase
-    .from("ota_updates")
-    .update({
-      is_active: true,
-      updated_at: promoteNow,
-      disabled_at: null,
-      policy_published_at: row.policy_published_at || promoteNow,
-    })
-    .eq("update_id", latestUpdateId)
-    .execute();
-
-  if (activateLatestError) {
-    throw new Error(
-      `Failed to activate latest update during promote: ${activateLatestError.message}`,
-    );
-  }
-
-  const updatedChannel = await upsertChannelRow(scope, {
-    latest_update_id: channelRow?.latest_update_id || row.update_id,
-    latest_created_at: channelRow?.latest_created_at || row.created_at,
-    latest_created_at_path:
-      channelRow?.latest_created_at_path || row.created_at_path,
-    active_update_id: null,
-    active_changed_at: promoteNow,
-  });
-
-  return {
-    promoted: true,
-    latestUpdateId: updatedChannel.latest_update_id,
-    activeUpdateId: updatedChannel.active_update_id,
-    rollbackActive: false,
-  };
+  return changeDistribution(extractUpdateIdFromKey(key), "promote");
 }
 
 export async function setUpdateDisabledByKey(key: string, disabled: boolean) {
-  if (!disabled) {
-    await assertOtaDistributionAllowed();
-  }
-  const updateId = extractUpdateIdFromKey(key);
-  const row = await getUpdateRowById(updateId);
-  const scope = makeScopeFromRow(row);
-  const now = new Date().toISOString();
-
-  const scopeChannelRow = await getChannelRow(scope);
-  const rollbackActive =
-    Boolean(scopeChannelRow?.active_update_id) &&
-    scopeChannelRow?.active_update_id !== scopeChannelRow?.latest_update_id;
-  const newestRow = await getNewestUpdateByScope(scope);
-  const isNewestInScope = newestRow?.update_id === updateId;
-
-  if (!disabled) {
-    if (!isNewestInScope) {
-      throw new Error(
-        "Direct activation is allowed only for the newest update in scope. Use Rollback for older updates.",
-      );
-    }
-
-    if (rollbackActive) {
-      throw new Error(
-        "Direct activation is unavailable while rollback mode is active. Use Promote on the newest update.",
-      );
-    }
-
-    // Peer deactivation is performed atomically by the database trigger.
-  }
-
-  const { error } = await supabase
-    .from("ota_updates")
-    .update({
-      is_active: !disabled,
-      updated_at: now,
-      disabled_at: disabled ? now : null,
-      ...(!disabled && !row.policy_published_at
-        ? { policy_published_at: now }
-        : {}),
-    })
-    .eq("update_id", updateId)
-    .execute();
-
-  if (error) {
-    throw new Error(`Failed to change update active state: ${error.message}`);
-  }
-
-  const currentChannel = await getChannelRow(scope);
-  const shouldClearRollback =
-    disabled && currentChannel?.active_update_id === updateId;
-
-  const { channelRow, latestActive, rollbackId } = shouldClearRollback
-    ? await assignRollbackForScope(scope, null)
-    : await recalculateChannelPointers(scope);
-
-  return {
-    updated: true,
-    disabled,
-    state: disabled ? "disabled" : "active",
-    fallbackApplied: Boolean(latestActive),
-    activeUpdateId: channelRow.active_update_id,
-    latestUpdateId: channelRow.latest_update_id,
-    rollbackActive: Boolean(rollbackId),
-  };
+  if (!disabled) await assertOtaDistributionAllowed();
+  return changeDistribution(extractUpdateIdFromKey(key), disabled ? "stop" : "activate");
 }
 
 export function normalizeSortBy(value: string | null): SortField {

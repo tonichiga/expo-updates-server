@@ -80,12 +80,7 @@ repeatable and do not change the audience or active state of existing releases.
 The targeting migration removes the single-active-release index because a targeted
 release must coexist with its public fallback. Existing releases have audience `all`.
 
-Activation, rollback and promotion of a targeted release preserve other active releases.
-Normal public activation keeps the previous behavior of disabling older releases.
-Widening an already-active targeted release leaves the prior public fallback eligible;
-the newer release wins selection. Disabling the targeted release restores fallback selection.
-Explicit rollback has priority, subject to the same audience and compatibility checks.
-Emergency pinned redirects still fail closed when the selected artifact differs.
+Targeted smoke releases can coexist with a public release. Activating a public release, or widening an active smoke release to all devices, retires the previously public release in that runtime, channel and platform. Stopping the public release leaves public delivery stopped. Use **Releases → Public delivery → Restore** to resume the previous eligible public release manually. Drafts and device-only activations do not enter public history.
 
 Admin API:
 
@@ -116,7 +111,7 @@ CAS, global block and reinstall tests. Fixtures are rolled back. Device reinstal
 behavior additionally requires physical-device testing with the native build.
 
 Activation and audience changes are serialized in PostgreSQL. Public activation disables
-other active releases in the same scope within the same statement; a failed activation
+the previous public release in the same scope within the same statement; a failed activation
 cannot partially disable the previous public release. This also covers the existing
 `update-meta.json` editor. Targeted activation preserves other audiences. During a global
 stop, deactivation can repair stale pointers to the remaining active fallback; activating,

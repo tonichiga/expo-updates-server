@@ -1,0 +1,433 @@
+import {
+  downloadsOnPostpone,
+  manifestDetails,
+  requiresImmediateReload,
+} from "../types";
+import type {
+  OtaCandidate,
+  OtaCheckResult,
+  OtaFetchResult,
+  OtaOptions,
+  OtaState,
+} from "../types";
+
+interface Dependencies {
+  enabled: boolean;
+  start(): void;
+  identity(): Promise<{
+    installationId: string | null;
+    deviceId: string | null;
+  }>;
+  check(): Promise<OtaCheckResult>;
+  fetch(): Promise<OtaFetchResult>;
+  reload(): Promise<void>;
+  isActive(): boolean;
+  openStore(payload: unknown): Promise<void>;
+  readPostponedId?(): Promise<string | null>;
+  writePostponedId?(id: string | null): Promise<void>;
+  runningCandidate?(): OtaCandidate | null;
+  now?(): number;
+}
+
+// Pure lifecycle model. Native APIs, storage and React live in adapters.
+export function createUpdateController(deps: Dependencies) {
+  let state: Readonly<OtaState> = Object.freeze({
+    enabled: deps.enabled,
+    status: "idle",
+    installationId: null,
+    deviceId: null,
+    available: false,
+    postponedUpdateId: null,
+    pending: false,
+    candidate: null,
+    policy: null,
+    blocked: false,
+    blockReason: null,
+    error: null,
+  });
+  const listeners = new Set<() => void>();
+  const owners = new Map<symbol, OtaOptions>();
+  let flight: Promise<unknown> | undefined;
+  let flightKind: OtaState["status"] | undefined;
+  let lastAutomaticCheck = -Infinity;
+  let identityReady: Promise<void> | undefined;
+  let acceptedId: string | undefined;
+  let pendingKey: string | undefined;
+  let pendingGeneration = 0;
+  let requestedReloadId: string | undefined;
+  const now = deps.now || Date.now;
+  function patch(value: Partial<OtaState>) {
+    state = Object.freeze({ ...state, ...value });
+    for (const listener of listeners) listener();
+  }
+  function options() {
+    const result: Required<OtaOptions> = {
+      autoCheck: false,
+      autoUpdate: false,
+      autoReload: false,
+      guardHandlers: {},
+    };
+    for (const owner of owners.values()) {
+      for (const key of ["autoCheck", "autoUpdate", "autoReload"] as const)
+        result[key] ||= owner[key] === true;
+      Object.assign(result.guardHandlers, owner.guardHandlers);
+    }
+    return result;
+  }
+  function initialize() {
+    deps.start();
+    if (!deps.enabled) return Promise.resolve();
+    if (!identityReady)
+      identityReady = Promise.all([
+        deps.identity(),
+        deps.readPostponedId?.().catch(() => null),
+      ])
+        .then(async ([identity, storedId]) => {
+          const applied =
+            storedId && storedId === key(deps.runningCandidate?.());
+          if (applied)
+            await deps.writePostponedId?.(null).catch(() => undefined);
+          patch({
+            ...identity,
+            postponedUpdateId: applied ? null : (storedId ?? null),
+          });
+          await inspectRunning();
+        })
+        .catch((error) => {
+          identityReady = undefined;
+          patch({ error });
+          throw error;
+        });
+    return identityReady;
+  }
+  function run<T>(
+    kind: OtaState["status"],
+    task: () => Promise<T>,
+  ): Promise<T> {
+    if (!deps.enabled)
+      return Promise.reject(
+        new Error("OTA updates are unavailable in this build"),
+      );
+    if (flight) {
+      if (flightKind === kind) return flight as Promise<T>;
+      return Promise.reject(new Error("Another OTA operation is in progress"));
+    }
+    flightKind = kind;
+    patch({ status: kind, error: null });
+    const operation = Promise.resolve()
+      .then(initialize)
+      .then(task)
+      .catch((error) => {
+        patch({ error });
+        throw error;
+      })
+      .finally(() => {
+        flight = undefined;
+        flightKind = undefined;
+        patch({ status: "idle" });
+      });
+    flight = operation;
+    return operation;
+  }
+  async function inspect(candidate: OtaCandidate | null) {
+    const policy =
+      manifestDetails(candidate?.manifest)?.extra?.updatePolicy ?? null;
+    patch({ candidate, policy, blocked: false, blockReason: null });
+    if (!policy) return;
+    if (
+      policy.schemaVersion !== 1 ||
+      !["manual", "background"].includes(policy.delivery)
+    ) {
+      patch({ blocked: true, blockReason: "unsupported-policy" });
+      return;
+    }
+    const guard = policy.guard;
+    if (!guard) return;
+    // Fail closed while an asynchronous application guard is being evaluated.
+    patch({ blocked: true, blockReason: guard.action || "unsupported-policy" });
+    if (
+      guard.action === "ota-force-update" ||
+      guard.action === "ota-force-store-update"
+    )
+      return;
+    const handler = options().guardHandlers[guard.action];
+    if (!handler) return;
+    const decision = await handler({
+      action: guard.action,
+      payload: guard.payload,
+      manifest: candidate?.manifest,
+    });
+    if (decision === "allow") patch({ blocked: false, blockReason: null });
+  }
+  async function inspectRunning() {
+    const running = deps.runningCandidate?.();
+    // Force OTA is fulfilled by launching it. Store/custom guards still apply
+    // after a native cold start, including a bundle fetched during a release race.
+    if (
+      manifestDetails(running?.manifest)?.extra?.updatePolicy?.guard?.action ===
+      "ota-force-update"
+    )
+      return inspect(null);
+    return inspect(running || null);
+  }
+  function isPostponed() {
+    return (
+      downloadsOnPostpone(state.policy) &&
+      state.postponedUpdateId !== null &&
+      state.postponedUpdateId === key(state.candidate)
+    );
+  }
+  function canDownload() {
+    return !state.blocked || state.blockReason === "ota-force-update";
+  }
+  async function downloadInternal() {
+    if (!state.available && !state.pending)
+      throw new Error("Check for an update before downloading");
+    if (!canDownload()) throw new Error("Update is blocked by its guard");
+    patch({ status: "downloading" });
+    const result = await deps.fetch();
+    if (result.isNew || result.isRollBackToEmbedded) {
+      await acceptPending(target(result));
+    } else if (requiresImmediateReload(state.policy)) {
+      throw new Error(
+        "The required update is no longer available. Check again.",
+      );
+    }
+    return result;
+  }
+  async function acceptPending(candidate: OtaCandidate) {
+    const id = key(candidate);
+    const fetchedPolicy = manifestDetails(candidate.manifest)?.extra
+      ?.updatePolicy;
+    if (
+      requiresImmediateReload(fetchedPolicy) ||
+      requiresImmediateReload(state.policy)
+    ) {
+      if (candidate.type === "new" && !id) {
+        pendingKey = undefined;
+        pendingGeneration += 1;
+        patch({ pending: false });
+        if (requiresImmediateReload(fetchedPolicy)) await inspect(candidate);
+        throw new Error("The downloaded update has no update ID. Check again.");
+      }
+      if (
+        candidate.type === "new" &&
+        id === manifestDetails(deps.runningCandidate?.()?.manifest)?.id
+      ) {
+        pendingGeneration += 1;
+        pendingKey = undefined;
+        patch({ pending: false, available: false });
+        await inspectRunning();
+        return;
+      }
+    }
+    pendingKey = id;
+    pendingGeneration += 1;
+    patch({ pending: true, available: true });
+    await inspect(candidate);
+  }
+  async function reloadInternal() {
+    if (!state.pending) throw new Error("No downloaded update is ready");
+    if (!canDownload()) throw new Error("Update is blocked by its guard");
+    if (!deps.isActive())
+      throw new Error("Reload is only allowed while the app is active");
+    patch({ status: "reloading" });
+    if (!requiresImmediateReload(state.policy)) return deps.reload();
+    if (!pendingKey)
+      throw new Error("The downloaded update has no update ID. Check again.");
+    if (requestedReloadId === pendingKey) return;
+    requestedReloadId = pendingKey;
+    try {
+      await deps.reload();
+    } catch (error) {
+      requestedReloadId = undefined;
+      throw error;
+    }
+  }
+  async function automate(allowDownload = true) {
+    const settings = options();
+    if (
+      allowDownload &&
+      !state.pending &&
+      state.available &&
+      canDownload() &&
+      ((settings.autoUpdate && !downloadsOnPostpone(state.policy)) ||
+        isPostponed() ||
+        state.policy?.delivery === "background" ||
+        state.blockReason === "ota-force-update")
+    ) {
+      await downloadInternal();
+    }
+    // Only the downloaded policy can authorize an immediate restart.
+    if (
+      state.pending &&
+      canDownload() &&
+      (requiresImmediateReload(state.policy) ||
+        (settings.autoReload &&
+          state.policy?.delivery !== "background" &&
+          (!downloadsOnPostpone(state.policy) ||
+            (!isPostponed() &&
+              Boolean(acceptedId) &&
+              pendingKey === acceptedId)))) &&
+      deps.isActive()
+    )
+      await reloadInternal();
+  }
+  function check() {
+    return run("checking", async () => {
+      const result = await deps.check();
+      if (result.isAvailable || result.isRollBackToEmbedded) {
+        patch({ available: true });
+        // Never replace the policy governing an already downloaded bundle with a different candidate.
+        if (!state.pending) {
+          const candidate = target(result);
+          const fetched = manifestDetails(candidate.manifest);
+          if (
+            requiresImmediateReload(fetched?.extra?.updatePolicy) &&
+            fetched?.id &&
+            fetched.id ===
+              manifestDetails(deps.runningCandidate?.()?.manifest)?.id
+          ) {
+            patch({ available: false });
+            await inspectRunning();
+          } else {
+            await inspect(candidate);
+          }
+        }
+      } else if (!state.pending) {
+        patch({ available: false });
+        await inspectRunning();
+      }
+      if (state.pending) await inspect(state.candidate);
+      await automate();
+      return result;
+    });
+  }
+  async function postpone() {
+    const id = key(state.candidate);
+    if (
+      !id ||
+      !downloadsOnPostpone(state.policy) ||
+      state.blocked ||
+      !state.available
+    )
+      return;
+    patch({ postponedUpdateId: id });
+    acceptedId = undefined;
+    const saved = deps.writePostponedId?.(id).catch(() => undefined);
+    if (flight) await flight;
+    if (
+      state.pending ||
+      !state.available ||
+      !isPostponed() ||
+      key(state.candidate) !== id
+    ) {
+      await saved;
+      return;
+    }
+    await run("downloading", async () => {
+      await saved;
+      const result = await downloadInternal();
+      // A different fetched manifest may carry a new mandatory guard.
+      if (requiresImmediateReload(state.policy)) await automate(false);
+      return result;
+    });
+  }
+  function automaticCheck() {
+    // A required bundle may have finished downloading while inactive. Its restart
+    // needs neither a network check nor another minute of foreground time.
+    if (state.pending && requiresImmediateReload(state.policy)) {
+      if (
+        deps.isActive() &&
+        !flight &&
+        !state.error &&
+        requestedReloadId !== pendingKey
+      ) {
+        void run("reloading", reloadInternal).catch(() => undefined);
+      }
+      return;
+    }
+    if (
+      !deps.enabled ||
+      !options().autoCheck ||
+      !deps.isActive() ||
+      flight ||
+      now() - lastAutomaticCheck < 60000
+    )
+      return;
+    lastAutomaticCheck = now();
+    void check().catch(() => undefined);
+  }
+  const api = {
+    getSnapshot: () => state,
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    initialize,
+    configure(owner: symbol, value: OtaOptions) {
+      owners.set(owner, value);
+    },
+    removeOwner(owner: symbol) {
+      owners.delete(owner);
+    },
+    automaticCheck,
+    check,
+    postpone,
+    download: () =>
+      run("downloading", async () => {
+        acceptedId = key(state.candidate);
+        const result = await downloadInternal();
+        await automate(false);
+        return result;
+      }),
+    reload: () => run("reloading", reloadInternal),
+    retry: () =>
+      state.pending && requiresImmediateReload(state.policy)
+        ? run("reloading", reloadInternal).then(() => ({
+            isAvailable: true,
+            manifest: state.candidate?.manifest,
+          }))
+        : check(),
+    openStore: () =>
+      run("opening-store", async () => {
+        if (state.blockReason !== "ota-force-store-update")
+          throw new Error("No store upgrade is required");
+        await deps.openStore(state.policy?.guard?.payload);
+      }),
+    syncPending(candidate: OtaCandidate | null): Promise<void> {
+      if (!candidate || (state.pending && key(candidate) === pendingKey))
+        return Promise.resolve();
+      if (flight) {
+        const observedGeneration = pendingGeneration;
+        return flight
+          .catch(() => undefined)
+          .then(() => {
+            if (pendingGeneration === observedGeneration)
+              return api.syncPending(candidate);
+          });
+      }
+      return run("checking", async () => {
+        await acceptPending(candidate);
+        if (
+          state.pending &&
+          requiresImmediateReload(state.policy) &&
+          deps.isActive()
+        )
+          await reloadInternal();
+      });
+    },
+  };
+  return api;
+}
+
+function target(result: OtaCheckResult | OtaFetchResult): OtaCandidate {
+  if (result.isRollBackToEmbedded) return { type: "rollback", manifest: null };
+  return { type: "new", manifest: result.manifest };
+}
+function key(candidate: OtaCandidate | null | undefined) {
+  if (!candidate) return undefined;
+  if (candidate.type === "rollback") return "rollback";
+  const id = manifestDetails(candidate.manifest)?.id;
+  return typeof id === "string" && id.trim() ? id : undefined;
+}

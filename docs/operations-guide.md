@@ -339,6 +339,8 @@ Activation advances the channel epoch even if its latest pointer is unchanged.
 Pointer changes and repeated rollback operations advance the epoch clock by
 at least one millisecond, so successive publications remain ordered for Expo.
 
+Reapply this repeatable migration when upgrading an existing installation. It also orders a fallback after a disabled patch when the publishing machine’s clock runs ahead of the server. Devices already on the fallback receive a no-update response.
+
 The server records the manifest-to-update mapping before returning a manifest.
 Missing mapping tables, lookup errors, or failed mapping writes now fail the
 request instead of silently changing IDs or losing history. Identical mapping
@@ -382,17 +384,17 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
   -f docs/migrations/2026-10-22-device-analytics.sql \
   -f docs/migrations/2026-10-22-device-version-metadata.sql \
   -f docs/migrations/2026-10-22-device-targeting.sql \
-  -f docs/migrations/2026-10-22-device-targeting-activation.sql
+  -f docs/migrations/2026-10-22-device-targeting-activation.sql \
+  -f docs/migrations/2026-11-25-device-favorites.sql \
+  -f docs/migrations/2026-11-25-public-distribution-history.sql \
+  -f docs/migrations/2026-11-25-download-on-postpone.sql
 ```
 
 Fresh installations use only `schema.sql`, which includes these changes. Reapplying
 these migrations preserves collection start, installation records and release audiences.
-The final migration moves public-versus-targeted activation into an atomic database
-operation, allows deactivation cleanup during the global stop, and adds the separate
-`ota-force-update` catalog entry. Apply it before deploying the matching server.
+The activation migration adds the separate `ota-force-update` catalog entry. The next two migrations enable personal device favorites and record public activations. Existing scopes start with their observed public release. Where older configurations allowed several public releases to remain active, the history migration keeps the one preferred by the anonymous manifest selector.
 
-Rerun the stock app configurator to install the generated identity/telemetry client and
-root `useOtaUpdates`/`OtaUpdateGate` integration. Adding SecureStore or the other native
+Run the app configurator to install `expo-updates-server-client`, initialize telemetry and mount `<OtaUpdates />` in the app root. Adding SecureStore or the other native
 client dependencies requires a native rebuild with a compatible runtime; do not publish
 JavaScript that imports unavailable native modules to an older runtime. Existing clients
 already sending heartbeats can populate analytics without a native rebuild, but the new

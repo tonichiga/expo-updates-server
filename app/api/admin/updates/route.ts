@@ -21,7 +21,18 @@ export async function GET(request: NextRequest) {
     const sortBy = normalizeSortBy(searchParams.get("sortBy"));
     const order = normalizeSortOrder(searchParams.get("order"));
 
-    const result = await getUpdatesPage({ page, pageSize, sortBy, order });
+    const result = await getUpdatesPage({
+      page,
+      pageSize,
+      sortBy,
+      order,
+      q: searchParams.get("q") ?? "",
+      platform: searchParams.get("platform") ?? "",
+      channel: searchParams.get("channel") ?? "",
+      runtime: searchParams.get("runtime") ?? "",
+      status: searchParams.get("status") ?? "",
+      audience: searchParams.get("audience") ?? "",
+    });
     return NextResponse.json(result);
   } catch (error: unknown) {
     return NextResponse.json(

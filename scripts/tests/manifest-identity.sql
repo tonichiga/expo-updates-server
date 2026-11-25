@@ -179,7 +179,7 @@ begin
     raise exception 'Historical mapping was modified';
   end if;
 
-  -- Direct active inserts also rotate an already existing empty channel.
+  -- Legacy publishers asking for an active insert still create only a draft.
   insert into public.ota_update_channels (runtime_version, channel, platform)
   values (test_scope, test_scope || '-insert', 'android')
   returning served_manifest_id, served_manifest_changed_at
@@ -193,10 +193,12 @@ begin
   );
   select * into strict current_channel from public.ota_update_channels
    where runtime_version = test_scope and channel = test_scope || '-insert';
-  if current_channel.served_manifest_id = previous_epoch
-     or date_trunc('milliseconds', current_channel.served_manifest_changed_at)
-        <= date_trunc('milliseconds', previous_time) then
-    raise exception 'Active insert did not advance an existing channel epoch';
+  if current_channel.served_manifest_id <> previous_epoch
+     or current_channel.served_manifest_changed_at <> previous_time or exists (
+       select 1 from public.ota_updates where runtime_version=test_scope and channel=test_scope||'-insert'
+         and (is_active or policy_published_at is not null)
+     ) then
+    raise exception 'Draft insert changed delivery state';
   end if;
 end;
 $$;

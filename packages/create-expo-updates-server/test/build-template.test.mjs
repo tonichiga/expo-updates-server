@@ -67,6 +67,8 @@ test("build materializes every template byte from the recorded commit", async ()
         version: "1.2.3",
         workspaces: ["packages/*"],
       },
+      "packages/ota-client": { name: "expo-updates-server-client", version: "0.1.0" },
+      "node_modules/expo-updates-server-client": { link: true, resolved: "packages/ota-client" },
       "packages/create-expo-updates-server": {
         name: "create-expo-updates-server",
         version: "0.1.0",
@@ -170,6 +172,8 @@ test("build materializes every template byte from the recorded commit", async ()
     generatedLock.packages["packages/create-expo-updates-server"],
     undefined,
   );
+  assert.equal(generatedLock.packages["packages/ota-client"], undefined);
+  assert.equal(generatedLock.packages["node_modules/expo-updates-server-client"], undefined);
   assert.equal(manifest.sourceCommit, sourceCommit);
   assert.equal(manifest.installerVersion, "0.1.0");
   await assert.rejects(

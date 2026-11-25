@@ -64,15 +64,14 @@ try {
     assert.deepEqual(await active(tx), [pub]);
     await tx.query('rollback');
 
-    // Widening keeps public fallback; subsequent public activation restores the
-    // normal single-release behavior, including direct update-meta writes.
+    // Explicit widening starts public distribution in the same statement.
     await tx.query('begin');
     await tx.query('update ota_updates set is_active=true,disabled_at=null where update_id=$1', [pub]);
     await tx.query("select * from ota_replace_audience($1,'devices','[]',$2,(select audience_version from ota_updates where update_id=$1))", [target, JSON.stringify([device])]);
     await tx.query('update ota_updates set is_active=true,disabled_at=null where update_id=$1', [target]);
     assert.deepEqual(await active(tx), expectedBoth);
     await tx.query("select * from ota_replace_audience($1,'all','[]','[]',(select audience_version from ota_updates where update_id=$1))", [target]);
-    assert.deepEqual(await active(tx), expectedBoth);
+    assert.deepEqual(await active(tx), [target]);
     await tx.query('update ota_updates set is_active=true,disabled_at=null where update_id=$1', [target]);
     assert.deepEqual(await active(tx), [target]);
     await tx.query('rollback');

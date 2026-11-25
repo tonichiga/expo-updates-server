@@ -1,18 +1,19 @@
 "use client";
+import { useConfirmAction } from "@/components/admin/confirm-action";
 import type { TranslationMessage } from "@/src/client/i18n/messages";
 import { useI18n } from "@/src/client/i18n/provider";
 
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 
+import { statusTones } from "@/components/ui/status-tones";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import {
-  ShieldCheck,
-  ShieldAlert,
-  ChevronDown,
-  RefreshCw,
-} from "lucide-react";
+import { ShieldCheck, ShieldAlert, ChevronDown, RefreshCw } from "lucide-react";
 
 import {
   AdminApiError,
@@ -23,9 +24,7 @@ import type { DistributionControlResponse } from "./admin-types";
 import { useCallback, useEffect, useState } from "react";
 
 export function useDistributionControlState() {
-  const [state, setState] = useState<DistributionControlResponse | null>(
-    null,
-  );
+  const [state, setState] = useState<DistributionControlResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -76,49 +75,63 @@ export function DistributionControlBanner({
   const { t, formatLocale } = useI18n();
   if (loading) {
     return (
-      <section className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
-        {t("Проверка глобального статуса OTA…")}
-      </section>
+      <Skeleton className="h-12" role="status">
+        <span className="sr-only">
+          {t("Проверка глобального статуса OTA…")}
+        </span>
+      </Skeleton>
     );
   }
-
   if (error || !state) {
     return (
-      <section className="rounded-lg border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive">
-        {t(
-          "Глобальный статус OTA недоступен. Распространяющие действия отключены до восстановления связи.",
-        )}
-        {error ? <p className="mt-1 text-xs">{t(error)}</p> : null}
-      </section>
+      <Alert variant="destructive">
+        <ShieldAlert />
+        <AlertTitle>
+          {t(
+            "Глобальный статус OTA недоступен. Распространяющие действия отключены до восстановления связи.",
+          )}
+        </AlertTitle>
+        {error && <AlertDescription>{t(error)}</AlertDescription>}
+      </Alert>
     );
   }
-
   if (!state.blocked) {
     return null;
   }
 
   return (
-    <section className="rounded-lg border border-destructive/25 bg-destructive/5 p-4 text-destructive">
-      <p className="font-semibold">
-        {t("Распространение OTA остановлено")}
-      </p>
-      <p className="mt-1 text-sm">{state.reason}</p>
-      <p className="mt-2 text-xs">
-        {new Date(state.changedAt).toLocaleString(formatLocale)} ·{" "}
-        {formatChangedBy(state, t)}
-      </p>
-    </section>
+    <Alert variant="destructive">
+      <ShieldAlert />
+      <AlertTitle>{t("Распространение OTA остановлено")}</AlertTitle>
+      <AlertDescription>
+        <p>{state.reason}</p>
+        <p>
+          {new Date(state.changedAt).toLocaleString(formatLocale)} ·{" "}
+          {formatChangedBy(state, t)}
+        </p>
+      </AlertDescription>
+    </Alert>
   );
 }
 
-export default function DistributionControl() {
+export default function DistributionControl({
+  onAvailabilityChange,
+}: {
+  onAvailabilityChange?: (blocked: boolean) => void;
+}) {
+  const confirmAction = useConfirmAction();
   const { t, formatLocale } = useI18n();
-  const { state, setState, loading, error, setError, refresh } =
+  const { state, setState, loading, error, refresh } =
     useDistributionControlState();
+  const [actionError, setActionError] = useState("");
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<TranslationMessage>("");
   const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    onAvailabilityChange?.(loading || !!error || !state || state.blocked);
+  }, [loading, error, state, onAvailabilityChange]);
 
   const changeState = async (blocked: boolean) => {
     if (!state) {
@@ -127,23 +140,25 @@ export default function DistributionControl() {
 
     const normalizedReason = reason.trim();
     if (blocked && !normalizedReason) {
-      setError("Укажите причину аварийной блокировки.");
+      setActionError("Укажите причину аварийной блокировки.");
       return;
     }
 
-    const confirmed = window.confirm(
+    const confirmed = await confirmAction(
+      blocked ? t("Остановить все OTA") : t("Возобновить OTA"),
       blocked
         ? t(
             "Немедленно остановить выдачу manifest и всех OTA assets для всех клиентов?",
           )
         : t("Возобновить глобальное OTA-распространение?"),
+      blocked,
     );
     if (!confirmed) {
       return;
     }
 
     setSaving(true);
-    setError("");
+    setActionError("");
     setMessage("");
     try {
       const updated = await setDistributionControl({
@@ -161,11 +176,11 @@ export default function DistributionControl() {
     } catch (saveError: unknown) {
       if (saveError instanceof AdminApiError && saveError.status === 409) {
         await refresh();
-        setError(
+        setActionError(
           "Состояние уже изменил другой оператор. Данные обновлены; проверьте их и повторите действие.",
         );
       } else {
-        setError(
+        setActionError(
           saveError instanceof Error
             ? saveError.message
             : "Не удалось изменить глобальный статус OTA",
@@ -177,11 +192,16 @@ export default function DistributionControl() {
   };
 
   return (
-    <Card className="gap-0 overflow-hidden py-0 shadow-none">
+    <Card
+      className={cn(
+        "gap-0 overflow-hidden py-0 shadow-none",
+        (state?.blocked || error) && "border-l-4 border-l-destructive",
+      )}
+    >
       <div className="flex flex-wrap items-center justify-between gap-4 p-4">
         <div className="flex items-start gap-3">
           <div
-            className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${state?.blocked || error ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground"}`}
+            className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${state?.blocked || error ? statusTones.destructive : state && !loading ? statusTones.positive : "bg-muted text-muted-foreground"}`}
           >
             {loading ? (
               <RefreshCw className="size-4 animate-spin" />
@@ -197,11 +217,12 @@ export default function DistributionControl() {
                 {t("Распространение OTA")}
               </h2>
               <Badge
-                variant="secondary"
-                className={
-                  state?.blocked || error
-                    ? "bg-destructive/10 text-destructive"
-                    : ""
+                variant={
+                  loading
+                    ? "neutral"
+                    : state?.blocked || error || !state
+                      ? "destructive"
+                      : "positive"
                 }
               >
                 {loading
@@ -234,34 +255,42 @@ export default function DistributionControl() {
             />
           </Button>
         ) : state ? (
-          <Badge variant="outline">{t("Read only · updates:write")}</Badge>
+          <Badge variant="neutral">{t("Read only · updates:write")}</Badge>
         ) : null}
       </div>
       {expanded && state?.canWrite && (
         <div
           id="distribution-controls"
-          className="space-y-3 border-t bg-muted/20 p-4"
+          className={cn(
+            "space-y-3 border-t p-4",
+            state.blocked ? "bg-muted/20" : statusTones.destructive,
+          )}
         >
           <p className="text-xs text-muted-foreground">
             {t("Изменено: ")}
             {new Date(state.changedAt).toLocaleString(formatLocale)} ·{" "}
-            {formatChangedBy(state, t)}{" "}
-            {t(" · version {0}", [state.version])}
+            {formatChangedBy(state, t)} {t(" · version {0}", [state.version])}
           </p>
           {!state.blocked && (
-            <label className="block space-y-2 text-sm font-medium">
-              {t("Причина остановки")}
+            <Field>
+              <FieldLabel htmlFor="stop-reason">
+                {t("Причина остановки")}
+              </FieldLabel>
               <Textarea
+                id="stop-reason"
                 value={reason}
-                onChange={(event) => setReason(event.target.value)}
+                onChange={(event) => {
+                  setReason(event.target.value);
+                  setActionError("");
+                }}
                 maxLength={500}
                 aria-label={t("Причина аварийной блокировки OTA")}
                 placeholder={t(
                   "Обязательная причина остановки (до 500 символов)",
                 )}
-                className="block min-h-20 w-full max-w-2xl rounded-md border border-input bg-background p-3 text-sm font-normal outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="min-h-20 max-w-2xl bg-background text-foreground"
               />
-            </label>
+            </Field>
           )}
           <Button
             variant={state.blocked ? "default" : "destructive"}
@@ -277,18 +306,21 @@ export default function DistributionControl() {
           </Button>
         </div>
       )}
-      {error && (
+      {(error || actionError) && (
         <p
           role="alert"
-          className="border-t bg-destructive/5 px-4 py-3 text-sm text-destructive"
+          className={cn("border-t px-4 py-3 text-sm", statusTones.destructive)}
         >
-          {t(error)}
+          {t(error || actionError)}
         </p>
       )}
       {message && (
         <p
           role="status"
-          className="border-t px-4 py-3 text-sm text-emerald-700 dark:text-emerald-400"
+          className={cn(
+            "border-t px-4 py-3 text-sm",
+            state?.blocked ? statusTones.destructive : statusTones.positive,
+          )}
         >
           {t(message)}
         </p>

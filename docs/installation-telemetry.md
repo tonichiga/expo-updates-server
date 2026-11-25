@@ -5,13 +5,7 @@ For an existing database, apply the migrations in the
 the server. Fresh installs use `schema.sql`, which includes telemetry, analytics,
 version metadata, device audiences and atomic activation.
 
-Run the existing `npm run configure-app -- ...` workflow. It installs compatible
-`expo-updates`, `expo-application`, `expo-crypto`, `expo-secure-store` and AsyncStorage
-dependencies, creates `ota-client/` and a synchronous `ota-entry.js` bootstrap, and
-preserves the original entry in `ota-client-entry.json`. The configurator also patches
-the root layout/App with `useOtaUpdates` and `OtaUpdateGate`; application authors do not
-have to generate IDs, send heartbeats, or wire update methods by hand. Supported roots
-are described in the [client lifecycle guide](./ota-client-lifecycle.md).
+Run `npm run configure-app -- ...` from the server directory. It installs `expo-updates-server-client` and the Expo-compatible native dependencies. The generated `ota-entry.js` initializes the client with `ota-client/config.json` and starts identity and telemetry before loading the original entry recorded in `ota-client-entry.json`. The configurator imports and mounts `<OtaUpdates />` in supported root components. See the [client lifecycle guide](./ota-client-lifecycle.md).
 
 Reruns preserve the original entry. Changed generated files require the existing
 `--force` option; review local customizations before replacing them. Custom Android build
@@ -147,7 +141,7 @@ state and observed version transitions commit atomically. Epoch changes pointing
 to the same artifact do not create fake version transitions. Resolved snapshots
 survive deletion of the artifact for a device still reporting that launch ID.
 
-The generated `useOtaUpdates(options)` hook exposes shared candidate/download state,
+The `useOtaUpdates(options)` hook exposes shared candidate/download state,
 `check()`, `download()`, `reload()`, `retry()` and store upgrade handling. Identity is
 persisted and the `installation_id` and `device_id` Expo extra parameters are set before
 checks/downloads. Root options configure automatic checks, downloads and reloads;

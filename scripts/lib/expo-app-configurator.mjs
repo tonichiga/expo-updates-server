@@ -1,4 +1,5 @@
-import { planOtaClient } from './ota-client-configurator.mjs';
+import { planOtaClient } from "./ota-client-configurator.mjs";
+import { clientPackage, clientVersion, nativeClientDependencies } from "./ota-client-package.mjs";
 import { execFileSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -7,7 +8,9 @@ import { fileURLToPath } from "node:url";
 
 const CHANNEL_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const LEGACY_GENERATED_FILE_SHA256 = {
+  publisherDatabaseClient: "79fd8aea1fa626485f83c1b3bf5b234317c5bcadd64dac7c6c9faddc490cbe62",
   embeddedRegistrars: [
+    "6d2201f51851d9af41449f8da3653a4792cddb30d411d59e3c161adbc5cf76ff",
     "29c48288d4804c072129da0ef60a12ad0892809eb8d57a14be94d039d990d6d7",
     "89997ef11a939ce00e65159bd8e04845f16b184d5192f8fb56b1bc4204b07bca",
   ],
@@ -137,6 +140,7 @@ function detectPackageManager(appRoot) {
 }
 
 function getPackageCommands(packageManager, platform) {
+  const clientInstallArgs = ["expo", "install", ...nativeClientDependencies, `${clientPackage}@${clientVersion}`];
   const prebuildArgs = ["expo", "prebuild"];
   if (platform !== "all") {
     prebuildArgs.push("--platform", platform);
@@ -144,7 +148,7 @@ function getPackageCommands(packageManager, platform) {
 
   if (packageManager === "pnpm") {
     return {
-      installExpoUpdates: ["pnpm", ["exec", "expo", "install", "expo-updates", "expo-application", "expo-crypto", "expo-secure-store", "@react-native-async-storage/async-storage"]],
+      installExpoUpdates: ["pnpm", ["exec", ...clientInstallArgs]],
       installPublisherDependencies: [
         "pnpm",
         ["add", "--save-dev", ...PUBLISHER_DEPENDENCIES],
@@ -155,7 +159,7 @@ function getPackageCommands(packageManager, platform) {
 
   if (packageManager === "yarn") {
     return {
-      installExpoUpdates: ["yarn", ["expo", "install", "expo-updates", "expo-application", "expo-crypto", "expo-secure-store", "@react-native-async-storage/async-storage"]],
+      installExpoUpdates: ["yarn", clientInstallArgs],
       installPublisherDependencies: [
         "yarn",
         ["add", "--dev", ...PUBLISHER_DEPENDENCIES],
@@ -166,7 +170,7 @@ function getPackageCommands(packageManager, platform) {
 
   if (packageManager === "bun") {
     return {
-      installExpoUpdates: ["bunx", ["expo", "install", "expo-updates", "expo-application", "expo-crypto", "expo-secure-store", "@react-native-async-storage/async-storage"]],
+      installExpoUpdates: ["bunx", clientInstallArgs],
       installPublisherDependencies: [
         "bun",
         ["add", "--dev", ...PUBLISHER_DEPENDENCIES],
@@ -176,7 +180,7 @@ function getPackageCommands(packageManager, platform) {
   }
 
   return {
-    installExpoUpdates: ["npx", ["expo", "install", "expo-updates", "expo-application", "expo-crypto", "expo-secure-store", "@react-native-async-storage/async-storage"]],
+    installExpoUpdates: ["npx", clientInstallArgs],
     installPublisherDependencies: [
       "npm",
       ["install", "--save-dev", ...PUBLISHER_DEPENDENCIES],
@@ -461,15 +465,6 @@ function patchPackageJson(packageJson, platform) {
   return packageJson;
 }
 
-function patchPublisherEnvExample(filePath, channel) {
-  const current = fs.readFileSync(filePath, "utf8");
-  const next = current.replace(
-    /^EXPO_UPDATE_CHANNEL=.*$/m,
-    `EXPO_UPDATE_CHANNEL=${channel}`,
-  );
-  fs.writeFileSync(filePath, next, "utf8");
-}
-
 function validateProject(appRoot) {
   const packagePath = path.join(appRoot, "package.json");
   const appJsonPath = path.join(appRoot, "app.json");
@@ -561,7 +556,7 @@ export function configureExpoApp(
   validateCertificate(certificatePath);
   const manifestUrl = resolveManifestUrl(rawOptions.serverUrl);
   const project = validateProject(appRoot);
-  const clientPlan = planOtaClient({ appRoot, templateRoot, packageJson: project.packageJson, manifestUrl, channel, force });
+  const clientPlan = planOtaClient({ appRoot, packageJson: project.packageJson, manifestUrl, channel, force });
   const packageManager = detectPackageManager(appRoot);
   const commands = getPackageCommands(packageManager, platform);
   const certificateDestination = path.join(
@@ -714,9 +709,18 @@ export function configureExpoApp(
     exportCommandDestination,
     force,
   );
-  assertCopyAllowed(envExampleSource, envExampleDestination, force);
+  const envExample = fs.readFileSync(envExampleSource, "utf8").replace(
+    /^EXPO_UPDATE_CHANNEL=.*$/m,
+    `EXPO_UPDATE_CHANNEL=${channel}`,
+  );
+  if (fs.existsSync(envExampleDestination) && fs.readFileSync(envExampleDestination, "utf8") !== envExample) {
+    assertCopyAllowed(envExampleSource, envExampleDestination, force);
+  }
   for (const file of publisherFiles) {
-    assertCopyAllowed(file.source, file.destination, force);
+    const knownVersions = file.source === path.join(publisherTemplateRoot, "api", "database-client.mjs")
+      ? [LEGACY_GENERATED_FILE_SHA256.publisherDatabaseClient]
+      : [];
+    assertGeneratedCopyAllowed(file.source, file.destination, force, knownVersions);
   }
   assertGeneratedCopyAllowed(
     registrarSource,
@@ -760,9 +764,11 @@ export function configureExpoApp(
     );
   }
 
+  commandRunner(...commands.installExpoUpdates, appRoot);
+
   writeJson(
     project.appJsonPath,
-    patchAppJson(project.appJson, {
+    patchAppJson(readJson(project.appJsonPath), {
       channel,
       runtimeVersion,
       manifestUrl,
@@ -774,7 +780,7 @@ export function configureExpoApp(
   copyFile(certificatePath, certificateDestination);
   copyFile(publisherSource, publisherDestination);
   copyFile(exportCommandSource, exportCommandDestination);
-  copyFile(envExampleSource, envExampleDestination);
+  fs.writeFileSync(envExampleDestination, envExample);
   for (const file of publisherFiles) {
     copyFile(file.source, file.destination);
   }
@@ -782,7 +788,6 @@ export function configureExpoApp(
   copyFile(androidRegistrarSource, androidRegistrarDestination);
   fs.chmodSync(androidRegistrarDestination, 0o755);
   copyFile(iosPluginSource, iosPluginDestination);
-  patchPublisherEnvExample(envExampleDestination, channel);
   if (localPublisherEnv) {
     fs.writeFileSync(
       publisherEnvDestination,
@@ -791,8 +796,6 @@ export function configureExpoApp(
     );
   }
   appendGitignore(appRoot);
-
-  commandRunner(...commands.installExpoUpdates, appRoot);
 
   const installedPackageJson = readJson(project.packagePath);
   writeJson(

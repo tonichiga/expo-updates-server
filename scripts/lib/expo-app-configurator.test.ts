@@ -194,6 +194,10 @@ function readCurrentRegistrar() {
 function createManifestOnlyRegistrar() {
   const manifestOnly = readCurrentRegistrar()
     .replace(
+      /if \(process\.argv\[1\] && fs\.existsSync[\s\S]*?fileURLToPath\(import\.meta\.url\)\)\) \{/,
+      "if (process.argv[1] === fileURLToPath(import.meta.url)) {",
+    )
+    .replace(
       `
 export function readExpoAppVersion(appRoot, readFile = fs.readFileSync) {
   try {
@@ -408,6 +412,7 @@ function createRunner() {
       const packagePath = path.join(cwd, "package.json");
       const packageJson = JSON.parse(fs.readFileSync(packagePath, "utf8"));
       packageJson.dependencies["expo-updates"] = "~56.0.0";
+      packageJson.dependencies["expo-updates-server-client"] = "^0.1.0";
       fs.writeFileSync(packagePath, JSON.stringify(packageJson, null, 2));
     }
   };
@@ -476,6 +481,7 @@ describe("configureExpoApp", () => {
       "./plugins/with-ota-embedded-registration",
     );
     expect(packageJson.dependencies["expo-updates"]).toBe("~56.0.0");
+    expect(packageJson.dependencies["expo-updates-server-client"]).toBe("0.1.0");
     expect(packageJson.scripts["ota:publish"]).toBe(
       "node scripts/ota-publish/index.mjs",
     );
@@ -587,7 +593,7 @@ describe("configureExpoApp", () => {
     expect(calls).toEqual([
       {
         command: "npx",
-        args: ["expo", "install", "expo-updates", "expo-application", "expo-crypto", "expo-secure-store", "@react-native-async-storage/async-storage"],
+        args: ["expo", "install", "expo-updates", "expo-application", "expo-crypto", "expo-secure-store", "@react-native-async-storage/async-storage", "expo-updates-server-client@0.1.0"],
         cwd: appRoot,
       },
       {
@@ -607,6 +613,35 @@ describe("configureExpoApp", () => {
         cwd: appRoot,
       },
     ]);
+  });
+
+  it.each([
+    ["pnpm-lock.yaml", "pnpm", ["exec", "expo", "install"]],
+    ["yarn.lock", "yarn", ["expo", "install"]],
+    ["bun.lock", "bunx", ["expo", "install"]],
+  ])("installs the SDK and Expo-compatible peers with %s", (lockfile, command, prefix) => {
+    const { appRoot, certificatePath, templateRoot } = createFixture();
+    fs.writeFileSync(path.join(appRoot, lockfile as string), "");
+    const { calls, commandRunner } = createRunner();
+    configureExpoApp({
+      app: appRoot, certificate: certificatePath, serverUrl: "https://updates.example.com",
+      channel: "production", runtimeVersion: "1.0", platform: "android",
+    }, { commandRunner, templateRoot });
+    expect(calls[0]).toEqual({ command, cwd: appRoot, args: [
+      ...prefix, "expo-updates", "expo-application", "expo-crypto", "expo-secure-store",
+      "@react-native-async-storage/async-storage", "expo-updates-server-client@0.1.0",
+    ] });
+  });
+
+  it("keeps app wiring intact when installing the SDK fails", () => {
+    const { appRoot, certificatePath, templateRoot } = createFixture();
+    const original = fs.readFileSync(path.join(appRoot, "App.tsx"), "utf8");
+    expect(() => configureExpoApp({
+      app: appRoot, certificate: certificatePath, serverUrl: "https://updates.example.com",
+      channel: "production", runtimeVersion: "1.0", platform: "android",
+    }, { commandRunner: () => { throw new Error("registry unavailable"); }, templateRoot })).toThrow("registry unavailable");
+    expect(fs.readFileSync(path.join(appRoot, "App.tsx"), "utf8")).toBe(original);
+    expect(fs.existsSync(path.join(appRoot, "ota-entry.js"))).toBe(false);
   });
 
   it("creates publisher credentials from local Docker settings", () => {
@@ -882,7 +917,7 @@ describe("configureExpoApp", () => {
       app: appRoot,
       certificate: certificatePath,
       serverUrl: "https://updates.example.com",
-      channel: "production",
+      channel: "qa-preview",
       runtimeVersion: "1.0.0",
     };
     fs.mkdirSync(path.dirname(registrarPath), { recursive: true });

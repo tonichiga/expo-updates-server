@@ -29,7 +29,7 @@ Required:
 Optional:
   --platform         all, ios or android (default: all)
   --server-env       Local Docker env file (default: server .env)
-  --force            Replace generated client, publisher and certificate files
+  --force            Replace generated files and back up customized legacy client code
   --help             Show this message
 `);
 }
@@ -137,8 +137,8 @@ try {
   if (!result.publisherEnvConfigured) {
     console.log(`${step++}. Keep any existing .env.ota; create it from .env.ota.example only if missing, then verify publisher/registration credentials.`);
   }
-  console.log(`${step++}. In the app, add manual check/download/reload controls or enable hook automation before building. The generated root only auto-checks by default.`);
-  console.log(`${step++}. Build and install a native binary with telemetry dependencies: npm run ota:build:android:apk or Xcode for iOS. Do this before delivering ota-client via OTA.`);
+  console.log(`${step++}. The mounted OtaUpdates component checks for updates automatically by default. Background delivery downloads silently. The immediate required policy also reloads the active app when ready, including with autoReload disabled.`);
+  console.log(`${step++}. For a first native integration, build with npm run ota:build:android:apk or Xcode for iOS. Apps already running a compatible native runtime and dependencies can receive this client patch via OTA.`);
   console.log(`${step++}. Publish with: npm run ota:publish -- --message "Update description"`);
   console.log(`${step++}. Activate the update in the OTA admin panel.`);
 } catch (error) {

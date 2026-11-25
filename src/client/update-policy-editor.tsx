@@ -1,10 +1,50 @@
 "use client";
+import { AdminRoleContext } from "@/components/admin/admin-role";
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@/components/ui/collapsible";
+import {
+  ChevronDown,
+  Download,
+  ShieldCheck,
+  Zap,
+  MousePointer2,
+  Store,
+  Braces,
+  LockKeyhole,
+} from "lucide-react";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Field, FieldLabel, FieldDescription } from "@/components/ui/field";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  behaviors,
+  chooseBehavior,
+  draftFromPolicy,
+  isDeliveryProfile,
+  policyFromDraft,
+  setStoreLink,
+  storePayloadObject,
+  validStoreLink,
+  type PolicyDraft,
+  type PolicyBehavior,
+} from "./policy-draft";
+import GuardActionCatalog from "./guard-action-catalog";
 import type { TranslationMessage } from "@/src/client/i18n/messages";
 import { useI18n } from "@/src/client/i18n/provider";
 
 import { Textarea } from "@/components/ui/textarea";
-
-import { NativeSelect } from "@/components/ui/native-select";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -12,51 +52,87 @@ import { Input as TextInput } from "@/components/ui/input";
 
 import {
   createGuardAction,
-  deleteGuardAction,
   getGuardActions,
   getUpdatePolicy,
   putUpdatePolicy,
 } from "@/src/client/admin-api";
-import {
-  GuardActionItem,
-  UpdatePolicy,
-  UpdatePolicyGuard,
-} from "@/src/client/admin-types";
-import GuardActionCombobox from "@/src/client/guard-action-combobox";
+import { GuardActionItem, UpdatePolicy } from "@/src/client/admin-types";
+import GuardActionPicker from "@/src/client/guard-action-combobox";
 import {
   beginCatalogAttempt,
-  GuardActionOption,
   isCurrentCatalogAttempt,
   mergeGuardActionOptions,
-  normalizeCreatableGuardAction,
 } from "@/src/client/guard-action-options";
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 
-function payloadText(guard: UpdatePolicyGuard | null): string {
-  return guard?.payload === undefined
-    ? ""
-    : JSON.stringify(guard.payload, null, 2);
-}
+const profiles = {
+  manual: {
+    label: "Optional update",
+    description:
+      "Users can download the update, restart to apply it, or continue with their current version.",
+    icon: MousePointer2,
+  },
+  "manual-postpone": {
+    label: "Download on postpone",
+    description:
+      "Offer the update first. If the user postpones it, download silently and apply it on the next full launch.",
+    icon: Download,
+  },
+  background: {
+    label: "Background update",
+    description:
+      "The app downloads the update silently and applies it on the next launch.",
+    icon: Download,
+  },
+  required: {
+    label: "Required OTA update",
+    description:
+      "The app blocks access and downloads this update. Users restart to continue.",
+    icon: ShieldCheck,
+  },
+  immediate: {
+    label: "Immediate required update",
+    description:
+      "The app silently downloads this update and restarts as soon as it is active and ready. Users can retry if the update fails.",
+    icon: Zap,
+  },
+  store: {
+    label: "Require a store update",
+    description:
+      "The app blocks access and opens the configured store link when the user chooses to upgrade.",
+    icon: Store,
+  },
+  custom: {
+    label: "Custom guard",
+    description:
+      "The app runs the selected action. Access stays blocked unless the app’s handler allows it.",
+    icon: Braces,
+  },
+};
 
 export default function UpdatePolicyEditor({
   encodedKey,
+  platform,
   onSaved,
 }: {
   encodedKey: string;
+  platform?: string;
   onSaved: () => Promise<void>;
 }) {
+  const isViewer = useContext(AdminRoleContext) === "viewer";
   const { t, formatLocale } = useI18n();
   const [policy, setPolicy] = useState<UpdatePolicy | null>(null);
-  const [payload, setPayload] = useState("");
+  const [draftState, setDraft] = useState<PolicyDraft | null>(null);
+  const previousDrafts = useRef<Partial<Record<PolicyBehavior, PolicyDraft>>>(
+    {},
+  );
+  const [loadSequence, setLoadSequence] = useState(0);
   const [error, setError] = useState("");
   const [message, setMessage] = useState<TranslationMessage>("");
   const [saving, setSaving] = useState(false);
   const [guardActions, setGuardActions] = useState<GuardActionItem[]>([]);
   const [canWriteGuardActions, setCanWriteGuardActions] = useState(false);
   const [catalogError, setCatalogError] = useState("");
-  const [catalogCreateValue, setCatalogCreateValue] = useState("");
-  const [catalogCreateError, setCatalogCreateError] = useState("");
-  const [catalogCreatePending, setCatalogCreatePending] = useState(false);
   const [actionError, setActionError] = useState("");
   const actionAttempt = useRef({ current: 0 });
 
@@ -74,36 +150,79 @@ export default function UpdatePolicyEditor({
   };
 
   useEffect(() => {
+    let active = true;
     void getUpdatePolicy(encodedKey)
       .then((loaded) => {
+        if (!active) return;
         beginCatalogAttempt(actionAttempt.current);
         setActionError("");
         setPolicy(loaded);
-        setPayload(payloadText(loaded.guard));
+        previousDrafts.current = {};
+        setDraft(draftFromPolicy(loaded));
+        setError("");
       })
-      .catch((loadError: unknown) =>
-        setError((loadError as Error).message || "Failed to load policy"),
+      .catch(
+        (loadError: unknown) =>
+          active &&
+          setError((loadError as Error).message || "Failed to load policy"),
       );
-  }, [encodedKey]);
+    return () => {
+      active = false;
+    };
+  }, [encodedKey, loadSequence]);
 
   useEffect(() => {
     void loadGuardActions();
   }, []);
 
-  if (!policy) {
+  if (!policy || !draftState) {
     return (
-      <Card className="rounded-xl border border-border bg-card p-5 text-sm  shadow-none">
-        {t(error || "Loading update policy…")}
+      <Card className="gap-3 p-5 shadow-none">
+        {error ? (
+          <>
+            <p role="alert">{t(error)}</p>
+            <Button
+              className="w-fit"
+              variant="outline"
+              size="sm"
+              onClick={() => setLoadSequence((n) => n + 1)}
+            >
+              {t("Retry")}
+            </Button>
+          </>
+        ) : (
+          <>
+            <span role="status" className="text-sm text-muted-foreground">
+              {t("Loading update policy…")}
+            </span>
+            <Skeleton className="h-16 w-full" />
+          </>
+        )}
       </Card>
     );
   }
-
-  const readOnly = !policy.editable;
+  const draft = draftState;
+  const readOnly = !policy.editable || isViewer;
   const editingDisabled = readOnly || saving;
-  const guardActionOptions = mergeGuardActionOptions(
-    guardActions,
-    policy.guard ? [policy.guard.action] : [],
-  );
+  const catalogWritable = canWriteGuardActions && !isViewer;
+  const dirty =
+    JSON.stringify(draft) !== JSON.stringify(draftFromPolicy(policy));
+  const guarded = !isDeliveryProfile(draft.behavior);
+  const storeFields = storePayloadObject(draft.payload);
+  const profile = profiles[draft.behavior];
+  const guardActionOptions = mergeGuardActionOptions(guardActions, [
+    draft.action,
+    policy.guard?.action || "",
+  ]);
+  const edit = (next: PolicyDraft) => {
+    if (next.action !== draft.action || next.behavior !== draft.behavior) {
+      beginCatalogAttempt(actionAttempt.current);
+      setActionError("");
+    }
+    setMessage("");
+    setError("");
+    setDraft(next);
+  };
 
   const addGuardAction = (item: GuardActionItem) => {
     setGuardActions((current) => {
@@ -114,16 +233,6 @@ export default function UpdatePolicyEditor({
         left.actionKey.localeCompare(right.actionKey, "en"),
       );
     });
-  };
-
-  const changeGuardAction = (action: string) => {
-    beginCatalogAttempt(actionAttempt.current);
-    setActionError("");
-    setPolicy((current) =>
-      current?.guard
-        ? { ...current, guard: { ...current.guard, action } }
-        : current,
-    );
   };
 
   const persistSelectedAction = async (action: string) => {
@@ -143,82 +252,30 @@ export default function UpdatePolicyEditor({
     }
   };
 
-  const createCatalogOnlyAction = async (event: FormEvent) => {
-    event.preventDefault();
-    let action: string;
-    try {
-      action = normalizeCreatableGuardAction(catalogCreateValue);
-    } catch (validationError: unknown) {
-      setCatalogCreateError((validationError as Error).message);
-      return;
-    }
-
-    setCatalogCreatePending(true);
-    setCatalogCreateError("");
-    try {
-      addGuardAction(await createGuardAction(action));
-      setCatalogCreateValue("");
-    } catch (createError: unknown) {
-      setCatalogCreateError(
-        (createError as Error).message ||
-          "Failed to add action to the catalog.",
-      );
-    } finally {
-      setCatalogCreatePending(false);
-    }
-  };
-
-  const removeGuardAction = async (option: GuardActionOption) => {
-    if (
-      !option.id ||
-      !window.confirm(
-        t(
-          'Delete "{0}" from the action catalog? Existing policies are unaffected.',
-          [option.actionKey],
-        ),
-      )
-    ) {
-      return;
-    }
-    try {
-      await deleteGuardAction(option.id);
-      setGuardActions((current) =>
-        current.filter((item) => item.id !== option.id),
-      );
-      setCatalogError("");
-    } catch (deleteError: unknown) {
-      setCatalogError(
-        (deleteError as Error).message ||
-          "Failed to delete action from catalog",
-      );
-    }
-  };
-
   const save = async () => {
     setError("");
     setMessage("");
     setSaving(true);
     try {
-      let guard: UpdatePolicyGuard | null = null;
-      if (policy.guard) {
-        if (!policy.guard.action) {
-          throw new Error("Select or create a Guard action.");
-        }
-        const trimmedPayload = payload.trim();
-        guard = {
-          action: policy.guard.action,
-          ...(trimmedPayload
-            ? { payload: JSON.parse(trimmedPayload) }
-            : {}),
-        };
+      const input = policyFromDraft(draft);
+      const original = draftFromPolicy(policy);
+      if (
+        draft.behavior === "store" &&
+        (original.behavior !== "store" || draft.payload !== original.payload) &&
+        !validStoreLink(draft.payload, platform)
+      ) {
+        throw new Error(
+          "Enter a valid store link for this platform or a default store link.",
+        );
       }
       const saved = await putUpdatePolicy(
         encodedKey,
-        { delivery: policy.delivery, guard },
+        input,
         policy.policyVersion,
       );
+      previousDrafts.current = {};
       setPolicy(saved);
-      setPayload(payloadText(saved.guard));
+      setDraft(draftFromPolicy(saved));
       setMessage({
         key: "Policy saved as version {0}.",
         values: [saved.policyVersion],
@@ -236,238 +293,315 @@ export default function UpdatePolicyEditor({
   };
 
   return (
-    <Card className="gap-4 p-5 shadow-none">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <Card className="gap-0 overflow-hidden py-0 shadow-none">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b px-5 py-4">
         <div>
           <h2 className="font-semibold">{t("Update policy")}</h2>
-          <p className="text-xs text-muted-foreground">
-            {t("Version {0}", [policy.policyVersion])}
-            {policy.publishedAt
-              ? t(" · published {0}", [
-                  new Date(policy.publishedAt).toLocaleString(formatLocale),
-                ])
-              : t(" · draft")}
+          <p className="mt-1 text-sm text-muted-foreground">
+            {t("Choose how this release reaches users.")}
           </p>
         </div>
-        <label className="text-sm">
-          {t("Delivery")}{" "}
-          <NativeSelect
-            value={policy.delivery}
-            disabled={editingDisabled}
-            onChange={(event) =>
-              setPolicy({
-                ...policy,
-                delivery: event.target.value as UpdatePolicy["delivery"],
-              })
-            }
-            className="rounded-md border border-input bg-background px-2 py-2 "
-          >
-            <option value="manual">{t("Manual")}</option>
-            <option value="background">{t("Background")}</option>
-          </NativeSelect>
-        </label>
+        <Badge
+          variant={policy.publishedAt ? "info" : "warning"}
+          className="whitespace-normal font-normal"
+        >
+          {t("Version {0}", [policy.policyVersion])}
+          {policy.publishedAt
+            ? t(" · published {0}", [
+                new Date(policy.publishedAt).toLocaleString(formatLocale),
+              ])
+            : t(" · draft")}
+        </Badge>
       </div>
-
-      {readOnly ? (
-        <div className="rounded-md border border-border bg-muted/30 p-3 text-sm ">
+      {readOnly && (
+        <div className="flex items-start gap-2 border-b bg-muted/40 px-5 py-3 text-sm text-muted-foreground">
+          <LockKeyhole className="mt-0.5 size-4 shrink-0" />
           {t(
-            "Published policies are read-only. Publish a new update ID to change policy.",
+            !policy.editable
+              ? "Published policies are read-only. Publish a new update ID to change policy."
+              : "Your role has read-only access to this policy.",
           )}
         </div>
-      ) : null}
-      {policy.guard && policy.delivery === "manual" ? (
-        <div className="rounded-md border border-blue-300 bg-blue-50 p-3 text-sm text-blue-900 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-200">
-          <strong>{t("Note:")}</strong>{" "}
-          {t(
-            "a Guard is usually paired with Background delivery so the candidate can fetch silently. Activation is still allowed.",
+      )}
+      <div className="grid gap-6 p-5 md:grid-cols-[minmax(13rem,0.8fr)_minmax(0,1.4fr)]">
+        <section className="min-w-0">
+          <h3 id="policy-behavior" className="mb-3 text-sm font-medium">
+            {t("Update behavior")}
+          </h3>
+          <RadioGroup
+            value={draft.behavior}
+            disabled={editingDisabled}
+            aria-labelledby="policy-behavior"
+            className="gap-1.5"
+            onValueChange={(v) => {
+              const mode = v as PolicyBehavior;
+              previousDrafts.current[draft.behavior] = draft;
+              edit(previousDrafts.current[mode] ?? chooseBehavior(draft, mode));
+            }}
+          >
+            {behaviors.map((mode) => {
+              const Icon = profiles[mode].icon;
+              return (
+                <Label
+                  key={mode}
+                  htmlFor={`behavior-${mode}`}
+                  className="flex min-h-10 cursor-pointer gap-2.5 rounded-md border px-3 py-2.5 text-sm font-normal has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-accent has-[[data-state=checked]]:font-medium has-[:disabled]:cursor-default"
+                >
+                  <Icon
+                    aria-hidden
+                    className="size-4 shrink-0 text-muted-foreground"
+                  />
+                  <span className="flex-1">{t(profiles[mode].label)}</span>
+                  <RadioGroupItem id={`behavior-${mode}`} value={mode} />
+                </Label>
+              );
+            })}
+          </RadioGroup>
+        </section>
+        <section className="min-w-0 space-y-4 border-t pt-4 md:border-t-0 md:border-l md:pt-0 md:pl-6">
+          <div>
+            <h3 className="font-semibold">{t(profile.label)}</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {t(profile.description)}
+            </p>
+          </div>
+          {draft.behavior === "custom" && (
+            <GuardActionPicker
+              value={draft.action}
+              options={guardActionOptions}
+              disabled={editingDisabled}
+              onChange={(action) => edit({ ...draft, action })}
+              onCreate={persistSelectedAction}
+            />
           )}
+          {draft.behavior === "store" &&
+            (storeFields ? (
+              <div className="grid gap-3">
+                {(
+                  [
+                    ["url", "Default store link"],
+                    ["iosUrl", "iOS store link"],
+                    ["androidUrl", "Android store link"],
+                  ] as const
+                ).map(([key, label]) => (
+                  <Field key={key} className="gap-1.5">
+                    <FieldLabel htmlFor={`policy-store-${key}`}>
+                      {t(label)}
+                    </FieldLabel>
+                    <TextInput
+                      id={`policy-store-${key}`}
+                      inputMode="url"
+                      autoCapitalize="off"
+                      spellCheck={false}
+                      readOnly={editingDisabled}
+                      value={String(storeFields[key] ?? "")}
+                      onChange={(e) =>
+                        edit({
+                          ...draft,
+                          payload: setStoreLink(
+                            storeFields,
+                            key,
+                            e.target.value,
+                          ),
+                        })
+                      }
+                    />
+                  </Field>
+                ))}
+                <FieldDescription>
+                  {t(
+                    "The app uses its platform link first, then the default link. Use https, market or itms-apps links.",
+                  )}
+                </FieldDescription>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {t(
+                  "Edit the existing store payload in advanced settings to preserve its structure.",
+                )}
+              </p>
+            ))}
+          {guarded && (
+            <Collapsible
+              key={draft.behavior}
+              defaultOpen={
+                draft.behavior === "custom" ||
+                (draft.delivery === "background" &&
+                  draft.behavior !== "immediate") ||
+                Boolean(draft.payload && draft.behavior !== "store") ||
+                (draft.behavior === "store" && !storeFields)
+              }
+            >
+              <CollapsibleTrigger asChild>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="group"
+                >
+                  {t("Advanced settings")}
+                  <ChevronDown className="group-data-[state=open]:rotate-180" />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-3">
+                <div className="space-y-4 rounded-md border bg-muted/20 p-3">
+                  {draft.behavior !== "required" &&
+                    draft.behavior !== "immediate" && (
+                      <div className="grid gap-1.5">
+                        <Label htmlFor="policy-delivery">{t("Delivery")}</Label>
+                        <Select
+                          value={draft.delivery}
+                          disabled={editingDisabled}
+                          onValueChange={(v) =>
+                            edit({
+                              ...draft,
+                              delivery: v as UpdatePolicy["delivery"],
+                            })
+                          }
+                        >
+                          <SelectTrigger
+                            id="policy-delivery"
+                            aria-describedby="policy-delivery-hint policy-guard-hint"
+                            className="w-full"
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="manual">
+                              {t("Manual")}
+                            </SelectItem>
+                            <SelectItem value="background">
+                              {t("Background")}
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p
+                          id="policy-delivery-hint"
+                          className="text-xs leading-relaxed text-muted-foreground"
+                        >
+                          {draft.delivery === "background"
+                            ? t(
+                                "When OTA is allowed, the app downloads it silently during use. It takes effect on the next full launch. For an automatic restart, select Immediate required update.",
+                              )
+                            : t(
+                                "When OTA is allowed, the default client lets the user choose when to download and restart. They can postpone the update.",
+                              )}
+                        </p>
+                        <p
+                          id="policy-guard-hint"
+                          className="text-xs leading-relaxed text-muted-foreground"
+                        >
+                          {draft.behavior === "store"
+                            ? t(
+                                "This release requires an update from the store. Both delivery modes show the store button and block the OTA download.",
+                              )
+                            : t(
+                                "Delivery starts only after the app’s custom action allows the update.",
+                              )}
+                        </p>
+                      </div>
+                    )}
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="policy-payload">
+                      {t("Optional custom JSON payload")}
+                    </Label>
+                    <Textarea
+                      id="policy-payload"
+                      spellCheck={false}
+                      value={draft.payload}
+                      readOnly={editingDisabled}
+                      className="min-h-24 font-mono text-xs"
+                      onChange={(e) =>
+                        edit({ ...draft, payload: e.target.value })
+                      }
+                    />
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          )}
+          {actionError && (
+            <div role="status" className="text-sm text-destructive">
+              {t(actionError)}{" "}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void persistSelectedAction(draft.action)}
+              >
+                {t("Retry")}
+              </Button>
+            </div>
+          )}
+        </section>
+      </div>
+      {!readOnly && (
+        <div className="flex flex-wrap items-center gap-2 border-t bg-muted/20 px-5 py-3">
+          <div
+            className="min-w-0 flex-1 text-sm text-muted-foreground"
+            role="status"
+          >
+            {message ? t(message) : dirty ? t("Unsaved changes") : null}
+          </div>
+          {dirty && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={saving}
+              onClick={() => {
+                previousDrafts.current = {};
+                edit(draftFromPolicy(policy));
+              }}
+            >
+              {t("Discard changes")}
+            </Button>
+          )}
+          <Button
+            size="sm"
+            disabled={saving || !dirty}
+            onClick={() => void save()}
+          >
+            {saving ? t("Saving…") : t("Save policy")}
+          </Button>
         </div>
-      ) : null}
-      {error ? <p className="text-sm text-red-600">{t(error)}</p> : null}
-      {message ? (
-        <p className="text-sm text-emerald-600">{t(message)}</p>
-      ) : null}
-      {catalogError ? (
+      )}
+      {error && (
+        <Alert variant="destructive" className="mx-5 my-3 w-auto">
+          <AlertDescription>
+            {t(error)}
+            <Button
+              type="button"
+              variant="link"
+              className="h-auto px-0"
+              onClick={() => setLoadSequence((n) => n + 1)}
+            >
+              {t("Reload saved policy")}
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+      {catalogError && (
         <div
           role="status"
-          className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-300"
+          className="flex items-center gap-2 px-5 py-3 text-sm"
         >
-          <span>
-            {t("Action catalog:")} {t(catalogError)}
-          </span>
+          {t(catalogError)}
           <Button
             variant="outline"
             size="sm"
-            type="button"
             onClick={() => void loadGuardActions()}
           >
             {t("Retry")}
           </Button>
         </div>
-      ) : null}
-      {canWriteGuardActions ? (
-        <form
-          onSubmit={(event) => void createCatalogOnlyAction(event)}
-          className="flex flex-wrap items-end gap-2 rounded-md border border-border p-3 "
-        >
-          <label className="min-w-56 flex-1 text-xs text-muted-foreground">
-            {t("Add action to catalog")}
-            <TextInput
-              value={catalogCreateValue}
-              maxLength={100}
-              disabled={catalogCreatePending}
-              onChange={(event) => {
-                setCatalogCreateValue(event.target.value);
-                setCatalogCreateError("");
-              }}
-              aria-describedby="guard-action-catalog-create-help"
-              className="mt-1 w-full rounded border border-input bg-background p-2 text-sm "
-              placeholder={t("Reusable action name")}
-            />
-          </label>
-          <Button
-            variant="outline"
-            size="sm"
-            type="submit"
-            disabled={catalogCreatePending}
-          >
-            {catalogCreatePending ? t("Adding…") : t("Add to catalog")}
-          </Button>
-          <p
-            id="guard-action-catalog-create-help"
-            className="w-full text-xs text-muted-foreground"
-          >
-            {t(
-              "Adds a reusable catalog item without changing this policy.",
-            )}
-          </p>
-          {catalogCreateError ? (
-            <div
-              role="status"
-              className="flex w-full items-center gap-2 text-xs text-amber-700 dark:text-amber-300"
-            >
-              <span>{t(catalogCreateError)}</span>
-              <Button variant="outline" size="sm" type="submit">
-                {t("Retry")}
-              </Button>
-            </div>
-          ) : null}
-        </form>
-      ) : null}
-      <div className="space-y-2 rounded-md border border-border p-3 ">
-        <h3 className="text-sm font-medium">{t("Action catalog")}</h3>
-        {guardActions.length > 0 ? (
-          <ul
-            aria-label={t("Guard action catalog entries")}
-            className="max-h-40 space-y-1 overflow-auto"
-          >
-            {guardActions.map((item) => (
-              <li
-                key={item.id}
-                className="flex items-center justify-between gap-2 rounded bg-muted/30 px-2 py-1 text-sm dark:bg-muted/20"
-              >
-                <span className="min-w-0 truncate" title={item.actionKey}>
-                  {item.actionKey}
-                </span>
-                {canWriteGuardActions ? (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    type="button"
-                    aria-label={t("Delete {0} from action catalog", [
-                      item.actionKey,
-                    ])}
-                    onClick={() =>
-                      void removeGuardAction({
-                        id: item.id,
-                        actionKey: item.actionKey,
-                        persisted: true,
-                      })
-                    }
-                  >
-                    {t("Delete")}
-                  </Button>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            {t("No catalog actions found.")}
-          </p>
-        )}
-      </div>
-
-      <div className="space-y-3 rounded-lg border border-input p-3 ">
-        <label className="flex items-center gap-2 text-sm font-medium">
-          <input
-            className="size-4 rounded border-input accent-primary"
-            type="checkbox"
-            checked={policy.guard !== null}
-            disabled={editingDisabled}
-            onChange={(event) => {
-              beginCatalogAttempt(actionAttempt.current);
-              setActionError("");
-              setPolicy({
-                ...policy,
-                guard: event.target.checked
-                  ? { action: guardActions[0]?.actionKey || "" }
-                  : null,
-              });
-              if (!event.target.checked) setPayload("");
-            }}
-          />
-          {t("Guard enabled")}
-        </label>
-        <p className="text-xs text-muted-foreground">
-          {t(
-            "When enabled, this Guard applies unconditionally whenever this OTA is selected for a client.",
-          )}
-        </p>
-        {policy.guard ? (
-          <>
-            <GuardActionCombobox
-              value={policy.guard.action}
-              options={guardActionOptions}
-              selectionDisabled={editingDisabled}
-              canMutateCatalog={canWriteGuardActions}
-              mutationError={actionError}
-              onChange={changeGuardAction}
-              onCreate={persistSelectedAction}
-              onDelete={removeGuardAction}
-              onRetry={
-                actionError
-                  ? () => persistSelectedAction(policy.guard?.action || "")
-                  : undefined
-              }
-            />
-            <label className="block text-xs text-muted-foreground">
-              {t("Optional custom JSON payload")}
-              <Textarea
-                value={payload}
-                disabled={editingDisabled}
-                onChange={(event) => setPayload(event.target.value)}
-                className="mt-1 h-24 w-full rounded border border-input bg-background p-2 font-mono text-xs "
-                placeholder='{"message":"Optional"}'
-              />
-            </label>
-          </>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            {t("No Guard will be emitted in the update manifest.")}
-          </p>
-        )}
-      </div>
-
-      <Button
-        variant="default"
-        size="sm"
-        type="button"
-        disabled={editingDisabled}
-        onClick={() => void save()}
-      >
-        {t("Save policy")}
-      </Button>
+      )}
+      <GuardActionCatalog
+        items={guardActions}
+        writable={catalogWritable}
+        onAdd={addGuardAction}
+        onDelete={(id) =>
+          setGuardActions((items) => items.filter((item) => item.id !== id))
+        }
+      />
     </Card>
   );
 }

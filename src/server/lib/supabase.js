@@ -160,6 +160,13 @@ function toSqlColumns(columns) {
     .split(",")
     .map((part) => part.trim())
     .filter(Boolean)
+    .map((part) => {
+      if (!part.includes(":")) return part;
+      // Match PostgREST's alias:json_column->key syntax using literal keys.
+      const [alias, expression] = part.split(":");
+      const [column, ...keys] = expression.split("->").map(assertSqlIdentifier);
+      return `${column}${keys.map((key) => `->'${key}'`).join("")} AS ${assertSqlIdentifier(alias)}`;
+    })
     .join(", ");
 }
 
@@ -214,6 +221,11 @@ class TableQuery {
 
   eq(column, value) {
     this.filters.push({ type: "eq", column, value });
+    return this;
+  }
+
+  gt(column, value) {
+    this.filters.push({ type: "gt", column, value });
     return this;
   }
 
@@ -292,6 +304,13 @@ class TableQuery {
           params.push(filter.value);
           index += 1;
         }
+        continue;
+      }
+
+      if (filter.type === "gt") {
+        conditions.push(`${assertSqlIdentifier(filter.column)} > $${index}`);
+        params.push(filter.value);
+        index += 1;
         continue;
       }
 
@@ -707,6 +726,11 @@ class SupabaseTableQuery {
 
   eq(column, value) {
     this.builder = this.builder.eq(column, value);
+    return this;
+  }
+
+  gt(column, value) {
+    this.builder = this.builder.gt(column, value);
     return this;
   }
 

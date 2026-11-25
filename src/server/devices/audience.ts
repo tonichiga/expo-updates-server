@@ -1,8 +1,11 @@
 import { parseDictionary } from "structured-headers";
 
-export const installationIdPattern =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-export const deviceIdPattern = /^[0-9a-f]{64}$/;
+import {
+  deviceIdPattern,
+  installationIdPattern,
+  maxIdsPerKind,
+} from "@/lib/audience-ids";
+export { deviceIdPattern, installationIdPattern } from "@/lib/audience-ids";
 export type Audience = {
   audience_mode: "all" | "devices";
   audience_installation_ids: string[];
@@ -47,7 +50,8 @@ export function eligibleForAudience(
   return Boolean(
     (identity.installationId &&
       row.audience_installation_ids?.includes(identity.installationId)) ||
-    (identity.deviceId && row.audience_device_ids?.includes(identity.deviceId)),
+      (identity.deviceId &&
+        row.audience_device_ids?.includes(identity.deviceId)),
   );
 }
 
@@ -58,7 +62,7 @@ export function parseAudience(value: unknown): Audience {
     const list = v[key];
     if (
       !Array.isArray(list) ||
-      list.length > 100 ||
+      list.length > maxIdsPerKind ||
       list.some((id) => typeof id !== "string" || !pattern.test(id))
     )
       throw new Error("Invalid target IDs (maximum 100 per type)");

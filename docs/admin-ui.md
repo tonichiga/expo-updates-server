@@ -4,13 +4,17 @@ The admin panel uses a shared shadcn/ui (Radix) UI kit, Tailwind CSS 4, Lucide a
 
 ## Navigation and data {#навигация-и-данные}
 
-- **Installations** (`/updates/devices`): shared server filters, KPIs, daily activity, version distribution, cohorts and registry. Search supports partial installation IDs. Select an ID for full identifiers and diagnostics.
-- **OTA updates** (`/updates`): releases, sorting, pagination and editing. The emergency distribution stop is in the expandable Management panel.
+- **Releases** (`/updates`) opens after sign-in. Search all releases by ID, comment, channel or version. Combine platform, channel, runtime, status and audience filters before paging. Open a release to review its delivery scope, edit the audience and policy, activate, roll back or promote. Metadata has its own tab. The global distribution switch appears above the list.
+- **Installations** (`/updates/devices`) has Overview, Versions, Cohorts and Registry tabs. Shared filters apply across tabs. Daily values distinguish missing history, zero activity and a partial UTC day. Version shares use the installations in each displayed platform and channel.
 - **Embedded builds** and **Emergency redirects** retain the existing role restrictions and management actions.
 
-Apply filters to the entire selection with Apply. A failed request keeps the previous result with an explicit message. If the last page disappears after a refresh, the registry moves to the last available page. Analytics count installations, not unique people.
+Changing a selection or resetting filters updates results immediately. Text search updates after a short pause in typing. A failed request keeps the previous result with an explicit message. If the last page disappears after a refresh, the registry moves to the last available page. Analytics count installations, not unique people.
 
 For daily data, cohort and retention semantics and database migration, see [installation telemetry](./installation-telemetry.md). Existing databases require `2026-10-22-device-analytics.sql`; new databases receive it from the canonical `schema.sql`.
+
+Publication creates an inactive draft. Choose an audience and a delivery policy before manually activating the release. In **Selected devices**, save an installation or device to your personal favorites to reuse it for smoke tests. **Public delivery** shows current and previous public releases for each runtime, channel and platform. Restore requires confirmation. On an existing database, apply `2026-11-25-device-favorites.sql` and `2026-11-25-public-distribution-history.sql` after the device-targeting migrations. Public history starts with the current public release at installation. Older activation dates and predecessors are unknown.
+
+Under **Selected recipients**, choose a device from the registry, add a favorite, or paste IDs. Review the list before saving. A Device ID targets the device across reinstalls. An Installation ID targets one installation.
 
 ## Interface verification {#проверка-интерфеиса}
 

@@ -1,4 +1,7 @@
 "use client";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useConfirmAction } from "@/components/admin/confirm-action";
 import type { TranslationMessage } from "@/src/client/i18n/messages";
 import { useI18n } from "@/src/client/i18n/provider";
 import { useFormatters } from "@/src/client/i18n/use-formatters";
@@ -23,7 +26,26 @@ import UpdateAudienceEditor from "@/src/client/update-audience-editor";
 import UpdatePolicyEditor from "@/src/client/update-policy-editor";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
+import {
+  ArrowLeft,
+  FileJson,
+  Radio,
+  Users,
+  Undo2,
+  ShieldAlert,
+  Trash2,
+} from "lucide-react";
+import { AdminRoleContext } from "@/components/admin/admin-role";
+import {
+  PlatformBadge,
+  ChannelBadge,
+  ReleaseStatusBadge,
+  AudienceBadge,
+  DeliveryBadge,
+} from "@/components/admin/release-badges";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import {
   DistributionControlBanner,
   useDistributionControlState,
@@ -40,8 +62,11 @@ function prettyJson(value: unknown): string {
 }
 
 export default function UpdateDetailsPage() {
+  const confirmAction = useConfirmAction();
   const { t } = useI18n();
   const { fullDate } = useFormatters();
+  const role = useContext(AdminRoleContext);
+  const canWrite = role === "operator" || role === "admin";
   const params = useParams<{ encodedKey: string }>();
   const router = useRouter();
   const encodedKey = params.encodedKey;
@@ -77,51 +102,39 @@ export default function UpdateDetailsPage() {
     const rollbackActive =
       Boolean(activeUpdateId) && activeUpdateId !== latestUpdateId;
 
-    const newestUpdateId =
-      detail?.channelLatest &&
-      typeof detail.channelLatest.newestUpdateId === "string"
-        ? detail.channelLatest.newestUpdateId
-        : null;
-
     const currentServedUpdateId = activeUpdateId || latestUpdateId;
-    const isNewestInScope = Boolean(
-      detail?.updateId &&
-      newestUpdateId &&
-      detail.updateId === newestUpdateId,
-    );
 
     return {
       latestUpdateId,
       activeUpdateId,
       rollbackActive,
-      newestUpdateId,
       currentServedUpdateId,
-      isNewestInScope,
+      isNewestInScope:
+        detail?.isNewestInScope ??
+        (Boolean(detail?.updateId) &&
+          detail?.channelLatest?.newestUpdateId === detail?.updateId),
     };
   }, [detail]);
 
   const canPromote = Boolean(
-    !distributionBlocked &&
-    channelState.isNewestInScope &&
-    channelState.rollbackActive,
+    !distributionBlocked && detail?.isLatest && channelState.rollbackActive,
   );
   const canRollback = Boolean(
     detail &&
-    !distributionBlocked &&
-    !channelState.isNewestInScope &&
-    channelState.currentServedUpdateId &&
-    detail.updateId !== channelState.currentServedUpdateId,
+      !distributionBlocked &&
+      !channelState.isNewestInScope &&
+      channelState.currentServedUpdateId &&
+      detail.updateId !== channelState.currentServedUpdateId,
   );
   const canToggleDisabled = Boolean(
-    detail &&
-    !(channelState.rollbackActive && channelState.isNewestInScope),
+    detail && !(channelState.rollbackActive && channelState.isNewestInScope),
   );
   const canDirectActivate = Boolean(
     detail &&
-    !distributionBlocked &&
-    detail.status === "disabled" &&
-    channelState.isNewestInScope &&
-    !channelState.rollbackActive,
+      !distributionBlocked &&
+      detail.status === "disabled" &&
+      channelState.isNewestInScope &&
+      !channelState.rollbackActive,
   );
   const canDirectDeactivate = Boolean(
     detail && detail.status !== "disabled" && canToggleDisabled,
@@ -175,24 +188,23 @@ export default function UpdateDetailsPage() {
   }, [fileContent]);
 
   useEffect(() => {
-    const loadDetail = async () => {
-      setLoading(true);
-      setError("");
-      setSuccess("");
-
-      try {
-        const response = await getUpdate(encodedKey);
-        setDetail(response);
-      } catch (loadError: unknown) {
-        setError(
-          (loadError as Error).message || "Не удалось загрузить детали",
-        );
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    void loadDetail();
+    const controller = new AbortController();
+    setDetail(null);
+    setLoading(true);
+    setError("");
+    setSuccess("");
+    getUpdate(encodedKey, controller.signal)
+      .then((next) => {
+        if (!controller.signal.aborted) setDetail(next);
+      })
+      .catch((e: Error) => {
+        if (!controller.signal.aborted)
+          setError(e.message || "Не удалось загрузить детали");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
   }, [encodedKey]);
 
   const reload = async () => {
@@ -225,10 +237,12 @@ export default function UpdateDetailsPage() {
   };
 
   const handleRollback = async () => {
-    const confirmed = window.confirm(
+    const confirmed = await confirmAction(
+      t("Rollback"),
       t(
         "Вы действительно хотите начать распространение предыдущей версии обновления?",
       ),
+      true,
     );
     if (!confirmed) {
       return;
@@ -249,7 +263,8 @@ export default function UpdateDetailsPage() {
   };
 
   const handlePromote = async () => {
-    const confirmed = window.confirm(
+    const confirmed = await confirmAction(
+      t("Promote"),
       t("Вернуть распространение к последнему апдейту (promote)?"),
     );
     if (!confirmed) {
@@ -284,9 +299,7 @@ export default function UpdateDetailsPage() {
       await reload();
       setSuccess(disabled ? "Апдейт деактивирован" : "Апдейт активирован");
     } catch (toggleError: unknown) {
-      setError(
-        (toggleError as Error).message || "Не удалось изменить статус",
-      );
+      setError((toggleError as Error).message || "Не удалось изменить статус");
     } finally {
       setSaving(false);
     }
@@ -298,8 +311,10 @@ export default function UpdateDetailsPage() {
       return;
     }
 
-    const confirmed = window.confirm(
+    const confirmed = await confirmAction(
+      t("Удалить апдейт"),
       t("Удалить апдейт полностью из bucket?"),
+      true,
     );
     if (!confirmed) {
       return;
@@ -313,47 +328,61 @@ export default function UpdateDetailsPage() {
       await deleteUpdate(encodedKey);
       router.replace("/updates");
     } catch (deleteError: unknown) {
-      setError(
-        (deleteError as Error).message || "Не удалось удалить апдейт",
-      );
+      setError((deleteError as Error).message || "Не удалось удалить апдейт");
       setSaving(false);
     }
   };
 
   return (
-    <div className="mx-auto max-w-[1600px] space-y-6 p-4 md:p-8">
-      <div className="space-y-6">
-        <header className="space-y-2">
+    <div className="mx-auto max-w-[1500px] space-y-5 p-4 sm:p-6 lg:p-8">
+      <div className="space-y-5">
+        <header className="space-y-3">
           <Link
             href="/updates"
-            className="inline-flex items-center text-xs text-muted-foreground hover:text-primary"
+            className="inline-flex items-center gap-1.5 rounded-sm text-sm text-muted-foreground hover:text-foreground"
           >
-            {t("← Все обновления")}
+            <ArrowLeft className="size-4" />
+            {t("Публикации")}
           </Link>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {t("Детали обновления")}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {t("Метаданные, политика доставки и управление публикацией.")}
-          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="break-words text-3xl font-semibold tracking-tight">
+              {detail?.comment ||
+                (detail?.appVersion
+                  ? t("Version {0}", [detail.appVersion])
+                  : t("Детали обновления"))}
+            </h1>
+            {detail && <ReleaseStatusBadge release={detail} />}
+            {detail?.isLatest && <Badge variant="info">{t("Latest")}</Badge>}
+            {!canWrite && <Badge variant="neutral">{t("Read only")}</Badge>}
+          </div>
+          {detail && (
+            <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              <PlatformBadge platform={detail.platform} />
+              <ChannelBadge channel={detail.channel} />
+              <span className="break-all">
+                {t("Runtime {0}", [detail.runtimeVersion])}
+              </span>
+              <span>· {fullDate(detail.createdAt)}</span>
+            </div>
+          )}
         </header>
 
         {loading ? (
-          <div className="rounded-xl border border-border bg-card p-5 ">
-            {t("Загрузка...")}
-          </div>
+          <Skeleton className="h-16" role="status">
+            <span className="sr-only">{t("Загрузка...")}</span>
+          </Skeleton>
         ) : null}
 
         {error ? (
-          <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
-            {t(error)}
-          </div>
+          <Alert variant="destructive">
+            <AlertDescription>{t(error)}</AlertDescription>
+          </Alert>
         ) : null}
 
         {success ? (
-          <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300">
-            {t(success)}
-          </div>
+          <Alert role="status">
+            <AlertDescription>{t(success)}</AlertDescription>
+          </Alert>
         ) : null}
 
         <DistributionControlBanner
@@ -365,212 +394,295 @@ export default function UpdateDetailsPage() {
         {!loading && detail ? (
           <>
             {channelState.rollbackActive ? (
-              <section className="rounded-xl border border-orange-300 bg-orange-50 p-4 dark:border-orange-700 dark:bg-orange-950/30">
-                <p className="text-sm font-medium text-orange-900 dark:text-orange-200">
+              <Alert variant="destructive" role="status">
+                <Undo2 aria-hidden="true" />
+                <AlertTitle>
                   {t("⚠️ Rollback активен в этом канале/платформе.")}
-                </p>
-                <p className="mt-1 text-xs text-orange-800 dark:text-orange-300">
+                </AlertTitle>
+                <AlertDescription>
                   {t("Сейчас раздаётся updateId: ")}
                   {channelState.activeUpdateId}
-                </p>
-                <p className="mt-1 text-xs text-orange-800 dark:text-orange-300">
+                </AlertDescription>
+                <AlertDescription>
                   {t(
                     "Новые апдейты автоматически игнорируются до выполнения Promote.",
                   )}
-                </p>
-              </section>
+                </AlertDescription>
+              </Alert>
             ) : null}
 
             {detail.isIgnoredByRollback ? (
-              <section className="rounded-xl border border-border bg-muted/30 p-4 ">
-                <p className="text-sm font-medium text-foreground">
+              <Alert variant="warning" role="status">
+                <ShieldAlert aria-hidden="true" />
+                <AlertTitle>
                   {t("Этот апдейт сейчас не доставляется.")}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
+                </AlertTitle>
+                <AlertDescription>
                   {t(
                     "Причина: активен rollback, автодоставка новых апдейтов выключена.",
                   )}
-                </p>
-              </section>
+                </AlertDescription>
+              </Alert>
             ) : null}
 
-            <Card className="grid gap-4 rounded-xl border border-border bg-card p-5  md:grid-cols-2 lg:grid-cols-4 shadow-none">
-              <Info label={t("Runtime")} value={detail.runtimeVersion} />
-              <Info label={t("Platform")} value={detail.platform} />
-              <Info label={t("Channel")} value={detail.channel} />
-              <Info label={t("Stage")} value={detail.stage} />
-              <Info
-                label={t("Created")}
-                value={
-                  detail.createdAt
-                    ? fullDate(detail.createdAt)
-                    : detail.createdAtPath
-                }
-              />
-              <Info label={t("Status")} value={t(detail.status)} />
-              <Info
-                label={t("Latest")}
-                value={detail.isLatest ? t("Да") : t("Нет")}
-              />
-              <Info
-                label={t("Rollback")}
-                value={detail.isRollbackActive ? t("Активен") : t("Нет")}
-              />
-              <Info
-                label={t("Доставка")}
-                value={
-                  detail.isIgnoredByRollback
-                    ? t("Ignored by rollback")
-                    : detail.deliveryMode === "background"
-                      ? t("Background")
-                      : t("Manual")
-                }
-              />
-              <Info
-                label={t("Guard")}
-                value={detail.hasGuard ? t("Yes") : t("None")}
-              />
-              <Info
-                label={t("Policy")}
-                value={`v${detail.policyVersion} · ${detail.policyEditable ? t("draft") : t("published")}`}
-              />
-              <Info
-                label={t("Assets")}
-                value={String(detail.assetsCount)}
-              />
-              <Info
-                label={t("Update ID")}
-                value={detail.updateId}
-                className="md:col-span-2 lg:col-span-2"
-              />
-              <Info
-                label={t("Комментарий")}
-                value={detail.comment || "-"}
-                className="md:col-span-2 lg:col-span-2"
-              />
-              <Info
-                label={t("Активный update ID")}
-                value={channelState.activeUpdateId || "-"}
-                className="md:col-span-2 lg:col-span-2"
-              />
+            <Card className="gap-4 py-0 shadow-none">
+              <div className="grid gap-4 p-4 sm:grid-cols-3 sm:p-5">
+                <Info
+                  label={t("Audience")}
+                  value={<AudienceBadge mode={detail.audienceMode} />}
+                />
+                <Info
+                  label={t("Доставка")}
+                  value={
+                    detail.isIgnoredByRollback ? (
+                      <Badge variant="warning">
+                        {t("Ignored by rollback")}
+                      </Badge>
+                    ) : (
+                      <DeliveryBadge mode={detail.deliveryMode} />
+                    )
+                  }
+                />
+                <Info label={t("Update ID")} value={detail.updateId} />
+              </div>
+              {canWrite &&
+                (canRollback || canPromote || showToggleDisabledButton) && (
+                  <div className="flex flex-wrap items-center gap-2 border-t bg-muted/20 px-4 py-3 sm:px-5">
+                    {canRollback ? (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        type="button"
+                        onClick={handleRollback}
+                        disabled={saving}
+                      >
+                        <Undo2 aria-hidden="true" />
+                        {t("Rollback")}
+                      </Button>
+                    ) : null}
+                    {canPromote ? (
+                      <Button
+                        variant="default"
+                        size="sm"
+                        type="button"
+                        onClick={handlePromote}
+                        disabled={saving}
+                      >
+                        {t("Promote")}
+                      </Button>
+                    ) : null}
+                    {showToggleDisabledButton ? (
+                      <Button
+                        variant={
+                          detail.status === "disabled" ? "default" : "outline"
+                        }
+                        size="sm"
+                        type="button"
+                        onClick={handleToggleDisabled}
+                        disabled={saving}
+                      >
+                        {detail.status === "disabled"
+                          ? t("Активировать")
+                          : t("Деактивировать")}
+                      </Button>
+                    ) : null}
+                  </div>
+                )}
             </Card>
-
-            <UpdateAudienceEditor
+            <Tabs
+              defaultValue="audience"
               key={encodedKey}
-              encodedKey={encodedKey}
-              platform={detail.platform}
-            />
-            <UpdatePolicyEditor
-              key={`${encodedKey}-${detail.policyVersion}-${detail.policyPublishedAt || "draft"}`}
-              encodedKey={encodedKey}
-              onSaved={reload}
-            />
-
-            <Card className="gap-4 p-5 shadow-none">
-              <div className="flex flex-wrap gap-2">
-                {canRollback ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    type="button"
-                    onClick={handleRollback}
-                    disabled={saving}
-                  >
-                    {t("Rollback")}
-                  </Button>
-                ) : null}
-                {canPromote ? (
-                  <Button
-                    variant="default"
-                    size="sm"
-                    type="button"
-                    onClick={handlePromote}
-                    disabled={saving}
-                  >
-                    {t("Promote")}
-                  </Button>
-                ) : null}
-                {showToggleDisabledButton ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    type="button"
-                    onClick={handleToggleDisabled}
-                    disabled={saving}
-                  >
-                    {detail.status === "disabled"
-                      ? t("Активировать")
-                      : t("Деактивировать")}
-                  </Button>
-                ) : null}
-                {canDelete ? (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    type="button"
-                    onClick={handleDelete}
-                    disabled={saving}
-                  >
-                    {t("Удалить апдейт")}
-                  </Button>
-                ) : null}
-              </div>
-            </Card>
-
-            <Card className="gap-4 p-5 shadow-none">
-              <div className="flex flex-wrap items-center gap-2">
-                <label className="text-sm">{t("JSON файл")}</label>
-                <NativeSelect
-                  value={selectedFile}
-                  onChange={(event) =>
-                    setSelectedFile(event.target.value as EditableFile)
+              className="min-w-0 gap-4"
+            >
+              <TabsList
+                aria-label={t("Release sections")}
+                variant="line"
+                className="max-w-full justify-start border-b"
+              >
+                <TabsTrigger value="audience">
+                  <Users className="hidden size-4 sm:block" />
+                  {t("Audience")}
+                </TabsTrigger>
+                <TabsTrigger value="policy">
+                  <Radio className="hidden size-4 sm:block" />
+                  {t("Policy")}
+                </TabsTrigger>
+                <TabsTrigger value="metadata">
+                  <FileJson className="hidden size-4 sm:block" />
+                  {t("Metadata")}
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent
+                value="audience"
+                forceMount
+                className="data-[state=inactive]:hidden"
+              >
+                <UpdateAudienceEditor
+                  key={encodedKey}
+                  channel={detail.channel}
+                  runtime={detail.runtimeVersion}
+                  active={detail.status === "active"}
+                  encodedKey={encodedKey}
+                  platform={detail.platform}
+                  canWrite={canWrite}
+                  onSaved={(mode) =>
+                    setDetail(
+                      (current) =>
+                        current && { ...current, audienceMode: mode },
+                    )
                   }
-                  aria-label={t("Выбор JSON файла")}
-                  className="rounded-md border border-input bg-background px-2 py-2 text-sm "
-                >
-                  <option value="update-info.json">update-info.json</option>
-                  <option value="update-meta.json">update-meta.json</option>
-                  <option value="metadata.json">metadata.json</option>
-                  <option value="channel-latest.json">
-                    channel latest.json
-                  </option>
-                </NativeSelect>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  type="button"
-                  onClick={handleSaveJson}
-                  disabled={
-                    saving ||
-                    channelLatestLocked ||
-                    updateMetaDistributionLocked
-                  }
-                >
-                  {t("Сохранить JSON")}
-                </Button>
-              </div>
-              {channelLatestLocked ? (
-                <p className="mt-2 text-xs text-orange-700 dark:text-orange-300">
-                  {t(
-                    "Редактирование channel latest.json заблокировано: активен rollback или глобальный аварийный выключатель.",
-                  )}
-                </p>
-              ) : null}
-              {updateMetaDistributionLocked ? (
-                <p className="mt-2 text-xs text-red-700 dark:text-red-300">
-                  {t(
-                    "Активация через update-meta.json недоступна при глобальной блокировке. Деактивация с isActive=false остаётся доступна.",
-                  )}
-                </p>
-              ) : null}
-              <Textarea
-                value={editorValue}
-                onChange={(event) => setEditorValue(event.target.value)}
-                aria-label={t("Редактор JSON")}
-                className="mt-3 h-120 w-full rounded-md border border-border bg-muted/30 p-3 font-mono text-xs outline-none ring-blue-500 focus:ring-2 "
-                spellCheck={false}
-              />
-            </Card>
+                />
+              </TabsContent>
+              <TabsContent
+                value="policy"
+                forceMount
+                className="data-[state=inactive]:hidden"
+              >
+                <UpdatePolicyEditor
+                  key={`${encodedKey}-${detail.policyPublishedAt || "draft"}`}
+                  platform={detail.platform}
+                  encodedKey={encodedKey}
+                  onSaved={reload}
+                />
+              </TabsContent>
+              <TabsContent value="metadata" className="space-y-4">
+                <Card className="grid gap-4 p-5 shadow-none sm:grid-cols-2 lg:grid-cols-4">
+                  <Info label={t("Runtime")} value={detail.runtimeVersion} />
+                  <Info label={t("Platform")} value={detail.platform} />
+                  <Info label={t("Channel")} value={detail.channel} />
+                  <Info
+                    label={t("Created")}
+                    value={
+                      detail.createdAt
+                        ? fullDate(detail.createdAt)
+                        : detail.createdAtPath
+                    }
+                  />
+                  <Info label={t("Status")} value={t(detail.status)} />
+                  <Info
+                    label={t("Latest")}
+                    value={detail.isLatest ? t("Да") : t("Нет")}
+                  />
+                  <Info
+                    label={t("Rollback")}
+                    value={detail.isRollbackActive ? t("Активен") : t("Нет")}
+                  />
+                  <Info
+                    label={t("Доставка")}
+                    value={
+                      detail.isIgnoredByRollback
+                        ? t("Ignored by rollback")
+                        : detail.deliveryMode === "manual-postpone"
+                          ? t("Download on postpone")
+                          : detail.deliveryMode === "background"
+                            ? t("Background")
+                            : t("Manual")
+                    }
+                  />
+                  <Info
+                    label={t("Guard")}
+                    value={detail.hasGuard ? t("Yes") : t("None")}
+                  />
+                  <Info
+                    label={t("Policy")}
+                    value={`v${detail.policyVersion} · ${detail.policyEditable ? t("draft") : t("published")}`}
+                  />
+                  <Info
+                    label={t("Assets")}
+                    value={String(detail.assetsCount)}
+                  />
+                  <Info
+                    label={t("Update ID")}
+                    value={detail.updateId}
+                    className="md:col-span-2 lg:col-span-2"
+                  />
+                  <Info
+                    label={t("Комментарий")}
+                    value={detail.comment || "-"}
+                    className="md:col-span-2 lg:col-span-2"
+                  />
+                  <Info
+                    label={t("Активный update ID")}
+                    value={channelState.activeUpdateId || "-"}
+                    className="md:col-span-2 lg:col-span-2"
+                  />
+                </Card>
+                <Card className="gap-3 p-5 shadow-none">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="text-sm">{t("JSON файл")}</label>
+                    <NativeSelect
+                      value={selectedFile}
+                      onChange={(event) =>
+                        setSelectedFile(event.target.value as EditableFile)
+                      }
+                      aria-label={t("Выбор JSON файла")}
+                      className="rounded-md border border-input bg-background px-2 py-2 text-sm "
+                    >
+                      <option value="update-info.json">update-info.json</option>
+                      <option value="update-meta.json">update-meta.json</option>
+                      <option value="metadata.json">metadata.json</option>
+                      <option value="channel-latest.json">
+                        channel latest.json
+                      </option>
+                    </NativeSelect>
+                    {canWrite && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        type="button"
+                        onClick={handleSaveJson}
+                        disabled={
+                          saving ||
+                          channelLatestLocked ||
+                          updateMetaDistributionLocked
+                        }
+                      >
+                        {t("Сохранить JSON")}
+                      </Button>
+                    )}
+                  </div>
+                  {channelLatestLocked ? (
+                    <p className="mt-2 text-xs text-orange-700 dark:text-orange-300">
+                      {t(
+                        "Редактирование channel latest.json заблокировано: активен rollback или глобальный аварийный выключатель.",
+                      )}
+                    </p>
+                  ) : null}
+                  {updateMetaDistributionLocked ? (
+                    <p className="mt-2 text-xs text-red-700 dark:text-red-300">
+                      {t(
+                        "Активация через update-meta.json недоступна при глобальной блокировке. Деактивация с isActive=false остаётся доступна.",
+                      )}
+                    </p>
+                  ) : null}
+                  <Textarea
+                    value={editorValue}
+                    readOnly={!canWrite}
+                    onChange={(event) => setEditorValue(event.target.value)}
+                    aria-label={t("Редактор JSON")}
+                    className="mt-3 h-120 w-full rounded-md border border-border bg-muted/30 p-3 font-mono text-xs outline-none ring-blue-500 focus:ring-2 "
+                    spellCheck={false}
+                  />
+                </Card>
+                {canWrite && canDelete ? (
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/35 bg-destructive/5 p-4">
+                    <p className="text-sm text-foreground">
+                      {t("Delete this release and its files from storage.")}
+                    </p>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      type="button"
+                      onClick={handleDelete}
+                      disabled={saving}
+                    >
+                      <Trash2 aria-hidden="true" />
+                      {t("Удалить апдейт")}
+                    </Button>
+                  </div>
+                ) : null}
+              </TabsContent>
+            </Tabs>
           </>
         ) : null}
       </div>
@@ -584,7 +696,7 @@ function Info({
   className,
 }: {
   label: string;
-  value: string;
+  value: React.ReactNode;
   className?: string;
 }) {
   return (

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
+import { clientPackage } from "./ota-client-package.mjs";
 
 const extensions = ["tsx", "jsx", "ts", "js"];
 const suffixes = ["", ".android", ".ios", ".native", ".web"];
@@ -84,16 +85,16 @@ export function patchOtaRootHook(text, filename, appRoot) {
   const newline = text.includes("\r\n") ? "\r\n" : "\n";
   const clientPath = path.join(appRoot, "ota-client");
   const imports = source.statements.filter(ts.isImportDeclaration);
-  const clientImports = imports.filter(
-    (node) =>
-      ts.isStringLiteral(node.moduleSpecifier) &&
-      node.moduleSpecifier.text.startsWith(".") &&
-      ["", "/index", "/index.js", "/index.ts"].some(
-        (suffix) =>
-          path.resolve(path.dirname(filename), node.moduleSpecifier.text) ===
-          clientPath + suffix,
-      ),
-  );
+  const clientImports = imports.filter((node) => {
+    if (!ts.isStringLiteral(node.moduleSpecifier)) return false;
+    const specifier = node.moduleSpecifier.text;
+    if (specifier === clientPackage) return true;
+    if (!specifier.startsWith(".")) return false;
+    const resolved = path.resolve(path.dirname(filename), specifier);
+    return ["", "/index", "/index.js", "/index.ts"].some(
+      (suffix) => resolved === clientPath + suffix,
+    );
+  });
   const binding = (nodes, name) =>
     nodes
       .flatMap((node) =>
@@ -116,15 +117,26 @@ export function patchOtaRootHook(text, filename, appRoot) {
     )
   )
     fail(
-      "use a relative import to ota-client so existing configuration can be preserved",
+      "use an import from expo-updates-server-client or the relative ota-client path so existing configuration can be preserved",
     );
-  const hookName = binding(clientImports, "useOtaUpdates");
-  const gateName = binding(clientImports, "OtaUpdateGate");
+  const namespaces = clientImports.flatMap(({ importClause }) =>
+    !importClause?.isTypeOnly && importClause?.namedBindings &&
+    ts.isNamespaceImport(importClause.namedBindings)
+      ? [importClause.namedBindings.name.text]
+      : [],
+  );
+  const otaBindings = (member) => new Set([
+    ...clientImports.map((node) => binding([node], member)).filter(Boolean),
+    ...namespaces.map((name) => `${name}.${member}`),
+  ]);
+  const hookNames = otaBindings("useOtaUpdates");
+  const gateNames = otaBindings("OtaUpdateGate");
   const createName = binding(
     imports.filter((node) => node.moduleSpecifier.text === "react"),
     "createElement",
   );
-  const existingName = binding(clientImports, "OtaUpdates");
+  const componentNames = otaBindings("OtaUpdates");
+  const existingName = componentNames.values().next().value;
   const identifiers = new Set();
   const gather = (node) => {
     if (ts.isIdentifier(node)) identifiers.add(node.text);
@@ -135,7 +147,7 @@ export function patchOtaRootHook(text, filename, appRoot) {
   if (!existingName)
     for (let i = 2; identifiers.has(name); i++) name = `OtaUpdates${i}`;
   const watched = new Set(
-    [hookName, gateName, createName, existingName].filter(Boolean),
+    [...namespaces, ...hookNames, ...gateNames, ...componentNames, createName].filter(Boolean),
   );
   const checkBinding = (node) => {
     if (!node) return;
@@ -159,8 +171,7 @@ export function patchOtaRootHook(text, filename, appRoot) {
     if (ts.isReturnStatement(node)) returns.push(node);
     if (
       ts.isCallExpression(node) &&
-      ts.isIdentifier(node.expression) &&
-      node.expression.text === hookName
+      hookNames.has(node.expression.getText(source))
     ) {
       if (hook) fail("multiple update hooks in the root");
       hook = node;
@@ -225,7 +236,7 @@ export function patchOtaRootHook(text, filename, appRoot) {
     if (!node) return false;
     if (
       (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) &&
-      tagName(node) === existingName
+      componentNames.has(tagName(node))
     )
       return true;
     if (ts.isJsxElement(node) || ts.isJsxFragment(node))
@@ -237,12 +248,12 @@ export function patchOtaRootHook(text, filename, appRoot) {
     if (!node) return false;
     if (
       (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) &&
-      tagName(node) === existingName
+      componentNames.has(tagName(node))
     )
       return true;
     return ts.forEachChild(node, containsComponent) || false;
   };
-  const obsolete = new Set([hookName, gateName, createName].filter(Boolean));
+  const obsolete = new Set([...hookNames, ...gateNames, createName].filter(Boolean));
   const expressions = ts.isBlock(component.body)
     ? returns.map((node) => ({ node, expression: node.expression }))
     : [{ expression: component.body }];
@@ -266,7 +277,7 @@ export function patchOtaRootHook(text, filename, appRoot) {
       ts.isCallExpression(child) &&
       ts.isIdentifier(child.expression) &&
       child.expression.text === createName &&
-      child.arguments[0]?.getText(source) === gateName
+      gateNames.has(child.arguments[0]?.getText(source))
     ) {
       const settings = child.arguments[1];
       if (
@@ -285,7 +296,7 @@ export function patchOtaRootHook(text, filename, appRoot) {
     } else if (
       child &&
       (ts.isJsxElement(child) || ts.isJsxSelfClosingElement(child)) &&
-      tagName(child) === gateName
+      gateNames.has(tagName(child))
     ) {
       const opening = child.openingElement || child;
       const attrs = opening.attributes.properties;
@@ -335,24 +346,20 @@ export function patchOtaRootHook(text, filename, appRoot) {
     };
     inspectReferences(component.body);
   }
+  const migrateImportsOnly = !edits.length;
   for (const node of clientImports) {
-    if (node.moduleSpecifier.text.endsWith("/index.js")) {
+    if (node.moduleSpecifier.text !== clientPackage) {
       const specifier = node.moduleSpecifier;
       const quote = text[specifier.getStart(source)];
       edits.push({
         start: specifier.getStart(source),
         end: specifier.end,
-        content: `${quote}${specifier.text.slice(0, -"/index.js".length)}${quote}`,
+        content: `${quote}${clientPackage}${quote}`,
       });
     }
   }
   if (!edits.length) return text;
   if (!existingName) {
-    let relative = path
-      .relative(path.dirname(filename), clientPath)
-      .split(path.sep)
-      .join("/");
-    if (!relative.startsWith(".")) relative = `./${relative}`;
     let at =
       imports.at(-1)?.end ??
       source.statements[0]?.getStart(source) ??
@@ -366,11 +373,12 @@ export function patchOtaRootHook(text, filename, appRoot) {
     edits.push({
       start: at,
       end: at,
-      content: `${newline}import { ${specifier} } from '${relative}';${newline}`,
+      content: `${newline}import { ${specifier} } from '${clientPackage}';${newline}`,
     });
   }
   for (const edit of edits.sort((a, b) => b.start - a.start))
     text = text.slice(0, edit.start) + edit.content + text.slice(edit.end);
+  if (migrateImportsOnly) return text;
   // Drop only obsolete imports which no longer have references after migration.
   const updated = ts.createSourceFile(
     filename,
@@ -443,6 +451,44 @@ function formatRoot(text, filename, newline) {
   }
 }
 
+// Expo's blank template imports App and registers it directly in index.js.
+function registersDefaultApp(filename) {
+  const source = ts.createSourceFile(
+    filename,
+    fs.readFileSync(filename, "utf8"),
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  if (source.parseDiagnostics.length || source.statements.length !== 3)
+    return false;
+  const imports = source.statements.filter(ts.isImportDeclaration);
+  const registration = imports.find(
+    (node) => node.moduleSpecifier.text === "expo",
+  )?.importClause?.namedBindings;
+  const app = imports.find((node) => node.moduleSpecifier.text === "./App")
+    ?.importClause?.name;
+  if (!app || !registration || !ts.isNamedImports(registration)) return false;
+  const register = registration.elements.find(
+    (element) =>
+      (element.propertyName ?? element.name).text === "registerRootComponent",
+  );
+  const last = source.statements[2];
+  if (
+    !register ||
+    !ts.isExpressionStatement(last) ||
+    !ts.isCallExpression(last.expression)
+  )
+    return false;
+  const call = last.expression;
+  return (
+    ts.isIdentifier(call.expression) &&
+    call.expression.text === register.name.text &&
+    call.arguments.length === 1 &&
+    ts.isIdentifier(call.arguments[0]) &&
+    call.arguments[0].text === app.text
+  );
+}
+
 export function planOtaRootHook({ appRoot, originalEntry }) {
   const candidates = (base) =>
     suffixes
@@ -459,8 +505,20 @@ export function planOtaRootHook({ appRoot, originalEntry }) {
         : "app/_layout",
     );
   } else if (
+    /^(?:\.\/)?index(?:\.[jt]sx?)?$/.test(originalEntry) ||
+    originalEntry === "__platform_default__"
+  ) {
+    const entries = candidates("index");
+    if (
+      entries.length &&
+      entries.every((entry) => registersDefaultApp(path.join(appRoot, entry)))
+    ) {
+      roots = candidates("App");
+    } else if (!entries.length && originalEntry === "__platform_default__") {
+      roots = candidates("App");
+    }
+  } else if (
     [
-      "__platform_default__",
       "__app_fallback__",
       "node_modules/expo/AppEntry.js",
       "expo/AppEntry",
@@ -474,7 +532,7 @@ export function planOtaRootHook({ appRoot, originalEntry }) {
     return {
       files: [],
       warnings: [
-        "The OTA identity/telemetry bootstrap is configured, but no safely identifiable root component was found. Render <OtaUpdates /> from ota-client beside navigation in your main layout to enable update orchestration.",
+        "The OTA identity/telemetry bootstrap is configured, but no safely identifiable root component was found. Render <OtaUpdates /> from expo-updates-server-client beside navigation in your main layout to enable update orchestration.",
       ],
     };
   return {

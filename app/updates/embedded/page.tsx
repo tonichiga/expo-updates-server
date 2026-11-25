@@ -1,9 +1,14 @@
 "use client";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useConfirmAction } from "@/components/admin/confirm-action";
 import type { TranslationMessage } from "@/src/client/i18n/messages";
 import { useI18n } from "@/src/client/i18n/provider";
 
+import { AdminRoleContext } from "@/components/admin/admin-role";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { PlatformBadge, ChannelBadge } from "@/components/admin/release-badges";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -19,9 +24,12 @@ import {
   getEmbeddedUpdates,
 } from "@/src/client/admin-api";
 import { EmbeddedUpdateItem } from "@/src/client/admin-types";
-import { useCallback, useEffect, useState } from "react";
+import { useContext, useCallback, useEffect, useState } from "react";
 
 export default function EmbeddedUpdatesPage() {
+  const canWrite = useContext(AdminRoleContext) !== "viewer";
+  const [query, setQuery] = useState("");
+  const confirmAction = useConfirmAction();
   const { t, formatLocale } = useI18n();
   const [items, setItems] = useState<EmbeddedUpdateItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,8 +59,10 @@ export default function EmbeddedUpdatesPage() {
   }, [loadItems]);
 
   const handleDelete = async (embeddedUpdateId: string) => {
-    const confirmed = window.confirm(
+    const confirmed = await confirmAction(
+      t("Удалить"),
       t("Удалить запись embedded update {0}?", [embeddedUpdateId]),
+      true,
     );
     if (!confirmed) {
       return;
@@ -79,6 +89,13 @@ export default function EmbeddedUpdatesPage() {
     }
   };
 
+  const search = query.trim().toLowerCase();
+  const visible = items.filter((item) =>
+    [item.embeddedUpdateId, item.appVersion, item.platform, item.channel].some(
+      (field) => field?.toLowerCase().includes(search),
+    ),
+  );
+
   return (
     <div className="mx-auto max-w-[1600px] space-y-6 p-4 md:p-8">
       <div className="space-y-6">
@@ -88,29 +105,42 @@ export default function EmbeddedUpdatesPage() {
               {t("Embedded builds")}
             </h1>
             <p className="text-sm text-muted-foreground">
-              {t(
-                "Встроенные версии приложения и регистрация нативных сборок.",
-              )}
+              {t("Встроенные версии приложения и регистрация нативных сборок.")}
             </p>
           </div>
-          <Badge variant="secondary" className="px-3 py-1">
+          <Badge variant="info" className="px-3 py-1">
             {t("Builds: {0}", [items.length])}
           </Badge>
         </header>
 
         {error ? (
-          <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
-            {t(error)}
-          </div>
+          <Alert variant="destructive">
+            <AlertDescription>{t(error)}</AlertDescription>
+          </Alert>
         ) : null}
 
         {success ? (
-          <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300">
-            {t(success)}
-          </div>
+          <Alert role="status">
+            <AlertDescription>{t(success)}</AlertDescription>
+          </Alert>
         ) : null}
 
         <Card className="gap-0 overflow-hidden py-0 shadow-none">
+          <div className="flex flex-wrap items-center gap-2 border-b p-4">
+            <Input
+              type="search"
+              className="max-w-md"
+              placeholder={t("Search embedded builds")}
+              aria-label={t("Search embedded builds")}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+            {query && (
+              <Button variant="ghost" onClick={() => setQuery("")}>
+                {t("Сбросить")}
+              </Button>
+            )}
+          </div>
           <div className="overflow-x-auto">
             <Table className="min-w-full text-sm">
               <TableHeader className="bg-muted/40">
@@ -147,7 +177,7 @@ export default function EmbeddedUpdatesPage() {
                   </TableRow>
                 ) : null}
 
-                {!loading && items.length === 0 ? (
+                {!loading && visible.length === 0 ? (
                   <TableRow>
                     <TableCell
                       className="h-36 px-3 py-4 text-center text-muted-foreground"
@@ -159,7 +189,7 @@ export default function EmbeddedUpdatesPage() {
                 ) : null}
 
                 {!loading
-                  ? items.map((item) => (
+                  ? visible.map((item) => (
                       <TableRow
                         key={item.embeddedUpdateId}
                         className="border-t border-border "
@@ -173,10 +203,10 @@ export default function EmbeddedUpdatesPage() {
                           {item.appVersion || "—"}
                         </TableCell>
                         <TableCell className="px-4 py-3">
-                          {item.platform}
+                          <PlatformBadge platform={item.platform} />
                         </TableCell>
                         <TableCell className="px-4 py-3">
-                          <Badge variant="outline">{item.channel}</Badge>
+                          <ChannelBadge channel={item.channel} />
                         </TableCell>
                         <TableCell className="px-4 py-3 font-mono text-xs">
                           <span
@@ -187,19 +217,23 @@ export default function EmbeddedUpdatesPage() {
                           </span>
                         </TableCell>
                         <TableCell className="px-4 py-3">
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            type="button"
-                            onClick={() =>
-                              handleDelete(item.embeddedUpdateId)
-                            }
-                            disabled={deletingId === item.embeddedUpdateId}
-                          >
-                            {deletingId === item.embeddedUpdateId
-                              ? t("Удаление...")
-                              : t("Удалить")}
-                          </Button>
+                          {canWrite ? (
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              type="button"
+                              onClick={() =>
+                                handleDelete(item.embeddedUpdateId)
+                              }
+                              disabled={deletingId === item.embeddedUpdateId}
+                            >
+                              {deletingId === item.embeddedUpdateId
+                                ? t("Удаление...")
+                                : t("Удалить")}
+                            </Button>
+                          ) : (
+                            t("Read only")
+                          )}
                         </TableCell>
                       </TableRow>
                     ))

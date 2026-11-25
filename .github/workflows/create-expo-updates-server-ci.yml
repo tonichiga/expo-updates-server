@@ -7,8 +7,12 @@ on:
       - ".github/workflows/publish-create-expo-updates-server.yml"
       - ".gitignore"
       - "app/**"
+      - "components/**"
+      - "docker/**"
       - "docs/**"
-      - "packages/create-expo-updates-server/**"
+      - "hooks/**"
+      - "lib/**"
+      - "packages/**"
       - "public/**"
       - "scripts/**"
       - "src/**"
@@ -43,11 +47,23 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Test the OTA client and configurator
+        run: npm test
+
       - name: Build and test installer
         run: npm run installer:check
 
-      - name: Test packed initializer and generated lockfile
-        run: npm run installer:pack-smoke
+      - name: Test packed initializer, generated lockfile and Docker startup
+        run: npm run installer:pack-smoke -- --docker
+
+      - name: Install the browser for the release console tests
+        run: npx playwright install --with-deps chromium
+
+      - name: Verify database upgrades, signed OTA delivery and the release console
+        run: |
+          minio_image=$(docker image ls --filter 'reference=ota-smoke-*-minio:latest' --format '{{.ID}}')
+          docker image inspect "$minio_image" > /dev/null
+          OTA_E2E_MINIO_IMAGE="$minio_image" npm run test:e2e
 
       - name: Build documentation
         run: npm run docs:build
