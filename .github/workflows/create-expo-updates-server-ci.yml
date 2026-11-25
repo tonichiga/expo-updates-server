@@ -57,7 +57,10 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Exercise signed OTA delivery and the release console
-        run: npm run test:e2e
+        run: |
+          minio_image=$(docker image ls --filter 'reference=ota-smoke-*-minio:latest' --format '{{.ID}}')
+          docker image inspect "$minio_image" > /dev/null
+          OTA_E2E_MINIO_IMAGE="$minio_image" npm run test:e2e
 
       - name: Build documentation
         run: npm run docs:build
