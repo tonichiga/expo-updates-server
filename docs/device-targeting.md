@@ -50,6 +50,21 @@ Official API references: [Expo Application](https://docs.expo.dev/versions/v58.0
 [Expo SecureStore](https://docs.expo.dev/versions/v58.0.0/sdk/securestore/),
 [Expo extra parameters](https://docs.expo.dev/versions/v58.0.0/sdk/updates/#updatessetextraparamasynckey-value).
 
+Show the first 12 characters of the SDK Device ID in app settings.
+
+```tsx
+import { Text } from "react-native";
+import { useOtaUpdates } from "expo-updates-server-client";
+
+export function SettingsDeviceId() {
+  const { deviceId } = useOtaUpdates();
+  if (!deviceId) return null;
+  return <Text selectable>Device ID · {deviceId.slice(0, 12)}</Text>;
+}
+```
+
+After a heartbeat, search for this prefix in **Installations → Registry**, open the matching installation, and copy the full Device ID into the release audience. If several devices match, verify the platform and installation details. Apply `docs/migrations/2026-11-25-device-id-search.sql` after the device targeting migration for existing databases.
+
 ## Client initialization
 
 Generated entry calls `start()` automatically, persists installation identity and sets

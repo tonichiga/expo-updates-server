@@ -14,7 +14,7 @@ panel, device targeting and installation analytics.
 Create a server project:
 
 ```bash
-npx create-expo-updates-server@0.6.1 my-server
+npx create-expo-updates-server@0.6.2 my-server
 cd my-server
 ```
 

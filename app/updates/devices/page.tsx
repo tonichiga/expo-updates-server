@@ -150,15 +150,15 @@ export default function DevicesPage() {
                 />
                 <div className="grid gap-2">
                   <Label htmlFor="installation-search">
-                    {t("Installation ID")}
+                    {t("Device ID / Installation ID")}
                   </Label>
                   <Input
                     id="installation-search"
                     placeholder={t("ID или часть ID")}
                     value={filters.search}
-                    maxLength={36}
+                    maxLength={64}
                     pattern="[a-fA-F0-9\-]*"
-                    title={t("Часть UUID: цифры, буквы a–f и дефисы")}
+                    title={t("Enter a Device ID prefix or part of an Installation ID")}
                     onChange={(e) => update("search", e.target.value)}
                     className="bg-background/40"
                   />

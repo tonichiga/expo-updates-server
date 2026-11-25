@@ -24,6 +24,21 @@
 
 Офіційні довідники API: [Expo Application](https://docs.expo.dev/versions/v58.0.0/sdk/application/), [Expo SecureStore](https://docs.expo.dev/versions/v58.0.0/sdk/securestore/), [додаткові параметри Expo](https://docs.expo.dev/versions/v58.0.0/sdk/updates/#updatessetextraparamasynckey-value).
 
+У налаштуваннях застосунку можна показати перші 12 символів Device ID із SDK.
+
+```tsx
+import { Text } from "react-native";
+import { useOtaUpdates } from "expo-updates-server-client";
+
+export function SettingsDeviceId() {
+  const { deviceId } = useOtaUpdates();
+  if (!deviceId) return null;
+  return <Text selectable>Device ID · {deviceId.slice(0, 12)}</Text>;
+}
+```
+
+Після heartbeat введіть цей префікс у розділі **Встановлення → Реєстр**, відкрийте потрібне встановлення й скопіюйте повний ID пристрою до аудиторії релізу. Якщо є кілька збігів, звірте платформу та відомості про встановлення. Для наявної БД застосуйте `docs/migrations/2026-11-25-device-id-search.sql` після міграції адресної доставки.
+
 ## Ініціалізація клієнта {#client-initialization}
 
 Згенерована точка входу автоматично викликає `start()`, зберігає ідентифікатор встановлення й задає `installation_id` / `device_id` через `Updates.setExtraParamAsync`. Сигнал активності додає необов’язковий `deviceId`. Надійна черга та монотонна послідовність для кожного встановлення не змінюються. Недоступний ID пристрою не зупиняє телеметрію встановлень; доставка за пристроями при цьому закрита. Після тимчасового збою Keychain читання ID на iOS повторюється без заміни початкового значення.

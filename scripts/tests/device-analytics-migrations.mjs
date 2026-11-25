@@ -24,6 +24,8 @@ assert.ok(schema.includes(favoritesMigration.trim()), 'Canonical favorites SQL m
 assert.ok(schema.includes(historyMigration.trim()), 'Canonical public distribution SQL must match migration');
 assert.ok(schema.includes(targetingMigration.trim()), 'Canonical targeting SQL must match migration');
 assert.ok(schema.includes(activationMigration.trim()), 'Canonical activation SQL must match migration');
+const searchMigration = readFileSync(new URL('../../docs/migrations/2026-11-25-device-id-search.sql', import.meta.url), 'utf8');
+assert.ok(schema.includes(searchMigration.trim()), 'Canonical Device ID search SQL must match migration');
 const marker = '-- Daily device analytics (2026-10-22).';
 assert.ok(schema.includes(marker), 'Canonical schema must contain the analytics migration marker');
 assert.ok(schema.split(marker)[1].trimStart().startsWith(migration.trim()), 'Canonical analytics SQL must match the standalone migration');
@@ -67,6 +69,8 @@ try {
   await pool.query(targetingMigration);
   await pool.query(activationMigration);
   await pool.query(activationMigration);
+  await pool.query(searchMigration);
+  await pool.query(searchMigration);
   await pool.query(favoritesMigration);
   await pool.query(historyMigration);
   await pool.query(historyMigration);

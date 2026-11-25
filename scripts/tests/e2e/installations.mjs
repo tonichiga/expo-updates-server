@@ -7,6 +7,7 @@ export async function exerciseInstallations(page) {
   const origin = new URL(page.url()).origin;
   const runtime = "browser-installations";
   const id = randomUUID();
+  const deviceId = "123456789abc" + "f".repeat(52);
   for (const [installationId, channel, nativeBuild] of [
     [id, "analytics-ios", "12"],
     [randomUUID(), "analytics-ios", "13"],
@@ -15,6 +16,7 @@ export async function exerciseInstallations(page) {
     const response = await page.request.post(origin + "/api/device-heartbeat", {
       data: {
         installationId,
+        ...(installationId === id ? { deviceId } : {}),
         eventId: randomUUID(),
         sequence: 1,
         observedAt: new Date().toISOString(),
@@ -84,14 +86,18 @@ export async function exerciseInstallations(page) {
   const detailsButton = page.getByRole("button", {
     name: "Installation details " + id,
   });
+  const search = page.getByLabel("Device ID / Installation ID", { exact: true });
+  await search.fill(deviceId.slice(0, 12));
+  await expect(page.getByRole("table", { name: "Installation registry" }).getByRole("row")).toHaveCount(2);
   await detailsButton.click();
   const sheet = page.getByRole("dialog", { name: "Installation details" });
   await expect(sheet.getByText(id, { exact: true })).toBeVisible();
+  await expect(sheet.getByText(deviceId, { exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(sheet).toBeHidden();
   await expect(detailsButton).toBeFocused();
 
-  await page.getByLabel("Installation ID", { exact: true }).fill(randomUUID());
+  await search.fill(randomUUID());
   await expect(
     page.getByText("No installations found", { exact: true }),
   ).toBeVisible();
