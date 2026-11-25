@@ -11,6 +11,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  BookmarkTarget,
+  FavoriteList,
+  useFavoriteTargets,
+} from "@/src/client/devices/favorite-targets";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -110,6 +115,11 @@ export default function UpdateAudienceEditor({
       selectedDevices.join(",") !== audience.audience_device_ids.join(",") ||
       selectedInstallations.join(",") !==
         audience.audience_installation_ids.join(","));
+  const favorites = useFavoriteTargets(
+    platform,
+    mode === "devices" && audience !== null,
+    revision,
+  );
   const seen = new Set<string>();
   const options = devices
     .filter((d) => {
@@ -224,6 +234,23 @@ export default function UpdateAudienceEditor({
             </fieldset>
             {mode === "devices" && (
               <div className="space-y-4">
+                <FavoriteList
+                  favorites={favorites.favorites}
+                  error={favorites.error}
+                  platform={platform}
+                  canWrite={canWrite}
+                  busy={busy}
+                  selectedDevices={selectedDevices}
+                  selectedInstallations={selectedInstallations}
+                  onChanged={favorites.refresh}
+                  onAdd={(kind, id) => {
+                    const set =
+                      kind === "device" ? setDeviceIds : setInstallationIds;
+                    set((current) =>
+                      [...new Set([...splitIds(current), id])].join("\n"),
+                    );
+                  }}
+                />
                 <Input
                   aria-label={t("Поиск адресата")}
                   placeholder={t("Имя, ID, runtime или канал")}
@@ -254,34 +281,46 @@ export default function UpdateAudienceEditor({
                     const set = d.device_id ? setDeviceIds : setInstallationIds;
                     const kind = d.device_id ? t("Устройство") : t("Установка");
                     return (
-                      <label
-                        key={id}
-                        className="flex cursor-pointer items-start gap-3 p-3 text-sm"
+                      <div
+                        key={d.installation_id}
+                        className="flex items-start gap-2 p-3"
                       >
-                        <Checkbox
-                          aria-label={d.name || `${kind} ${id}`}
-                          className="mt-1"
-                          disabled={busy || !canWrite}
-                          checked={selected.includes(id)}
-                          onCheckedChange={(checked) =>
-                            set(
-                              (checked === true
-                                ? [...selected, id]
-                                : selected.filter((x) => x !== id)
-                              ).join("\n"),
-                            )
-                          }
-                        />
-                        <span className="min-w-0">
-                          <span className="font-medium">
-                            {d.name || `${kind} ${id.slice(0, 12)}…`}
+                        <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3 text-sm">
+                          <Checkbox
+                            aria-label={d.name || `${kind} ${id}`}
+                            className="mt-1"
+                            disabled={busy || !canWrite}
+                            checked={selected.includes(id)}
+                            onCheckedChange={(checked) =>
+                              set(
+                                (checked === true
+                                  ? [...selected, id]
+                                  : selected.filter((x) => x !== id)
+                                ).join("\n"),
+                              )
+                            }
+                          />
+                          <span className="min-w-0">
+                            <span className="font-medium">
+                              {d.name || `${kind} ${id.slice(0, 12)}…`}
+                            </span>
+                            <span className="block text-xs text-muted-foreground break-all">
+                              {d.runtime_version} · {d.channel} ·{" "}
+                              {d.installation_id}
+                            </span>
                           </span>
-                          <span className="block text-xs text-muted-foreground break-all">
-                            {d.runtime_version} · {d.channel} ·{" "}
-                            {d.installation_id}
-                          </span>
-                        </span>
-                      </label>
+                        </label>
+                        {canWrite && (
+                          <BookmarkTarget
+                            platform={platform}
+                            deviceId={d.device_id}
+                            installationId={d.installation_id}
+                            displayName={d.name}
+                            favorites={favorites.favorites ?? []}
+                            onChanged={favorites.refresh}
+                          />
+                        )}
+                      </div>
                     );
                   })}
                   {loadingTargets && (

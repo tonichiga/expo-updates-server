@@ -29,20 +29,7 @@ export async function writeDatabaseRecords(pool, update, latest) {
           false, $5, $9, $10, $11,
           $12::jsonb
         )
-        ON CONFLICT (id) DO UPDATE SET
-          runtime_version = EXCLUDED.runtime_version,
-          channel = EXCLUDED.channel,
-          platform = EXCLUDED.platform,
-          created_at = EXCLUDED.created_at,
-          created_at_path = EXCLUDED.created_at_path,
-          storage_bucket = EXCLUDED.storage_bucket,
-          storage_base_path = EXCLUDED.storage_base_path,
-          is_active = false,
-          disabled_at = EXCLUDED.disabled_at,
-          assets_count = EXCLUDED.assets_count,
-          launch_asset_path = EXCLUDED.launch_asset_path,
-          comment = EXCLUDED.comment,
-          manifest = EXCLUDED.manifest`,
+        ON CONFLICT (id) DO NOTHING`,
         [
           update.id,
           update.runtimeVersion,
@@ -58,23 +45,13 @@ export async function writeDatabaseRecords(pool, update, latest) {
           JSON.stringify(update),
         ],
       );
+      // Retrying a publication must never disable an activated artifact or
+      // move serving pointers. A new scope starts empty until activation.
       await client.query(
-        `INSERT INTO ota_update_channels (
-          runtime_version, channel, platform,
-          latest_update_id, latest_created_at, latest_created_at_path
-        ) VALUES ($1, $2, $3, $4, $5, $6)
-        ON CONFLICT (runtime_version, channel, platform) DO UPDATE SET
-          latest_update_id = EXCLUDED.latest_update_id,
-          latest_created_at = EXCLUDED.latest_created_at,
-          latest_created_at_path = EXCLUDED.latest_created_at_path`,
-        [
-          latest.runtimeVersion,
-          latest.channel,
-          latest.platform,
-          latest.updateId,
-          latest.createdAt,
-          latest.createdAtPath,
-        ],
+        `INSERT INTO ota_update_channels (runtime_version, channel, platform)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (runtime_version, channel, platform) DO NOTHING`,
+        [latest.runtimeVersion, latest.channel, latest.platform],
       );
       await client.query("COMMIT");
     } catch (error) {

@@ -368,6 +368,20 @@ describe.each(["ios", "android"])(
       await press("Check again", app);
       expect(app.getSnapshot().blocked).toBe(false);
       expect(text()).toContain("Update available");
+      // Stopping a public replacement must not silently reinstate its store Guard.
+      await admin(scopes.store.replacement + "/deactivate", "POST", { disabled: true });
+      await check(app);
+      expect(app.getSnapshot().available).toBe(false);
+      expect(app.getSnapshot().blocked).toBe(false);
+      const { scopes: history } = await admin("/api/admin/distribution-history");
+      const stopped = history.find((s) => s.channel === scopes.store.channel && s.platform === platform);
+      expect(stopped.current).toBeNull();
+      await admin("/api/admin/distribution-history/restore", "POST", {
+        updateId: stopped.previous.updateId, expectedRevision: stopped.revision,
+      });
+      await check(app);
+      expect(text()).toContain("Open store");
+
     });
   },
 );

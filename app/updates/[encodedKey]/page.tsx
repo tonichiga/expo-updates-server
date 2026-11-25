@@ -1,4 +1,6 @@
 "use client";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useConfirmAction } from "@/components/admin/confirm-action";
 import type { TranslationMessage } from "@/src/client/i18n/messages";
 import { useI18n } from "@/src/client/i18n/provider";
@@ -353,27 +355,21 @@ export default function UpdateDetailsPage() {
         </header>
 
         {loading ? (
-          <div className="rounded-xl border border-border bg-card p-5 ">
-            {t("Загрузка...")}
-          </div>
+          <Skeleton className="h-16" role="status">
+            <span className="sr-only">{t("Загрузка...")}</span>
+          </Skeleton>
         ) : null}
 
         {error ? (
-          <div
-            role="alert"
-            className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
-          >
-            {t(error)}
-          </div>
+          <Alert variant="destructive">
+            <AlertDescription>{t(error)}</AlertDescription>
+          </Alert>
         ) : null}
 
         {success ? (
-          <div
-            role="status"
-            className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300"
-          >
-            {t(success)}
-          </div>
+          <Alert role="status">
+            <AlertDescription>{t(success)}</AlertDescription>
+          </Alert>
         ) : null}
 
         <DistributionControlBanner
@@ -385,33 +381,33 @@ export default function UpdateDetailsPage() {
         {!loading && detail ? (
           <>
             {channelState.rollbackActive ? (
-              <section className="rounded-xl border border-orange-300 bg-orange-50 p-4 dark:border-orange-700 dark:bg-orange-950/30">
-                <p className="text-sm font-medium text-orange-900 dark:text-orange-200">
+              <Alert role="status">
+                <AlertTitle>
                   {t("⚠️ Rollback активен в этом канале/платформе.")}
-                </p>
-                <p className="mt-1 text-xs text-orange-800 dark:text-orange-300">
+                </AlertTitle>
+                <AlertDescription>
                   {t("Сейчас раздаётся updateId: ")}
                   {channelState.activeUpdateId}
-                </p>
-                <p className="mt-1 text-xs text-orange-800 dark:text-orange-300">
+                </AlertDescription>
+                <AlertDescription>
                   {t(
                     "Новые апдейты автоматически игнорируются до выполнения Promote.",
                   )}
-                </p>
-              </section>
+                </AlertDescription>
+              </Alert>
             ) : null}
 
             {detail.isIgnoredByRollback ? (
-              <section className="rounded-xl border border-border bg-muted/30 p-4 ">
-                <p className="text-sm font-medium text-foreground">
+              <Alert role="status">
+                <AlertTitle>
                   {t("Этот апдейт сейчас не доставляется.")}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
+                </AlertTitle>
+                <AlertDescription>
                   {t(
                     "Причина: активен rollback, автодоставка новых апдейтов выключена.",
                   )}
-                </p>
-              </section>
+                </AlertDescription>
+              </Alert>
             ) : null}
 
             <Card className="gap-4 py-0 shadow-none">
@@ -524,7 +520,8 @@ export default function UpdateDetailsPage() {
                 className="data-[state=inactive]:hidden"
               >
                 <UpdatePolicyEditor
-                  key={`${encodedKey}-${detail.policyVersion}-${detail.policyPublishedAt || "draft"}`}
+                  key={`${encodedKey}-${detail.policyPublishedAt || "draft"}`}
+                  platform={detail.platform}
                   encodedKey={encodedKey}
                   onSaved={reload}
                 />

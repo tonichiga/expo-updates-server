@@ -2,6 +2,7 @@ import {
   AdminSessionResponse,
   DistributionControlResponse,
   DistributionControlState,
+  DistributionHistoryResponse,
   EmbeddedUpdatesListResponse,
   EmergencyRedirectInput,
   EmergencyRedirectItem,
@@ -32,6 +33,26 @@ async function parseJson<T>(response: Response): Promise<T> {
   }
 
   return data as T;
+}
+
+export async function getDistributionHistory(signal?: AbortSignal) {
+  const response = await fetch("/api/admin/distribution-history", {
+    cache: "no-store",
+    signal,
+  });
+  return parseJson<DistributionHistoryResponse>(response);
+}
+
+export async function restorePreviousRelease(
+  updateId: string,
+  expectedRevision: string,
+) {
+  const response = await fetch("/api/admin/distribution-history/restore", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ updateId, expectedRevision }),
+  });
+  return parseJson<{ ok: true }>(response);
 }
 
 export async function getDistributionControl() {
@@ -215,9 +236,7 @@ export async function getEmergencyRedirects() {
   return parseJson<EmergencyRedirectsListResponse>(response);
 }
 
-export async function createEmergencyRedirect(
-  input: EmergencyRedirectInput,
-) {
+export async function createEmergencyRedirect(input: EmergencyRedirectInput) {
   const response = await fetch("/api/admin/emergency-redirects", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

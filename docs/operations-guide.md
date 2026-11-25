@@ -384,14 +384,14 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
   -f docs/migrations/2026-10-22-device-analytics.sql \
   -f docs/migrations/2026-10-22-device-version-metadata.sql \
   -f docs/migrations/2026-10-22-device-targeting.sql \
-  -f docs/migrations/2026-10-22-device-targeting-activation.sql
+  -f docs/migrations/2026-10-22-device-targeting-activation.sql \
+  -f docs/migrations/2026-11-25-device-favorites.sql \
+  -f docs/migrations/2026-11-25-public-distribution-history.sql
 ```
 
 Fresh installations use only `schema.sql`, which includes these changes. Reapplying
 these migrations preserves collection start, installation records and release audiences.
-The final migration moves public-versus-targeted activation into an atomic database
-operation, allows deactivation cleanup during the global stop, and adds the separate
-`ota-force-update` catalog entry. Apply it before deploying the matching server.
+The activation migration adds the separate `ota-force-update` catalog entry. The next two migrations enable personal device favorites and record public activations. Existing scopes start with their observed public release. Where older configurations allowed several public releases to remain active, the history migration keeps the one preferred by the anonymous manifest selector.
 
 Rerun the stock app configurator to install the generated identity/telemetry client and
 root `useOtaUpdates`/`OtaUpdateGate` integration. Adding SecureStore or the other native

@@ -43,15 +43,14 @@ export async function seedPublication(
   }
   await db.query(
     `insert into ota_updates(update_id,build_id,runtime_version,channel,platform,created_at,
-    created_at_path,storage_bucket,storage_base_path,is_active,manifest,assets_count,launch_asset_path,comment)
-    values($1::uuid,$1::uuid,$2,$3,$4,clock_timestamp(),$1::uuid::text,'ota-fixtures',$5,$6,$7,1,'bundle.js',$8)`,
+    created_at_path,storage_bucket,storage_base_path,manifest,assets_count,launch_asset_path,comment)
+    values($1::uuid,$1::uuid,$2,$3,$4,clock_timestamp(),$1::uuid::text,'ota-fixtures',$5,$6,1,'bundle.js',$7)`,
     [
       id,
       runtime,
       channel,
       platform,
       prefix,
-      active,
       {
         runtimeVersion: runtime,
         launchAsset: assets[0],
@@ -62,11 +61,11 @@ export async function seedPublication(
     ],
   );
   await db.query(
-    `insert into ota_update_channels(runtime_version, channel, platform, latest_update_id, latest_created_at,latest_created_at_path)
-    values($1,$2,$3,$4::uuid,now(),$4::uuid::text) on conflict(runtime_version, channel, platform) do update
-    set latest_update_id=excluded.latest_update_id, latest_created_at=excluded.latest_created_at, latest_created_at_path=excluded.latest_created_at_path`,
-    [runtime, channel, platform, id],
+    `insert into ota_update_channels(runtime_version,channel,platform)
+     values($1,$2,$3) on conflict(runtime_version,channel,platform) do nothing`,
+    [runtime, channel, platform],
   );
+  if (active) await db.query("select * from ota_change_distribution($1,'activate')", [id]);
   return {
     id,
     path: "/api/admin/updates/" + Buffer.from(id).toString("base64url"),

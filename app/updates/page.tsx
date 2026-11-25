@@ -15,7 +15,19 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group";
+import DistributionHistory from "@/src/client/distribution-history";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { NativeSelect } from "@/components/ui/native-select";
 import {
   Table,
@@ -54,6 +66,8 @@ const sorts = [
 export default function UpdatesPage() {
   const { t } = useI18n();
   const { number, fullDate } = useFormatters();
+  const [historyRevision, setHistoryRevision] = useState(0);
+  const [distributionBlocked, setDistributionBlocked] = useState(true);
   const [draft, setDraft] = useState(emptyFilters);
   const [query, setQuery] = useState({
     ...emptyFilters,
@@ -99,6 +113,11 @@ export default function UpdatesPage() {
     setQuery(next);
   }
 
+  function refreshReleases() {
+    requestPage({ ...query });
+    setHistoryRevision((value) => value + 1);
+  }
+
   function apply(event: FormEvent) {
     event.preventDefault();
     requestPage({ ...query, ...draft, q: draft.q.trim(), page: 1 });
@@ -113,19 +132,24 @@ export default function UpdatesPage() {
     options: [string, string][],
   ) {
     return (
-      <NativeSelect
-        value={draft[key]}
-        aria-label={label}
-        className="max-w-48"
-        onChange={(e) => setDraft({ ...draft, [key]: e.target.value })}
+      <Select
+        value={"option:" + draft[key]}
+        onValueChange={(value) =>
+          setDraft((current) => ({ ...current, [key]: value.slice(7) }))
+        }
       >
-        <option value="">{label}</option>
-        {options.map(([value, title]) => (
-          <option key={value} value={value}>
-            {title}
-          </option>
-        ))}
-      </NativeSelect>
+        <SelectTrigger aria-label={label} className="max-w-48">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="option:">{label}</SelectItem>
+          {options.map(([value, title]) => (
+            <SelectItem key={value} value={"option:" + value}>
+              {title}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     );
   }
   const locked =
@@ -148,14 +172,19 @@ export default function UpdatesPage() {
           variant="outline"
           size="sm"
           disabled={loading}
-          onClick={() => requestPage({ ...query })}
+          onClick={refreshReleases}
         >
           <RefreshCw className={loading ? "animate-spin" : ""} />
           {t("Обновить")}
         </Button>
       </header>
 
-      <DistributionControl />
+      <DistributionControl onAvailabilityChange={setDistributionBlocked} />
+      <DistributionHistory
+        revision={historyRevision}
+        blocked={distributionBlocked}
+        onRestored={refreshReleases}
+      />
 
       {locked.length > 0 && (
         <div
@@ -225,19 +254,20 @@ export default function UpdatesPage() {
             </div>
           </div>
           <form onSubmit={apply} role="search" className="space-y-3">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
+            <InputGroup>
+              <InputGroupAddon>
+                <Search />
+              </InputGroupAddon>
+              <InputGroupInput
                 type="search"
                 aria-label={t("Search releases")}
                 placeholder={t(
                   "Search by comment, update ID, version or channel",
                 )}
-                className="pl-9"
                 value={draft.q}
                 onChange={(e) => setDraft({ ...draft, q: e.target.value })}
               />
-            </div>
+            </InputGroup>
             <div className="flex flex-wrap items-center gap-2">
               {filter("platform", t("Все платформы"), [
                 ["ios", "iOS"],

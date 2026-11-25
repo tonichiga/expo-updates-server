@@ -1,3 +1,4 @@
+import { seedPublication } from "./delivery.mjs";
 import { expect as playwrightExpect } from "@playwright/test";
 
 const expect = playwrightExpect.configure({ timeout: 30_000 });
@@ -8,20 +9,20 @@ export async function exerciseReleaseConsole(page, password) {
   await go("/updates");
   const search = page.getByRole("searchbox", { name: "Search releases" });
   await search.fill("Candidate");
-  await page
-    .getByRole("combobox", { name: "All platforms" })
-    .selectOption("ios");
-  await page
-    .getByRole("combobox", { name: "All channels" })
-    .selectOption("production");
+  await page.getByRole("combobox", { name: "All platforms" }).click();
+  await page.getByRole("option", { name: "iOS", exact: true }).click();
+  await page.getByRole("combobox", { name: "All channels" }).click();
+  await page.getByRole("option", { name: "production", exact: true }).click();
   await page.getByRole("button", { name: "Apply", exact: true }).click();
-  const release = page.getByRole("link", {
+  const release = page.getByRole("table").getByRole("link", {
     name: "Candidate release",
     exact: true,
   });
   await expect(release).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "Initial public build", exact: true }),
+    page
+      .getByRole("table")
+      .getByRole("link", { name: "Initial public build", exact: true }),
   ).toHaveCount(0);
   await search.fill("no such release");
   await page.getByRole("button", { name: "Apply", exact: true }).click();
@@ -34,7 +35,7 @@ export async function exerciseReleaseConsole(page, password) {
     .click();
   await search.fill("Initial public build");
   await page.getByRole("button", { name: "Apply", exact: true }).click();
-  const old = page.getByRole("link", {
+  const old = page.getByRole("table").getByRole("link", {
     name: "Initial public build",
     exact: true,
   });
@@ -99,5 +100,46 @@ export async function exerciseReleaseConsole(page, password) {
   }
   console.log(
     "PASS release filters, no matches/reset, rollback/promotion, policy/metadata navigation and viewer UI/API denial",
+  );
+}
+
+export async function exercisePublicRestore(page, { origin, db, storage }) {
+  const scope = { channel: "restore-browser", runtime: "8.0" };
+  const publish = (label) =>
+    seedPublication(db, storage, label, false, "ios", scope);
+  const setActive = async (release, active) => {
+    const response = await page.request.post(
+      origin + release.path + "/deactivate",
+      { data: { disabled: !active } },
+    );
+    expect(response.status()).toBe(200);
+  };
+  const previous = await publish("Stable patch");
+  await setActive(previous, true);
+  const latest = await publish("Replacement patch");
+  await setActive(latest, true);
+  await setActive(latest, false);
+  await page.goto(origin + "/updates");
+  const search = page.getByRole("textbox", { name: "Find a delivery scope" });
+  await search.fill(scope.channel);
+  const row = page.getByRole("region", {
+    name: "restore-browser / ios / 8.0",
+    exact: true,
+  });
+  await expect(row.getByText("No active release")).toBeVisible();
+  await expect(row.getByRole("link", { name: previous.comment })).toBeVisible();
+  const restore = row.getByRole("button", { name: "Restore", exact: true });
+  await restore.click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(row.getByText("No active release")).toBeVisible();
+  await restore.click();
+  await dialog
+    .getByRole("button", { name: "Restore release", exact: true })
+    .click();
+  await expect(row.getByRole("link", { name: latest.comment })).toBeVisible();
+  await expect(row.getByText("No active release")).toHaveCount(0);
+  console.log(
+    "PASS manual public restore, confirmation cancellation and refreshed release history",
   );
 }

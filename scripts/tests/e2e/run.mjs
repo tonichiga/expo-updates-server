@@ -105,6 +105,21 @@ try {
     "Object store startup",
   );
 
+  // Exercise fresh and upgrade paths in separate databases on this run's
+  // disposable PostgreSQL instance. Each migration test requires an empty DB.
+  for (const [database, script, ...args] of [
+    ["analytics_fresh", "device-analytics-migrations.mjs", "--fresh"],
+    ["analytics_upgrade", "device-analytics-migrations.mjs"],
+    ["public_history_upgrade", "public-distribution-history.mjs"],
+  ]) {
+    await db.query("CREATE DATABASE " + database);
+    const testUrl = new URL(DATABASE_URL);
+    testUrl.pathname = "/" + database;
+    execFileSync(process.execPath, [path.join(root, "scripts/tests", script), ...args], {
+      env: { ...process.env, OTA_TEST_DATABASE_URL: testUrl.href },
+      stdio: "inherit",
+    });
+  }
   const schema = await readFile(path.join(root, "docs/migrations/schema.sql"), "utf8");
   await db.query(schema);
   const old = await seedPublication(db, storage, "Initial public build", true);

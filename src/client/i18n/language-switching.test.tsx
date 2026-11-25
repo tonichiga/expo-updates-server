@@ -219,6 +219,8 @@ describe("language switching", () => {
     api.putUpdatePolicy.mockRejectedValue(
       new Error("Update policy is immutable after publication."),
     );
+    const background = container.querySelector<HTMLButtonElement>('#behavior-background')!;
+    await act(async () => background.click());
     await click("Зберегти політику");
     expect(container.textContent).toContain(
       "Політику оновлення не можна змінити після публікації.",

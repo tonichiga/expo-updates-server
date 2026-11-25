@@ -153,3 +153,26 @@ export type GuardActionsListResponse = {
   items: GuardActionItem[];
   canWrite: boolean;
 };
+
+export type DistributionHistoryRelease = {
+  updateId: string;
+  encodedKey: string;
+  appVersion: string | null;
+  comment: string | null;
+  createdAt: string;
+  activatedAt: string | null;
+};
+
+export type DistributionHistoryScope = {
+  runtimeVersion: string;
+  platform: string;
+  channel: string;
+  revision: string;
+  current: DistributionHistoryRelease | null;
+  previous: DistributionHistoryRelease | null;
+};
+
+export type DistributionHistoryResponse = {
+  canWrite: boolean;
+  scopes: DistributionHistoryScope[];
+};

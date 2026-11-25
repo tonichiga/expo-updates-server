@@ -6,7 +6,11 @@ import { AdminRoleContext } from "@/components/admin/admin-role";
 import UpdatesPage from "./page";
 import UpdateDetailsPage from "./[encodedKey]/page";
 
-const api = vi.hoisted(() => ({ getUpdates: vi.fn(), getUpdate: vi.fn() }));
+const api = vi.hoisted(() => ({
+  getDistributionHistory: vi.fn(),
+  getUpdates: vi.fn(),
+  getUpdate: vi.fn(),
+}));
 vi.mock("@/src/client/admin-api", () => api);
 vi.mock("next/navigation", () => ({
   useParams: () => ({ encodedKey: "draft" }),
@@ -55,6 +59,7 @@ beforeEach(() => {
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
+  api.getDistributionHistory.mockResolvedValue({ canWrite: true, scopes: [] });
   api.getUpdates.mockResolvedValue(result);
   api.getUpdate.mockResolvedValue(draft);
   vi.stubGlobal(
@@ -83,12 +88,13 @@ describe("release workflows", () => {
   it("applies filters to the API, retains the last history on error and resets empty results", async () => {
     await act(async () => root.render(<UpdatesPage />));
     expect(host.textContent).toContain(draft.comment);
-    const select = host.querySelector<HTMLSelectElement>(
-      'select[aria-label="All channels"]',
-    )!;
+    const search = host.querySelector<HTMLInputElement>("input[type=search]")!;
     await act(async () => {
-      select.value = "preview";
-      select.dispatchEvent(new Event("change", { bubbles: true }));
+      Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )!.set!.call(search, "First");
+      search.dispatchEvent(new Event("input", { bubbles: true }));
     });
     const form = host.querySelector("form")!;
     api.getUpdates.mockRejectedValueOnce(new Error("Temporary outage"));
@@ -98,7 +104,7 @@ describe("release workflows", () => {
       ),
     );
     expect(api.getUpdates).toHaveBeenLastCalledWith(
-      expect.objectContaining({ page: 1, channel: "preview" }),
+      expect.objectContaining({ page: 1, q: "First" }),
       expect.any(AbortSignal),
     );
     expect(host.querySelector("[role=alert]")?.textContent).toContain(
@@ -115,7 +121,7 @@ describe("release workflows", () => {
     )!;
     await act(async () => reset.click());
     expect(api.getUpdates).toHaveBeenLastCalledWith(
-      expect.objectContaining({ page: 1, channel: "" }),
+      expect.objectContaining({ page: 1, q: "" }),
       expect.any(AbortSignal),
     );
     expect(host.textContent).toContain(draft.comment);

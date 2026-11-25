@@ -264,6 +264,43 @@ export async function exerciseReleaseMatrix({
     });
   }
 
+  // Publication order differs from actual public activation history.
+  const historyChannel = "manual-restore";
+  const historyScope = async () => (await request("/api/admin/distribution-history")).scopes.find(
+    (s) => s.runtimeVersion === originalRuntime && s.channel === historyChannel && s.platform === "android",
+  );
+  const pub = (patch, options) => publish("android", originalRuntime, patch, { channel: historyChannel, ...options });
+  const publicA = await pub(1);
+  await request(publicA.path + "/deactivate", "POST", { disabled: true });
+  assert.equal((await historyScope()).previous, null);
+  await request(publicA.path + "/deactivate", "POST", { disabled: false });
+  const smoke = await pub(2, { targeted: true });
+  for (let patch = 3; patch <= 32; patch++) await pub(patch, { active: false });
+  assert.equal((await historyScope()).current.updateId, publicA.id);
+  const publicB = await pub(33);
+  for (const patch of [34, 35, 36]) await pub(patch, { active: false });
+  const live = await historyScope();
+  assert.equal(live.current.updateId, publicB.id);
+  assert.equal(live.previous.updateId, publicA.id);
+  const runningB = await expectRelease(publicB);
+  await request(publicB.path + "/deactivate", "POST", { disabled: true });
+  await expectNone("android", originalRuntime, { "expo-channel-name": historyChannel });
+  await expectNone("android", originalRuntime, { "expo-channel-name": historyChannel, ...running(runningB) });
+  const stopped = await historyScope();
+  assert.equal(stopped.current, null);
+  assert.equal(stopped.previous.updateId, publicA.id);
+  assert.notEqual(stopped.revision, live.revision);
+  const restore = (updateId, expectedRevision, status = 200) =>
+    request("/api/admin/distribution-history/restore", "POST", { updateId, expectedRevision }, status);
+  await restore(publicA.id, live.revision, 409);
+  await restore(smoke.id, stopped.revision, 409);
+  await restore(publicA.id, stopped.revision);
+  const restored = await historyScope();
+  assert.equal(restored.current.updateId, publicA.id);
+  assert.equal(restored.previous.updateId, publicB.id);
+  await expectRelease(publicA, running(runningB));
+  await restore(publicA.id, stopped.revision, 409);
+
   console.log(
     "PASS signed HTTP release matrix: both platform stacks, active/draft selection, scoped retired-build fallback, embedded floor, skipped versions, native runtime transition, normalized/empty/unknown channels and targeted channel isolation",
   );

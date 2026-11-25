@@ -1,3 +1,4 @@
+import { DistributionHistoryConflictError } from "@/src/server/lib/distribution-history";
 import { requireAdminAccess } from "@/src/server/lib/admin-api";
 import {
   decodeUpdateKey,
@@ -29,7 +30,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return NextResponse.json(
       { error: (error as Error).message || "Failed to deactivate update" },
       {
-        status: error instanceof OtaDistributionBlockedError ? 409 : 500,
+        status: error instanceof OtaDistributionBlockedError || error instanceof DistributionHistoryConflictError ? 409 : 500,
       },
     );
   }

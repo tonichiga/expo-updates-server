@@ -3,7 +3,9 @@ import { useFormatters } from "@/src/client/i18n/use-formatters";
 import { useI18n } from "@/src/client/i18n/provider";
 
 import { DeviceName } from "./device-name";
-import { useRef, useState } from "react";
+import { AdminRoleContext } from "@/components/admin/admin-role";
+import { BookmarkTarget, useFavoriteTargets } from "./favorite-targets";
+import { useContext, useRef, useState } from "react";
 import { Copy, Check, ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -86,6 +88,13 @@ export function Registry({
   const kindNames = useKindNames();
   const { number, fullDate, calendarDate } = useFormatters();
   const [selected, setSelected] = useState<DeviceInstallation | null>(null);
+  const role = useContext(AdminRoleContext);
+  const canBookmark = role === "admin" || role === "operator";
+  const personal = useFavoriteTargets(
+    selected?.platform ?? "",
+    !!selected && canBookmark,
+    0,
+  );
   return (
     <>
       <Card className="min-w-0 shadow-none">
@@ -259,6 +268,24 @@ export function Registry({
               )}
             </SheetDescription>
           </SheetHeader>
+          {selected && canBookmark && (
+            <div className="mx-4 space-y-2 sm:mx-6">
+              {personal.error && (
+                <p role="alert" className="text-sm text-destructive">
+                  {t(personal.error)}
+                </p>
+              )}
+              <BookmarkTarget
+                platform={selected.platform}
+                deviceId={selected.device_id ?? null}
+                installationId={selected.installation_id}
+                displayName={null}
+                showLabel
+                favorites={personal.favorites ?? []}
+                onChanged={personal.refresh}
+              />
+            </div>
+          )}
           {selected?.device_id && (
             <DeviceName
               key={selected.device_id}

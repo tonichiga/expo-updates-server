@@ -1,11 +1,14 @@
 import path from "node:path";
 import { mkdir } from "node:fs/promises";
-import { exerciseReleaseConsole } from "./releases.mjs";
+import { exerciseDeviceFavorites } from "./device-favorites.mjs";
+import { exercisePolicyEditor } from "./policy.mjs";
+import { exerciseReleaseConsole, exercisePublicRestore } from "./releases.mjs";
 import { exerciseInstallations } from "./installations.mjs";
 import assert from "node:assert/strict";
 import { chromium, expect } from "@playwright/test";
 
-export async function exerciseConsole({ origin, password }) {
+export async function exerciseConsole(fixture) {
+  const { origin, password } = fixture;
   const browser = await chromium.launch();
   try {
     const page = await browser.newPage({
@@ -21,6 +24,9 @@ export async function exerciseConsole({ origin, password }) {
     await page.getByRole("button", { name: "Sign in" }).click();
     await expect(page).toHaveURL(/\/updates$/);
     await exerciseReleaseConsole(page, password);
+    await exercisePolicyEditor(page, fixture);
+    await exerciseDeviceFavorites(page, fixture);
+    await exercisePublicRestore(page, fixture);
     await page.goto(origin + "/updates/embedded");
     await expect(page.getByText("beta", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Delete", exact: true }).click();

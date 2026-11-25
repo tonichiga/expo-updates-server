@@ -12,6 +12,8 @@ Apply filters to the entire selection with Apply. A failed request keeps the pre
 
 For daily data, cohort and retention semantics and database migration, see [installation telemetry](./installation-telemetry.md). Existing databases require `2026-10-22-device-analytics.sql`; new databases receive it from the canonical `schema.sql`.
 
+Publication creates an inactive draft. Choose an audience and a delivery policy before manually activating the release. In **Selected devices**, save an installation or device to your personal favorites to reuse it for smoke tests. **Public delivery** shows current and previous public releases for each runtime, channel and platform. Restore requires confirmation. On an existing database, apply `2026-11-25-device-favorites.sql` and `2026-11-25-public-distribution-history.sql` after the device-targeting migrations. Public history starts with the current public release at installation. Older activation dates and predecessors are unknown.
+
 ## Interface verification {#проверка-интерфеиса}
 
 When making changes, check 1440px and 390px widths, both themes, empty filter results and reset, expanding and copying IDs, keyboard dismissal of side panels with focus restoration, pagination retry after failure, and a shrinking last page. Tables may scroll within their cards; the whole page should not scroll horizontally. Never replace history before collection with zeroes or demo data.

@@ -3,6 +3,9 @@ import { useConfirmAction } from "@/components/admin/confirm-action";
 import type { TranslationMessage } from "@/src/client/i18n/messages";
 import { useI18n } from "@/src/client/i18n/provider";
 
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 
 import { Button } from "@/components/ui/button";
@@ -70,40 +73,50 @@ export function DistributionControlBanner({
   const { t, formatLocale } = useI18n();
   if (loading) {
     return (
-      <section className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
-        {t("Проверка глобального статуса OTA…")}
-      </section>
+      <Skeleton className="h-12" role="status">
+        <span className="sr-only">
+          {t("Проверка глобального статуса OTA…")}
+        </span>
+      </Skeleton>
     );
   }
-
   if (error || !state) {
     return (
-      <section className="rounded-lg border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive">
-        {t(
-          "Глобальный статус OTA недоступен. Распространяющие действия отключены до восстановления связи.",
-        )}
-        {error ? <p className="mt-1 text-xs">{t(error)}</p> : null}
-      </section>
+      <Alert variant="destructive">
+        <ShieldAlert />
+        <AlertTitle>
+          {t(
+            "Глобальный статус OTA недоступен. Распространяющие действия отключены до восстановления связи.",
+          )}
+        </AlertTitle>
+        {error && <AlertDescription>{t(error)}</AlertDescription>}
+      </Alert>
     );
   }
-
   if (!state.blocked) {
     return null;
   }
 
   return (
-    <section className="rounded-lg border border-destructive/25 bg-destructive/5 p-4 text-destructive">
-      <p className="font-semibold">{t("Распространение OTA остановлено")}</p>
-      <p className="mt-1 text-sm">{state.reason}</p>
-      <p className="mt-2 text-xs">
-        {new Date(state.changedAt).toLocaleString(formatLocale)} ·{" "}
-        {formatChangedBy(state, t)}
-      </p>
-    </section>
+    <Alert variant="destructive">
+      <ShieldAlert />
+      <AlertTitle>{t("Распространение OTA остановлено")}</AlertTitle>
+      <AlertDescription>
+        <p>{state.reason}</p>
+        <p>
+          {new Date(state.changedAt).toLocaleString(formatLocale)} ·{" "}
+          {formatChangedBy(state, t)}
+        </p>
+      </AlertDescription>
+    </Alert>
   );
 }
 
-export default function DistributionControl() {
+export default function DistributionControl({
+  onAvailabilityChange,
+}: {
+  onAvailabilityChange?: (blocked: boolean) => void;
+}) {
   const confirmAction = useConfirmAction();
   const { t, formatLocale } = useI18n();
   const { state, setState, loading, error, setError, refresh } =
@@ -112,6 +125,10 @@ export default function DistributionControl() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<TranslationMessage>("");
   const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    onAvailabilityChange?.(loading || !!error || !state || state.blocked);
+  }, [loading, error, state, onAvailabilityChange]);
 
   const changeState = async (blocked: boolean) => {
     if (!state) {
@@ -243,9 +260,12 @@ export default function DistributionControl() {
             {formatChangedBy(state, t)} {t(" · version {0}", [state.version])}
           </p>
           {!state.blocked && (
-            <label className="block space-y-2 text-sm font-medium">
-              {t("Причина остановки")}
+            <Field>
+              <FieldLabel htmlFor="stop-reason">
+                {t("Причина остановки")}
+              </FieldLabel>
               <Textarea
+                id="stop-reason"
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}
                 maxLength={500}
@@ -253,9 +273,9 @@ export default function DistributionControl() {
                 placeholder={t(
                   "Обязательная причина остановки (до 500 символов)",
                 )}
-                className="block min-h-20 w-full max-w-2xl rounded-md border border-input bg-background p-3 text-sm font-normal outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="min-h-20 max-w-2xl"
               />
-            </label>
+            </Field>
           )}
           <Button
             variant={state.blocked ? "default" : "destructive"}

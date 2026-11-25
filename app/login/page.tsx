@@ -6,6 +6,7 @@ import { ArrowRight, RadioTower } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { adminLogin } from "@/src/client/admin-api";
 import { useRouter } from "next/navigation";
@@ -61,29 +62,31 @@ export default function LoginPage() {
               className="grid gap-4"
               aria-busy={loading}
             >
-              <label className="grid gap-2 text-sm font-medium">
-                {t("Логин")}
+              <Field>
+                <FieldLabel htmlFor="username">{t("Логин")}</FieldLabel>
                 <Input
                   value={username}
                   onChange={(event) => setUsername(event.target.value)}
                   autoComplete="username"
+                  id="username"
                   name="username"
                   autoCapitalize="none"
                   spellCheck={false}
                   required
                 />
-              </label>
-              <label className="grid gap-2 text-sm font-medium">
-                {t("Пароль")}
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="password">{t("Пароль")}</FieldLabel>
                 <Input
                   type="password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   autoComplete="current-password"
+                  id="password"
                   name="password"
                   required
                 />
-              </label>
+              </Field>
               {error && (
                 <Alert variant="destructive">
                   <AlertDescription>{t(error)}</AlertDescription>

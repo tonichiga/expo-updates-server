@@ -34,11 +34,7 @@ equal to `created_at`. Its delivery mode and simple Guard remain editable until
 activation. `disabled_at` by itself is not evidence that an update was
 published.
 
-`ota_update_channels.latest_update_id` identifies the newest upload and may
-therefore point to an inactive draft. That pointer is not publication evidence;
-manifest selection falls back to the latest active update. An
-`active_update_id` rollback pointer or an `ota_served_manifest_log` row is
-publication evidence.
+Uploading a draft leaves the serving pointers unchanged. The console updates them when an operator activates, stops, promotes, rolls back or restores a release. On an older database a historical pointer can identify an inactive upload. Only activation or evidence of a served manifest establishes publication.
 
 Activation is the publication event. Once activated, promoted, used as a
 rollback target, or demonstrably served, a policy remains immutable even if the
@@ -74,12 +70,7 @@ installations should apply only the canonical
 
 ## Guard action catalog
 
-The policy editor loads reusable action names from `ota_guard_actions`. New
-installations receive the separate `ota-force-update` and `ota-force-store-update`
-actions. Operators can create
-an action by typing it in the action combobox or through the catalog-only form,
-which remains available while viewing an immutable policy and never changes
-that policy.
+Choose a policy profile for the draft, configure its fields and save the changes. Custom Guard actions can be selected from the catalog or created in the picker. The catalog can also be edited independently while viewing an immutable policy.
 
 Persisted catalog entries can be removed with the trash control. Catalog
 deletion does not modify an existing policy. Its action remains visible as a
