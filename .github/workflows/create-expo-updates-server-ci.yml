@@ -7,7 +7,11 @@ on:
       - ".github/workflows/publish-create-expo-updates-server.yml"
       - ".gitignore"
       - "app/**"
+      - "components/**"
+      - "docker/**"
       - "docs/**"
+      - "hooks/**"
+      - "lib/**"
       - "packages/create-expo-updates-server/**"
       - "public/**"
       - "scripts/**"
@@ -46,8 +50,14 @@ jobs:
       - name: Build and test installer
         run: npm run installer:check
 
-      - name: Test packed initializer and generated lockfile
-        run: npm run installer:pack-smoke
+      - name: Test packed initializer, generated lockfile and Docker startup
+        run: npm run installer:pack-smoke -- --docker
+
+      - name: Install the browser for the release console tests
+        run: npx playwright install --with-deps chromium
+
+      - name: Exercise signed OTA delivery and the release console
+        run: npm run test:e2e
 
       - name: Build documentation
         run: npm run docs:build
