@@ -39,6 +39,7 @@
     "@aws-sdk/s3-request-presigner": "^3.888.0",
     "@supabase/supabase-js": "^2.57.4",
     "@types/form-data": "^2.2.1",
+    "@vercel/functions": "^3.11.4",
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
