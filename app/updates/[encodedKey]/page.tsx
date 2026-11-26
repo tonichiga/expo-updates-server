@@ -41,6 +41,8 @@ import {
   PlatformBadge,
   ChannelBadge,
   ReleaseStatusBadge,
+  LatestReleaseBadge,
+  ReleaseVersionBadges,
   AudienceBadge,
   DeliveryBadge,
 } from "@/components/admin/release-badges";
@@ -352,16 +354,14 @@ export default function UpdateDetailsPage() {
                   : t("Детали обновления"))}
             </h1>
             {detail && <ReleaseStatusBadge release={detail} />}
-            {detail?.isLatest && <Badge variant="info">{t("Latest")}</Badge>}
+            {detail?.isLatest && <LatestReleaseBadge />}
             {!canWrite && <Badge variant="neutral">{t("Read only")}</Badge>}
           </div>
           {detail && (
             <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-muted-foreground">
               <PlatformBadge platform={detail.platform} />
               <ChannelBadge channel={detail.channel} />
-              <span className="break-all">
-                {t("Runtime {0}", [detail.runtimeVersion])}
-              </span>
+              <ReleaseVersionBadges {...detail} />
               <span>· {fullDate(detail.createdAt)}</span>
             </div>
           )}

@@ -86,6 +86,24 @@ afterEach(async () => {
 });
 
 describe("release workflows", () => {
+  it("renders actual app and runtime versions and highlights the channel’s latest pointer even when it is a draft", async () => {
+    api.getUpdates.mockResolvedValueOnce({
+      ...result,
+      items: [
+        { ...draft, appVersion: "3.2.1", isLatest: true, isNewestInScope: false },
+        { ...draft, key: "older", comment: "Earlier release", appVersion: null,
+          isLatest: false, isNewestInScope: true },
+      ],
+    });
+    await act(async () => root.render(<UpdatesPage />));
+    const [latest, other] = host.querySelectorAll('table[aria-label="Release history"] tbody tr');
+    const labels = (row: Element) =>
+      Array.from(row.querySelectorAll('[data-slot="badge"]'), (badge) => badge.textContent);
+    expect(labels(latest)).toEqual(expect.arrayContaining(["Runtime 1.0", "App 3.2.1", "draft"]));
+    expect(latest.querySelector('[title="Channel’s latest release for this runtime and platform, regardless of activation"]')).not.toBeNull();
+    expect(labels(other).some((label) => label?.includes("Latest") || label?.includes("App"))).toBe(false);
+  });
+
   it("applies filters to the API, retains the last history on error and resets empty results", async () => {
     await act(async () => root.render(<UpdatesPage />));
     expect(host.textContent).toContain(draft.comment);

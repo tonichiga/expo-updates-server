@@ -16,8 +16,9 @@ import {
   PlatformBadge,
   ChannelBadge,
   ReleaseStatusBadge,
-  AudienceBadge,
-  DeliveryBadge,
+  LatestReleaseBadge,
+  ReleaseVersionBadges,
+  deliveryLabel,
 } from "@/components/admin/release-badges";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -181,7 +182,7 @@ export default function UpdatesPage() {
         </Alert>
       )}
 
-      <Card className="min-w-0 gap-0 overflow-hidden py-0 shadow-none">
+      <Card className="@container min-w-0 gap-0 overflow-hidden py-0 shadow-none">
         <div className="space-y-4 border-b p-4 sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
@@ -295,30 +296,20 @@ export default function UpdatesPage() {
             </Button>
           </div>
         )}
-        <Table aria-busy={loading}>
-          <TableHeader>
+        <Table aria-label={t("Release history")} aria-busy={loading} className="table-fixed">
+          <TableHeader className="@max-3xl:sr-only">
             <TableRow className="bg-muted/35">
-              <TableHead className="pl-4 sm:pl-5">{t("Release")}</TableHead>
-              <TableHead className="hidden lg:table-cell">
-                {t("Compatibility")}
-              </TableHead>
-              <TableHead>{t("Состояние")}</TableHead>
-              <TableHead className="hidden sm:table-cell">
-                {t("Audience")}
-              </TableHead>
-              <TableHead className="hidden xl:table-cell">
-                {t("Доставка")}
-              </TableHead>
-              <TableHead className="hidden pr-5 text-right md:table-cell">
-                {t("Создано")}
-              </TableHead>
+              <TableHead scope="col" className="w-[33%] pl-5">{t("Release")}</TableHead>
+              <TableHead scope="col" className="w-[23%]">{t("Versions")}</TableHead>
+              <TableHead scope="col" className="w-[22%]">{t("Scope")}</TableHead>
+              <TableHead scope="col" className="pr-5">{t("Доставка")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {!result && loading && (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={4}
                   className="h-36 text-center text-muted-foreground"
                 >
                   {t("Загрузка обновлений…")}
@@ -327,7 +318,7 @@ export default function UpdatesPage() {
             )}
             {result?.items.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="h-40 text-center">
+                <TableCell colSpan={4} className="h-40 text-center">
                   <Layers3 className="mx-auto mb-3 size-6 text-muted-foreground" />
                   <p className="font-medium">
                     {resultsFiltered
@@ -349,80 +340,57 @@ export default function UpdatesPage() {
               </TableRow>
             )}
             {result?.items.map((item) => (
-              <TableRow key={item.key}>
-                <TableCell className="max-w-44 whitespace-normal py-4 pl-4 sm:max-w-80 sm:pl-5">
-                  <Link
-                    href={`/updates/${item.encodedKey}`}
-                    className="group inline-flex max-w-full items-start gap-1.5 rounded-sm font-semibold hover:text-primary"
-                  >
-                    <span className="line-clamp-2 break-words">
-                      {item.comment ||
-                        (item.appVersion
-                          ? t("Version {0}", [item.appVersion])
-                          : t("Release {0}", [item.updateId.slice(0, 8)]))}
-                    </span>
-                    <ArrowUpRight className="mt-0.5 size-3.5 shrink-0 text-muted-foreground group-hover:text-primary" />
-                  </Link>
-                  <div
-                    className="mt-1 font-mono text-xs text-muted-foreground"
-                    title={item.updateId}
-                  >
-                    {item.updateId.slice(0, 8)}
-                  </div>
-                  <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1 text-xs text-muted-foreground lg:hidden">
-                    <PlatformBadge platform={item.platform} />
-                    <ChannelBadge channel={item.channel} />
-                    <span className="break-all">{item.runtimeVersion}</span>
-                  </div>
-                </TableCell>
-                <TableCell className="hidden max-w-60 whitespace-normal lg:table-cell">
-                  <div className="flex min-w-0 flex-wrap items-center gap-1">
-                    <PlatformBadge platform={item.platform} />
-                    <ChannelBadge channel={item.channel} />
-                  </div>
-                  <div className="mt-1 break-words text-xs text-muted-foreground">
-                    {t("Runtime {0}", [item.runtimeVersion])}
-                    {item.appVersion ? ` · ${t("App")} ${item.appVersion}` : ""}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <div className="flex flex-col items-start gap-1.5">
-                    <ReleaseStatusBadge release={item} />
-                    {item.isLatest && (
-                      <span className="text-xs text-muted-foreground">
-                        {t("Latest")}
+              <TableRow key={item.key} className="@max-3xl:grid @max-3xl:grid-cols-2 @max-3xl:gap-x-4 @max-3xl:gap-y-2.5 @max-3xl:px-4 @max-3xl:py-4 @max-3xl:[&>td]:p-0">
+                <TableCell className="col-span-2 min-w-0 whitespace-normal py-4 pl-5">
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                    <Link
+                      href={`/updates/${item.encodedKey}`}
+                      className="group inline-flex max-w-full items-start gap-1 rounded-sm font-semibold hover:underline focus-visible:outline-ring"
+                    >
+                      <span className="line-clamp-2 [overflow-wrap:anywhere]">
+                        {item.comment ||
+                          (item.appVersion
+                            ? t("Version {0}", [item.appVersion])
+                            : t("Release {0}", [item.updateId.slice(0, 8)]))}
                       </span>
-                    )}
+                      <ArrowUpRight aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+                    </Link>
+                    {item.isLatest && <LatestReleaseBadge />}
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                    <code title={item.updateId}>{item.updateId.slice(0, 8)}</code>
+                    <time dateTime={item.createdAt}>{fullDate(item.createdAt)}</time>
+                  </div>
+                </TableCell>
+                <TableCell className="col-span-2 min-w-0">
+                  <ReleaseVersionBadges {...item} />
+                </TableCell>
+                <TableCell className="min-w-0 space-y-1.5 whitespace-normal">
+                  <div className="flex min-w-0 flex-wrap gap-1">
+                    <PlatformBadge platform={item.platform} />
+                    <ChannelBadge channel={item.channel} />
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    <span className="sr-only">{t("Audience")} · </span>
+                    {item.audienceMode === "devices" ? t("Выбранные устройства") : t("All devices")}
+                  </div>
+                </TableCell>
+                <TableCell className="min-w-0 space-y-1.5 whitespace-normal pr-5">
+                  <div className="flex flex-wrap items-center gap-1">
+                    <ReleaseStatusBadge release={item} />
                     {(item.isRollbackActive || item.isIgnoredByRollback) && (
                       <Badge
-                        variant={
-                          item.isRollbackActive ? "destructive" : "warning"
-                        }
-                        className="max-w-36 whitespace-normal text-left"
+                        variant={item.isRollbackActive ? "destructive" : "warning"}
+                        className="max-w-full whitespace-normal"
                       >
-                        {item.isRollbackActive
-                          ? t("Rollback")
-                          : t("Ignored by rollback")}
+                        {item.isRollbackActive ? t("Rollback") : t("Ignored by rollback")}
                       </Badge>
                     )}
-                    <div className="max-w-32 sm:hidden">
-                      <AudienceBadge mode={item.audienceMode} compact />
-                    </div>
                   </div>
-                </TableCell>
-                <TableCell className="hidden sm:table-cell">
-                  <AudienceBadge mode={item.audienceMode} compact />
-                </TableCell>
-                <TableCell className="hidden xl:table-cell">
-                  <DeliveryBadge mode={item.deliveryMode} />
-                  {item.hasGuard && (
-                    <Badge className="ml-1.5" variant="warning">
-                      {t("Guard")}
-                    </Badge>
-                  )}
-                </TableCell>
-                <TableCell className="hidden pr-5 text-right text-xs text-muted-foreground md:table-cell">
-                  {fullDate(item.createdAt)}
+                  <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
+                    <span>{t(deliveryLabel(item.deliveryMode))}</span>
+                    {item.hasGuard && <Badge variant="warning">{t("Guard")}</Badge>}
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
