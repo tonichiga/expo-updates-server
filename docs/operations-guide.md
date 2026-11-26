@@ -41,6 +41,12 @@ S3_FORCE_PATH_STYLE=true
 Never commit `.env.local`, database passwords, storage keys, access tokens or
 code-signing private keys.
 
+### PostgreSQL connections on Vercel {#vercel-postgresql}
+
+With `DATABASE_PROVIDER=pg`, each Vercel function instance reuses a pool of up to two PostgreSQL connections. A request waits up to eight seconds for a connection. Idle connections close after two seconds, and the pool is attached to the function lifecycle so they can close before suspension. Vercel enables this configuration automatically.
+
+Multiple devices share these connections, and Vercel can run multiple instances. When checking the database connection budget, filter `pg_stat_activity` by `application_name = 'ota-vercel'` to see sessions across instances. The global OTA switch still applies to subsequent manifest and asset requests.
+
 ## 3. Database installation
 
 For PostgreSQL or Supabase, apply the single canonical schema:
