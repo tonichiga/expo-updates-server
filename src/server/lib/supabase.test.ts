@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const poolOptions = vi.hoisted(() => vi.fn());
+const attachPool = vi.hoisted(() => vi.fn());
+vi.mock("@vercel/functions/db-connections", () => ({ attachDatabasePool: attachPool }));
+
 const poolQuery = vi.hoisted(() =>
   vi.fn(async (sql: string, params: unknown[]) => {
     void sql;
@@ -54,6 +58,7 @@ const supabaseRpcCalls = vi.hoisted(
 
 vi.mock("pg", () => ({
   Pool: class Pool {
+    constructor(options: unknown) { poolOptions(options); }
     query(sql: string, params: unknown[]) {
       return poolQuery(sql, params);
     }
@@ -105,6 +110,21 @@ describe("common database abstraction", () => {
       delete process.env.SUPABASE_SERVICE_ROLE_KEY;
     } else {
       process.env.SUPABASE_SERVICE_ROLE_KEY = originalSupabaseKey;
+    }
+  });
+
+  it("shares a bounded pool and releases idle connections on Vercel", async () => {
+    vi.stubEnv("VERCEL", "1");
+    try {
+      const { supabase } = await import("./supabase.js");
+      await supabase.from("ota_updates").select("id").execute();
+      await supabase.from("ota_updates").select("id").execute();
+      expect(poolOptions).toHaveBeenCalledWith(expect.objectContaining({
+        max: 2, idleTimeoutMillis: 2000, connectionTimeoutMillis: 8000,
+      }));
+      expect(attachPool).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllEnvs();
     }
   });
 

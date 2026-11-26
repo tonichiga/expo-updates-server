@@ -324,6 +324,7 @@
   "Installation ID": "ID встановлення",
   "Device ID": "ID пристрою",
   "Stage": "Етап",
+  "Channel’s latest release for this runtime and platform, regardless of activation": "Реліз, позначений у каналі як останній для цієї версії середовища й платформи, незалежно від активації",
   "Latest": "Останнє",
   "Rollback": "Відкат",
   "Guard": "Захист (Guard)",

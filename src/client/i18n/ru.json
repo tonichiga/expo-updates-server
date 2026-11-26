@@ -324,6 +324,7 @@
   "Installation ID": "ID установки",
   "Device ID": "ID устройства",
   "Stage": "Этап",
+  "Channel’s latest release for this runtime and platform, regardless of activation": "Релиз, отмеченный в канале как последний для этой версии среды и платформы, независимо от активации",
   "Latest": "Последнее",
   "Rollback": "Откат",
   "Guard": "Защита (Guard)",

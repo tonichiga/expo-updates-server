@@ -1,4 +1,5 @@
 import { Pool } from "pg";
+import { attachDatabasePool } from "@vercel/functions/db-connections";
 import { createClient } from "@supabase/supabase-js";
 import {
   DeleteObjectsCommand,
@@ -98,10 +99,21 @@ function getPool() {
     throw new Error("Missing DATABASE_URL in environment.");
   }
 
+  const onVercel = process.env.VERCEL === "1";
   pool = new Pool({
     connectionString: DATABASE_URL,
     ssl: shouldUseSsl ? { rejectUnauthorized: false } : false,
+    ...(onVercel && {
+      max: 2,
+      idleTimeoutMillis: 2000,
+      connectionTimeoutMillis: 8000,
+      application_name: "ota-vercel",
+    }),
   });
+  if (onVercel) {
+    // Let idle clients close before Vercel suspends this function instance.
+    attachDatabasePool(pool);
+  }
 
   return pool;
 }

@@ -16,6 +16,12 @@ Publication creates an inactive draft. Choose an audience and a delivery policy 
 
 Under **Selected recipients**, choose a device from the registry, add a favorite, or paste IDs. Review the list before saving. A Device ID targets the device across reinstalls. An Installation ID targets one installation.
 
+### Reading release history {#release-history}
+
+In **Versions**, **Runtime** is the compatibility version the device must match. **App** is the application version recorded at publication and appears when provided. Two releases can share both values. Use the update ID beneath the release name to tell them apart.
+
+**Latest** beside the name marks the release the channel points to for that platform and runtime. A disabled release can still carry this badge. To see which update devices can receive, check the activation status under **Delivery** and the platform, channel and audience under **Scope**. **Public delivery** shows the release currently served to all compatible devices.
+
 ## Interface verification {#проверка-интерфеиса}
 
 When making changes, check 1440px and 390px widths, both themes, empty filter results and reset, expanding and copying IDs, keyboard dismissal of side panels with focus restoration, pagination retry after failure, and a shrinking last page. Tables may scroll within their cards; the whole page should not scroll horizontally. Never replace history before collection with zeroes or demo data.

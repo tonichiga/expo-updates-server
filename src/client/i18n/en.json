@@ -324,6 +324,7 @@
   "Installation ID": "Installation ID",
   "Device ID": "Device ID",
   "Stage": "Stage",
+  "Channel’s latest release for this runtime and platform, regardless of activation": "Channel’s latest release for this runtime and platform, regardless of activation",
   "Latest": "Latest",
   "Rollback": "Rollback",
   "Guard": "Guard",
