@@ -34,6 +34,7 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group";
+import { NativeSelect } from "@/components/ui/native-select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   AdminApiError,
@@ -93,6 +94,7 @@ export default function DistributionHistory({
   const confirm = useConfirmAction();
   const [data, setData] = useState<DistributionHistoryResponse | null>(null);
   const [filter, setFilter] = useState("");
+  const [channel, setChannel] = useState("");
   const [page, setPage] = useState(0);
   const [loadError, setLoadError] = useState("");
   const [actionError, setActionError] = useState("");
@@ -159,10 +161,13 @@ export default function DistributionHistory({
   }
 
   const query = filter.trim().toLowerCase();
-  const scopes = (data?.scopes || []).filter((scope) =>
-    [scope.channel, scope.runtimeVersion, scope.platform].some((v) =>
-      v.toLowerCase().includes(query),
-    ),
+  const allScopes = data?.scopes ?? [];
+  const channels = new Set(["development", "production", ...allScopes.map(scope => scope.channel)]);
+  const scopes = allScopes.filter(scope =>
+    (!channel || scope.channel === channel) &&
+    [scope.channel, scope.runtimeVersion, scope.platform].some(value =>
+      value.toLowerCase().includes(query)
+    )
   );
   const pages = Math.ceil(scopes.length / pageSize);
   const visiblePage = Math.min(page, Math.max(0, pages - 1));
@@ -187,20 +192,33 @@ export default function DistributionHistory({
           </CardDescription>
         </div>
         {(data?.scopes.length ?? 0) > 0 && (
-          <InputGroup className="w-full sm:w-52">
-            <InputGroupAddon>
-              <Search />
-            </InputGroupAddon>
-            <InputGroupInput
-              aria-label={t("Find a delivery scope")}
-              placeholder={t("Find a delivery scope")}
-              value={filter}
-              onChange={(e) => {
-                setFilter(e.target.value);
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <NativeSelect
+              aria-label={t("Канал")}
+              value={channel}
+              onChange={(event) => {
+                setChannel(event.target.value);
                 setPage(0);
               }}
-            />
-          </InputGroup>
+            >
+              <option value="">{t("Все каналы")}</option>
+              {[...channels].map(value => <option key={value} value={value}>{value}</option>)}
+            </NativeSelect>
+            <InputGroup className="w-full sm:w-52">
+              <InputGroupAddon>
+                <Search />
+              </InputGroupAddon>
+              <InputGroupInput
+                aria-label={t("Find a delivery scope")}
+                placeholder={t("Find a delivery scope")}
+                value={filter}
+                onChange={(e) => {
+                  setFilter(e.target.value);
+                  setPage(0);
+                }}
+              />
+            </InputGroup>
+          </div>
         )}
       </CardHeader>
       {loadError && (
@@ -236,12 +254,12 @@ export default function DistributionHistory({
             </EmptyMedia>
             <EmptyTitle className="text-sm">
               {t(
-                query ? "No matching scopes" : "No public release history yet",
+                (query || channel) ? "No matching scopes" : "No public release history yet",
               )}
             </EmptyTitle>
             <EmptyDescription>
               {t(
-                query
+                (query || channel)
                   ? "Try another runtime, channel or platform."
                   : "Manually activate a release for all devices to start its history.",
               )}

@@ -132,7 +132,13 @@ export async function exercisePublicRestore(page, { origin, db, storage }) {
   await setActive(latest, false);
   await page.goto(origin + "/updates");
   const search = page.getByRole("textbox", { name: "Find a delivery scope" });
+  const channelFilter = page.locator('[aria-labelledby="public-distribution"]')
+    .getByRole("combobox", { name: "Channel", exact: true });
+  await channelFilter.selectOption("production");
   await search.fill(scope.channel);
+  await expect(page.getByText("No matching scopes", { exact: true })).toBeVisible();
+  await channelFilter.selectOption(scope.channel);
+  await search.fill(scope.runtime);
   const row = page.getByRole("region", {
     name: "restore-browser / ios / 8.0",
     exact: true,

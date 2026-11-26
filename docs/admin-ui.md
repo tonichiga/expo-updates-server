@@ -22,6 +22,8 @@ In **Versions**, **Runtime** is the compatibility version the device must match.
 
 **Latest** beside the name marks the release the channel points to for that platform and runtime. A disabled release can still carry this badge. To see which update devices can receive, check the activation status under **Delivery** and the platform, channel and audience under **Scope**. **Public delivery** shows the release currently served to all compatible devices.
 
+Public delivery lists newer runtime versions first. Select a channel to narrow the list, then search by runtime or platform.
+
 ## Interface verification {#проверка-интерфеиса}
 
 When making changes, check 1440px and 390px widths, both themes, empty filter results and reset, expanding and copying IDs, keyboard dismissal of side panels with focus restoration, pagination retry after failure, and a shrinking last page. Tables may scroll within their cards; the whole page should not scroll horizontally. Never replace history before collection with zeroes or demo data.

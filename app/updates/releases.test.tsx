@@ -86,6 +86,40 @@ afterEach(async () => {
 });
 
 describe("release workflows", () => {
+  it("filters public delivery independently across pages and combines the channel with search", async () => {
+    const scopes = ["development", "production", "production", "production", "production", "production", "production", "production-canary"]
+      .map((channel, index) => ({
+        channel, platform: "ios", runtimeVersion: `1.1.${20 - index}`, revision: "1",
+        current: null, previous: null,
+      }));
+    api.getDistributionHistory.mockResolvedValue({ canWrite: false, scopes });
+    await act(async () => root.render(<UpdatesPage />));
+    const card = host.querySelector('[aria-labelledby="public-distribution"]')!;
+    const rows = () => [...card.querySelectorAll("section")].map(row => row.getAttribute("aria-label"));
+    const channel = card.querySelector<HTMLSelectElement>('select[aria-label="Channel"]');
+    expect(channel).toBeTruthy();
+    async function choose(value: string) {
+      await act(async () => {
+        channel!.value = value;
+        channel!.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+    }
+    await act(async () => card.querySelector<HTMLButtonElement>('button[aria-label="Next"]')!.click());
+    await choose("production");
+    expect(rows()).toEqual(scopes.slice(1, 6).map(s => `production / ios / ${s.runtimeVersion}`));
+    await choose("development");
+    expect(rows()).toEqual(["development / ios / 1.1.20"]);
+    const search = card.querySelector<HTMLInputElement>("input")!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(search, "1.1.13");
+      search.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(card.textContent).toContain("No matching scopes");
+    await choose("");
+    expect(rows()).toEqual(["production-canary / ios / 1.1.13"]);
+    expect(api.getUpdates).toHaveBeenCalledTimes(1);
+  });
+
   it("renders actual app and runtime versions and highlights the channel’s latest pointer even when it is a draft", async () => {
     api.getUpdates.mockResolvedValueOnce({
       ...result,
