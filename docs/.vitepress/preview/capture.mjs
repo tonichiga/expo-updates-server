@@ -27,7 +27,11 @@ try {
   });
   const page = await ctx.newPage(); const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
+  page.setDefaultTimeout(10000);
   async function capture(name) {
+    assert.deepEqual(errors, []);
+    assert.deepEqual(unexpected, []);
+    assert.equal(await page.getByRole('alert').filter({ hasText: /./ }).count(), 0);
     // The authenticated SSR shell contains the test operator's name. Replace only
     // its visible name/avatar with a synthetic label before capturing any image.
     await page.locator('[data-sidebar="footer"] p').first().evaluate((el) => { el.textContent = 'demo.operator'; });
@@ -36,29 +40,30 @@ try {
     await page.screenshot({ path: path.join(output, `${name}.jpg`), type: 'jpeg', quality: 88, animations: 'disabled' });
   }
   await page.goto(`${base}/updates/devices`);
-  await page.getByText('Active installations by version', { exact: true }).waitFor();
+  const filters = page.getByRole('button', { name: 'Filters', exact: true });
+  await filters.click();
   await page.getByLabel('Platform', { exact: true }).selectOption('android');
   await page.getByLabel('Channel', { exact: true }).selectOption('production');
   await page.getByLabel('Runtime', { exact: true }).selectOption('2.4.0');
-  await page.getByRole('button', { name: 'Apply', exact: true }).click();
-  await page.getByRole('button', { name: 'Refresh', exact: true }).waitFor();
+  await filters.click();
+  await page.getByRole('tab', { name: 'Versions', exact: true }).click();
+  await page.getByRole('region', { name: 'Channel production, android' }).waitFor();
   await capture('admin-versions');
-  await page.getByText('Installation activity', { exact: true }).scrollIntoViewIfNeeded();
-  await page.evaluate(() => {
-    const el = [...document.querySelectorAll('[data-slot="card-title"]')].find((e) => e.textContent === 'Installation activity');
-    window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 30);
-  });
+  await page.getByRole('tab', { name: 'Cohorts', exact: true }).click();
+  await page.getByRole('heading', { name: 'Installation cohorts' }).waitFor();
   await capture('admin-cohorts');
   await page.goto(`${base}/updates`);
-  await page.getByText('Checkout polish · smoke test', { exact: true }).first().waitFor();
+  const history = page.getByRole('table', { name: 'Release history' });
+  const draft = history.getByRole('row').filter({ hasText: updates[0].comment }).first();
+  for (const label of ['Latest', 'draft', `Runtime ${updates[0].runtimeVersion}`, `App ${updates[0].appVersion}`]) {
+    await draft.locator('[data-slot="badge"]').filter({ hasText: label }).first().waitFor();
+  }
   await capture('admin-updates');
   await page.goto(`${base}/updates/${updates[0].encodedKey}`);
-  await page.getByText('Release owner · Pixel 9', { exact: true }).waitFor();
-  await page.getByText('Update audience', { exact: true }).scrollIntoViewIfNeeded();
-  await page.evaluate(() => {
-    const el = [...document.querySelectorAll('[data-slot="card-title"]')].find((e) => e.textContent === 'Update audience');
-    window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 30);
-  });
+  const recipients = page.getByRole('region', { name: 'Selected recipients' });
+  await recipients.getByText(/Release owner · Pixel 9/).waitFor();
+  await recipients.getByText(/QA · Galaxy S24/).waitFor();
+  await page.getByRole('tablist').first().evaluate((el) => el.scrollIntoView({ block: 'start' }));
   await capture('admin-targeting');
   assert.deepEqual(unexpected, []); assert.deepEqual(errors, []);
   console.log('Captured four admin screenshots with synthetic API data; no business writes.');

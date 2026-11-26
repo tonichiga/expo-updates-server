@@ -16,21 +16,21 @@ const baseSlides = [
     title: 'Turn installation heartbeats into a clear picture.',
     description: 'Explore daily activity and weekly cohorts. Separate devices running an OTA from those still on the embedded build.',
     path: '/updates/devices', file: 'admin-cohorts.jpg',
-    alt: 'Installation activity chart and weekly adoption cohorts, with simulated OTA and embedded-build distribution.',
+    alt: 'Weekly installation cohorts showing counts and shares for OTA, embedded and unknown builds.',
   },
   {
     key: 'updates', label: 'Release management', eyebrow: '03 / Manage releases',
     title: 'A single view of what is ready and what is live.',
     description: 'Review Android and iOS updates together, inspect their delivery status, and keep publication separate from activation.',
     path: '/updates', file: 'admin-updates.jpg',
-    alt: 'OTA release list with synthetic Android and iOS versions, active releases and drafts restricted to selected devices.',
+    alt: 'Android and iOS release history with Runtime and App badges, Latest markers and delivery status.',
   },
   {
     key: 'targeting', label: 'Device targeting', eyebrow: '04 / Start with your devices',
     title: 'Smoke-test first. Expand the audience when ready.',
     description: 'Choose named devices for a release, test the update, then make it available to all compatible installations.',
     path: '/updates/…', file: 'admin-targeting.jpg',
-    alt: 'Update audience editor with two simulated QA phones selected and background delivery options below.',
+    alt: 'Audience editor with a device registry on the left and two selected test devices on the right.',
   },
 ]
 const { lang } = useData()

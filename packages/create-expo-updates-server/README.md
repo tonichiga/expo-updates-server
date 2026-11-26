@@ -4,7 +4,7 @@ Create a standalone, self-hosted Expo Updates Server project from the
 versioned template bundled in this npm package.
 
 ```bash
-npx create-expo-updates-server@0.6.3 my-server
+npx create-expo-updates-server@0.6.4 my-server
 cd my-server
 ```
 
@@ -13,7 +13,7 @@ To scaffold into an empty current directory instead:
 ```bash
 mkdir my-server
 cd my-server
-npx create-expo-updates-server@0.6.3 .
+npx create-expo-updates-server@0.6.4 .
 ```
 
 The initializer performs no network requests, dependency installation, Git

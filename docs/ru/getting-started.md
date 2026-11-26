@@ -9,7 +9,7 @@
 Создайте файлы сервера или используйте существующую копию исходников:
 
 ```bash
-npx create-expo-updates-server@0.6.3 my-server
+npx create-expo-updates-server@0.6.4 my-server
 cd my-server
 ```
 
