@@ -13,7 +13,7 @@ SDK or macOS/Xcode. The server's Docker image does not provide the mobile toolch
 Create the server files, or use an existing source checkout:
 
 ```bash
-npx create-expo-updates-server@0.6.2 my-server
+npx create-expo-updates-server@0.6.3 my-server
 cd my-server
 ```
 
@@ -350,7 +350,7 @@ npm run configure-app
 ```
 
 Select the app directory, certificate, public URL, channel, runtime and platform.
-The CLI installs `expo-updates-server-client@0.1.0` and the native dependencies with `expo install`, configures native updates, adds the client bootstrap and mounts `<OtaUpdates />` in the root, installs publisher/registration
+The CLI installs `expo-updates-server-client@0.2.0` and the native dependencies with `expo install`, configures native updates, adds the client bootstrap and mounts `<OtaUpdates />` in the root, installs publisher/registration
 scripts and runs prebuild. Review its summary before applying changes.
 
 For flags, supported root components and reruns, see

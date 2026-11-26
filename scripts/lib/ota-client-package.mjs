@@ -1,5 +1,5 @@
 export const clientPackage = "expo-updates-server-client";
-export const clientVersion = "0.1.0";
+export const clientVersion = "0.2.0";
 export const nativeClientDependencies = [
   "expo-updates",
   "expo-application",
@@ -15,10 +15,16 @@ export function originalEntryCode(entry) {
   return `require(${JSON.stringify(entry)});`;
 }
 
-export function bootstrapCode(entry) {
+export function clientDependencies(adapter) {
+  return adapter ? ["expo-updates", "expo-application", "expo-secure-store"] : nativeClientDependencies;
+}
+
+export function bootstrapCode(entry, adapter) {
   return [
-    `const otaClient = require('${clientPackage}');`,
-    "otaClient.initializeOtaClient(require('./ota-client/config.json'));",
+    `const otaClient = require('${clientPackage}${adapter ? "/custom" : ""}');`,
+    adapter
+      ? `otaClient.initializeOtaClient({ ...require('./ota-client/config.json'), adapter: require(${JSON.stringify(adapter)}).otaAdapter });`
+      : "otaClient.initializeOtaClient(require('./ota-client/config.json'));",
     "otaClient.start();",
     originalEntryCode(entry),
   ].join("\n");

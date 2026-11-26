@@ -1,5 +1,5 @@
 import { planOtaClient } from "./ota-client-configurator.mjs";
-import { clientPackage, clientVersion, nativeClientDependencies } from "./ota-client-package.mjs";
+import { clientPackage, clientVersion, clientDependencies } from "./ota-client-package.mjs";
 import { execFileSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -139,8 +139,8 @@ function detectPackageManager(appRoot) {
   return "npm";
 }
 
-function getPackageCommands(packageManager, platform) {
-  const clientInstallArgs = ["expo", "install", ...nativeClientDependencies, `${clientPackage}@${clientVersion}`];
+function getPackageCommands(packageManager, platform, adapter) {
+  const clientInstallArgs = ["expo", "install", ...clientDependencies(adapter), `${clientPackage}@${clientVersion}`];
   const prebuildArgs = ["expo", "prebuild"];
   if (platform !== "all") {
     prebuildArgs.push("--platform", platform);
@@ -556,9 +556,9 @@ export function configureExpoApp(
   validateCertificate(certificatePath);
   const manifestUrl = resolveManifestUrl(rawOptions.serverUrl);
   const project = validateProject(appRoot);
-  const clientPlan = planOtaClient({ appRoot, packageJson: project.packageJson, manifestUrl, channel, force });
+  const clientPlan = planOtaClient({ appRoot, packageJson: project.packageJson, manifestUrl, channel, force, adapter: rawOptions.adapter });
   const packageManager = detectPackageManager(appRoot);
-  const commands = getPackageCommands(packageManager, platform);
+  const commands = getPackageCommands(packageManager, platform, clientPlan.adapter);
   const certificateDestination = path.join(
     appRoot,
     "certificates",

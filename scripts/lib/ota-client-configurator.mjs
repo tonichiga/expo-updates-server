@@ -101,12 +101,15 @@ export function planOtaClient({
   manifestUrl,
   channel,
   force,
+  adapter,
 }) {
+  let previousAdapter;
   let entry = packageJson.main;
   if (entry === ENTRY || entry === `./${ENTRY}`) {
     const metadata = JSON.parse(
       fs.readFileSync(path.join(appRoot, META), "utf8"),
     );
+    previousAdapter = metadata.adapter;
     entry = metadata.originalEntry;
     if (typeof entry !== "string" || entry.includes("ota-entry"))
       throw new Error("Invalid original OTA entry metadata");
@@ -123,6 +126,16 @@ export function planOtaClient({
   ) {
     entry = `./${entry}`;
   }
+  adapter ??= previousAdapter;
+  if (adapter !== undefined) {
+    const relative = path.relative(appRoot, path.resolve(appRoot, adapter));
+    if (!relative || relative === ".." || relative.startsWith(".." + path.sep) ||
+        !fs.statSync(path.join(appRoot, relative), { throwIfNoEntry: false })?.isFile()) {
+      throw new Error("--adapter must point to an existing file inside the app");
+    }
+    adapter = "./" + relative.split(path.sep).join("/");
+  }
+  const sdkEntry = adapter ? clientPackage + "/custom" : clientPackage;
   const heartbeatUrl = new URL(manifestUrl);
   heartbeatUrl.pathname = heartbeatUrl.pathname.replace(
     /\/manifest\/?$/,
@@ -153,11 +166,12 @@ export function planOtaClient({
   const oldEntries = ["./ota-client", "./ota-client/runtime"].map(
     (module) => `${header}require('${module}').start();\n${originalEntryCode(entry)}\n`,
   );
-  const rootHookPlan = planOtaRootHook({ appRoot, originalEntry: entry });
+  oldEntries.push(`${header}${bootstrapCode(entry, previousAdapter)}\n`);
+  const rootHookPlan = planOtaRootHook({ appRoot, originalEntry: entry, sdkEntry });
   const files = [
     ...defaultEntries,
-    [ENTRY, `${header}${bootstrapCode(entry)}\n`],
-    [META, `${JSON.stringify({ originalEntry: entry }, null, 2)}\n`],
+    [ENTRY, `${header}${bootstrapCode(entry, adapter)}\n`],
+    [META, `${JSON.stringify({ originalEntry: entry, adapter }, null, 2)}\n`],
     [
       "ota-client/config.json",
       `${JSON.stringify({ ...existingConfig, channel, heartbeatUrl: heartbeatUrl.toString(), identityNamespace }, null, 2)}\n`,
@@ -203,10 +217,11 @@ export function planOtaClient({
       continue;
     }
     const subpath = name.replace(/(?:\.d)?\.[jt]sx?$/, "");
-    const target = subpath === "index" ? clientPackage : `${clientPackage}/${subpath}`;
+    const standard = subpath === "index" ? clientPackage : `${clientPackage}/${subpath}`;
+    const target = subpath === "index" ? sdkEntry : adapter && subpath === "runtime" ? clientPackage + "/custom-runtime" : standard;
     const forwarder = `export * from "${target}";\n`;
     if (current === forwarder) continue;
-    if (!generated) preserveCustomizedFile(relative);
+    if (!generated && current !== `export * from "${standard}";\n`) preserveCustomizedFile(relative);
     forwarders.push([relative, forwarder]);
   }
 
@@ -216,11 +231,13 @@ export function planOtaClient({
     const current = fs.readFileSync(destination, "utf8").replace(/\r\n/g, "\n");
     if (current === content || (name === ENTRY && oldEntries.includes(current)))
       continue;
+    if (name === META && current === JSON.stringify({ originalEntry: entry, adapter: previousAdapter }, null, 2) + "\n") continue;
     if (name.endsWith(".js")) preserveCustomizedFile(name);
     else if (!force)
       throw new Error(`Refusing to overwrite ${destination}. Re-run with --force.`);
   }
   return {
+    adapter,
     warnings,
     apply() {
       for (const [file, backup] of backups)

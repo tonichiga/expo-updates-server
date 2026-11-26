@@ -27,6 +27,7 @@ Required:
   --runtime-version  Native runtime version
 
 Optional:
+  --adapter          App-relative path to a module exporting otaAdapter (optional)
   --platform         all, ios or android (default: all)
   --server-env       Local Docker env file (default: server .env)
   --force            Replace generated files and back up customized legacy client code
@@ -62,6 +63,7 @@ function parseArgs(argv) {
     index += 1;
 
     if (key === "server-env") options.serverEnv = value;
+    else if (key === "adapter") options.adapter = value;
     else if (key === "app") options.app = value;
     else if (key === "certificate") options.certificate = value;
     else if (key === "server-url") options.serverUrl = value;

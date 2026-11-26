@@ -427,6 +427,21 @@ afterEach(() => {
 });
 
 describe("configureExpoApp", () => {
+  it("keeps a custom adapter across reruns and omits the default native providers", () => {
+    const { appRoot, certificatePath, templateRoot } = createFixture();
+    const { calls, commandRunner } = createRunner();
+    const options = { app: appRoot, certificate: certificatePath, serverUrl: "https://example.org", channel: "dev", runtimeVersion: "1" };
+    const module = "export const otaAdapter = {};\n";
+    fs.writeFileSync(path.join(appRoot, "adapter.ts"), module);
+    configureExpoApp({ ...options, adapter: "./adapter.ts" }, { commandRunner, templateRoot });
+    configureExpoApp(options, { commandRunner, templateRoot });
+    expect(fs.readFileSync(path.join(appRoot, "App.tsx"), "utf8")).toContain("expo-updates-server-client/custom");
+    expect(fs.readFileSync(path.join(appRoot, "ota-entry.js"), "utf8")).toContain('require("./adapter.ts").otaAdapter');
+    expect(fs.readFileSync(path.join(appRoot, "adapter.ts"), "utf8")).toBe(module);
+    expect(calls.flatMap(call => call.args)).not.toContain("expo-crypto");
+    expect(calls.flatMap(call => call.args)).not.toContain("@react-native-async-storage/async-storage");
+  });
+
   it("configures receiving, publishing and native prebuild", () => {
     const { appRoot, certificatePath, templateRoot } = createFixture();
     const { calls, commandRunner } = createRunner();
@@ -481,7 +496,7 @@ describe("configureExpoApp", () => {
       "./plugins/with-ota-embedded-registration",
     );
     expect(packageJson.dependencies["expo-updates"]).toBe("~56.0.0");
-    expect(packageJson.dependencies["expo-updates-server-client"]).toBe("0.1.0");
+    expect(packageJson.dependencies["expo-updates-server-client"]).toBe("0.2.0");
     expect(packageJson.scripts["ota:publish"]).toBe(
       "node scripts/ota-publish/index.mjs",
     );
@@ -593,7 +608,7 @@ describe("configureExpoApp", () => {
     expect(calls).toEqual([
       {
         command: "npx",
-        args: ["expo", "install", "expo-updates", "expo-application", "expo-crypto", "expo-secure-store", "@react-native-async-storage/async-storage", "expo-updates-server-client@0.1.0"],
+        args: ["expo", "install", "expo-updates", "expo-application", "expo-crypto", "expo-secure-store", "@react-native-async-storage/async-storage", "expo-updates-server-client@0.2.0"],
         cwd: appRoot,
       },
       {
@@ -629,7 +644,7 @@ describe("configureExpoApp", () => {
     }, { commandRunner, templateRoot });
     expect(calls[0]).toEqual({ command, cwd: appRoot, args: [
       ...prefix, "expo-updates", "expo-application", "expo-crypto", "expo-secure-store",
-      "@react-native-async-storage/async-storage", "expo-updates-server-client@0.1.0",
+      "@react-native-async-storage/async-storage", "expo-updates-server-client@0.2.0",
     ] });
   });
 

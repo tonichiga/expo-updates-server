@@ -55,7 +55,7 @@ return (
 Из каталога приложения Expo установите пакет и его нативные зависимости.
 
 ```bash
-npx expo install expo-updates-server-client@0.1.0 expo-updates expo-application expo-crypto expo-secure-store @react-native-async-storage/async-storage
+npx expo install expo-updates-server-client@0.2.0 expo-updates expo-application expo-crypto expo-secure-store @react-native-async-storage/async-storage
 ```
 
 Создайте в приложении `ota-client/config.json` с публичными настройками сервера.

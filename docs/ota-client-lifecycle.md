@@ -93,7 +93,7 @@ Use this path for a custom root or dynamic `app.config.*` project. If the config
 From the Expo application directory, install the package and its native dependencies.
 
 ```bash
-npx expo install expo-updates-server-client@0.1.0 expo-updates expo-application expo-crypto expo-secure-store @react-native-async-storage/async-storage
+npx expo install expo-updates-server-client@0.2.0 expo-updates expo-application expo-crypto expo-secure-store @react-native-async-storage/async-storage
 ```
 
 Create `ota-client/config.json` in the application with your public server settings.

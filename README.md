@@ -14,7 +14,7 @@ panel, device targeting and installation analytics.
 Create a server project:
 
 ```bash
-npx create-expo-updates-server@0.6.2 my-server
+npx create-expo-updates-server@0.6.3 my-server
 cd my-server
 ```
 
@@ -39,7 +39,7 @@ checkout. For initializer options and filesystem behavior, see
 ## Application integration
 
 Run `npm ci` in the **server directory** before `npm run configure-app`.
-The configurator supports static `app.json` projects. It installs `expo-updates-server-client@0.1.0` and its native dependencies with `expo install`, writes the public settings to `ota-client/config.json`, and initializes the client before loading your original entry. In supported roots it imports and mounts `<OtaUpdates />` beside navigation. It also installs publisher and embedded-build registration scripts. See [Expo application setup](docs/expo-app-setup.md).
+The configurator supports static `app.json` projects. It installs `expo-updates-server-client@0.2.0` and its native dependencies with `expo install`, writes the public settings to `ota-client/config.json`, and initializes the client before loading your original entry. In supported roots it imports and mounts `<OtaUpdates />` beside navigation. It also installs publisher and embedded-build registration scripts. See [Expo application setup](docs/expo-app-setup.md).
 
 For a custom root or dynamic app configuration, follow [manual client integration](docs/ota-client-lifecycle.md#manual-integration). The guide covers initialization, the built-in component, and the headless hook. Configure publishing and build registration separately for a manual setup. Test the OTA lifecycle in a native release build.
 

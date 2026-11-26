@@ -24,7 +24,7 @@ npm run configure-app -- \
   --runtime-version 1.0.0
 ```
 
-Конфігуратор встановлює `expo-updates-server-client@0.1.0` та його нативні залежності через `expo install`. Він оновлює `app.json` і `package.json`, копіює публічний сертифікат підпису, встановлює публікатор і запускає `expo prebuild`. Підтримуються lock-файли npm, pnpm, Yarn і Bun.
+Конфігуратор встановлює `expo-updates-server-client@0.2.0` та його нативні залежності через `expo install`. Він оновлює `app.json` і `package.json`, копіює публічний сертифікат підпису, встановлює публікатор і запускає `expo prebuild`. Підтримуються lock-файли npm, pnpm, Yarn і Bun.
 
 Публічні налаштування зберігаються в `ota-client/config.json`. У створеному файлі `ota-entry.js` викликаються `initializeOtaClient(config)` і `start()` до завантаження початкової точки входу. У підтримуваний корінь конфігуратор додає імпорт з `expo-updates-server-client` і розміщує `<OtaUpdates />` поруч із навігацією. Підтримуються `src/app/_layout` та `app/_layout` в Expo Router, а також стандартні компоненти `App`, зокрема платформні варіанти. Компонент автоматично перевіряє оновлення та пропонує завантажити їх чи перезапустити застосунок. Його параметри можна змінити в корені. Див. [життєвий цикл клієнта](./ota-client-lifecycle.md).
 
@@ -106,7 +106,7 @@ npm run ota:publish -- --platform android --message "Fresh app hook smoke test"
 Для ручного налаштування встановіть сумісні з Expo версії всіх клієнтських залежностей:
 
 ```bash
-npx expo install expo-updates-server-client@0.1.0 expo-updates expo-application expo-crypto expo-secure-store @react-native-async-storage/async-storage
+npx expo install expo-updates-server-client@0.2.0 expo-updates expo-application expo-crypto expo-secure-store @react-native-async-storage/async-storage
 ```
 
 Застосунок не надсилає токен адмінки під час перевірки оновлення. `/api/manifest` і `/api/assets` — публічні робочі ендпоїнти. Сесії адмінки та токени доступу потрібні лише операторам, CI й адміністративній автоматизації.
@@ -495,3 +495,5 @@ curl -i \
 5. Запустіть перевірку оновлень застосунку.
 6. Завантажте, перезапустіть і підтвердьте новий ID оновлення.
 7. До запуску production перевірте відкат і точний аварійний маршрут.
+
+Адаптер необов’язковий. Для власного сховища в SDK 0.2.0 використовуйте `expo-updates-server-client/custom` і передайте `adapter` під час ініціалізації. Новий configure-app приймає `--adapter ./ota-client/adapter.ts` (іменований експорт `otaAdapter`).

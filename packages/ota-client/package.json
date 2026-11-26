@@ -1,6 +1,6 @@
 {
   "name": "expo-updates-server-client",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Expo app client for self-hosted Expo Updates Server",
   "license": "MIT",
   "repository": {
@@ -20,7 +20,9 @@
     "./runtime": "./src/runtime.ts",
     "./types": "./src/types.ts",
     "./ui/ota-update-gate": "./src/ui/ota-update-gate.tsx",
-    "./ui/ota-updates": "./src/ui/ota-updates.tsx"
+    "./ui/ota-updates": "./src/ui/ota-updates.tsx",
+    "./custom": "./src/custom.ts",
+    "./custom-runtime": "./src/runtime-core.ts"
   },
   "files": [
     "src",
