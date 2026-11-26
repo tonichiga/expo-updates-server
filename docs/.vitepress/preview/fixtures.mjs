@@ -1,5 +1,5 @@
 // Synthetic data only. Nothing here is written to a server/database.
-const id = (n) => `80000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+const id = (n) => `${(0x80000000 + n).toString(16)}-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const date = (day) => `2026-10-${day}T10:30:00.000Z`;
 export const devices = ['Release owner · Pixel 9', 'QA · Galaxy S24', 'QA · Pixel 8', 'Beta tester · OnePlus 12'].map((name, n) => ({
   name, installation_id: id(100 + n), device_id: String(n + 1).repeat(64), platform: 'android', runtime_version: '2.4.0', channel: 'production',
@@ -49,10 +49,18 @@ export function responseFor(url) {
   const pathname = url.pathname;
   if (pathname === '/api/admin/session') return { authenticated: true, username: 'demo.operator', role: 'admin' };
   if (pathname === '/api/admin/distribution-control') return { blocked: false, canWrite: true, version: 1, reason: null, changedAt: date(23), changedBy: { type: 'session', id: 'demo', label: 'demo.operator', role: 'admin' } };
+  if (pathname === '/api/admin/distribution-history') return {
+    canWrite: true,
+    scopes: updates.filter((u) => u.status === 'active').map((current, i) => ({
+      platform: current.platform, channel: current.channel, runtimeVersion: current.runtimeVersion,
+      revision: current.updateId, current, previous: updates[4 + i],
+    })),
+  };
+  if (pathname === '/api/admin/device-favorites') return { favorites: [] };
   if (pathname === '/api/admin/devices') return report(url);
   if (pathname === '/api/admin/device-targets') return { devices };
   if (pathname === '/api/admin/guard-actions') return { items: [{ id: id(50), actionKey: 'ota-force-update' }, { id: id(51), actionKey: 'ota-force-store-update' }], canWrite: true };
-  if (pathname === '/api/admin/updates') return { items: updates, total: updates.length, totalPages: 1, page: 1, pageSize: 20, rollbackLockByScope: [] };
+  if (pathname === '/api/admin/updates') return { items: updates, total: updates.length, totalPages: 1, page: 1, pageSize: 20, filters: { channels: ['production'], runtimes: ['2.4.0', '2.3.0'] }, rollbackLockByScope: [] };
   if (pathname.endsWith('/audience')) return { audience_mode: 'devices', audience_device_ids: devices.slice(0, 2).map((d) => d.device_id), audience_installation_ids: [], audience_version: 1 };
   if (pathname.endsWith('/policy')) return { delivery: 'background', guard: null, policyVersion: 1, publishedAt: null, editable: true };
   if (pathname.startsWith('/api/admin/updates/')) return { ...updates[0], updateInfo: { version: '2.4.3', message: updates[0].comment }, updateMeta: { isActive: false, updatedAt: date(23), disabledAt: null }, metadata: { platform: 'android' }, channelLatest: null };
