@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import { execFile } from 'node:child_process';
 import { createHash, X509Certificate } from 'node:crypto';
 import { probeServer } from './doctor-probes.mjs';
-import { bootstrapCode, clientPackage, nativeClientDependencies } from './ota-client-package.mjs';
+import { bootstrapCode, clientPackage, clientDependencies } from './ota-client-package.mjs';
 
 const exec = util.promisify(execFile);
 const present = (value) => typeof value === 'string' && Boolean(value.trim()) && !/(?:<[^>]+>|replace-with|YOUR_|choose-a-|:\/\/USER:PASSWORD@HOST|:\/\/user:password@host|updates\.example\.com|storage\.example\.com)/.test(value);
@@ -59,7 +59,13 @@ async function inspectApplication(appRoot, serverUrl, add) {
     return {};
   }
   const require = createRequire(path.join(appRoot, 'package.json'));
-  const dependencies = ['expo', ...nativeClientDependencies];
+  const entryMetadata = await readJson(path.join(appRoot, 'ota-client-entry.json')).catch(() => ({}));
+  const adapter = entryMetadata.adapter;
+  const dependencies = ['expo', ...clientDependencies(adapter)];
+  if (adapter) {
+    const valid = typeof adapter === 'string' && adapter.startsWith('./') && await exists(path.resolve(appRoot, adapter));
+    add('app.adapter', valid ? 'pass' : 'fail', valid ? 'Custom OTA adapter file exists.' : 'Custom OTA adapter file is missing.');
+  }
   const missing = dependencies.filter((name) => {
     if (!pkg.dependencies?.[name]) return true;
     try { require.resolve(name); return false; } catch { return true; }
@@ -95,10 +101,10 @@ async function inspectApplication(appRoot, serverUrl, add) {
     if (['ota-entry.js', './ota-entry.js'].includes(originalEntry)) {
       originalEntry = (await readJson(path.join(appRoot, 'ota-client-entry.json'))).originalEntry;
       const entrySource = (await fs.readFile(path.join(appRoot, 'ota-entry.js'), 'utf8')).replace(/\r\n/g, '\n');
-      if (typeof originalEntry !== 'string' || !entrySource.includes(bootstrapCode(originalEntry))) throw new Error('entry');
+      if (typeof originalEntry !== 'string' || !entrySource.includes(bootstrapCode(originalEntry, adapter))) throw new Error('entry');
     }
     const { planOtaRootHook } = await import('./ota-root-hook-patcher.mjs');
-    const plan = planOtaRootHook({ appRoot, originalEntry });
+    const plan = planOtaRootHook({ appRoot, originalEntry, sdkEntry: adapter ? clientPackage + "/custom" : clientPackage });
     if (!plan.files.length) {
       add('app.root', 'warn', 'Custom entry/root cannot be verified automatically.', 'Verify SDK initialization before the original entry and a mounted OtaUpdates in your root.');
     } else {

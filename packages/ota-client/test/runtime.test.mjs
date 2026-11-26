@@ -117,3 +117,46 @@ describe("OTA SDK bootstrap", () => {
     });
   });
 });
+
+it("uses application storage, UUID and SHA-256 without calling default providers", async () => {
+  vi.stubGlobal("__DEV__", false);
+  const runtime = await import("../src/runtime-core");
+  const data = new Map();
+  const adapter = {
+    storage: {
+      getItem: key => data.get(key) ?? null,
+      setItem: (key, value) => { data.set(key, value); },
+      removeItem: key => { data.delete(key); },
+    },
+    randomUUID: () => "custom-uuid",
+    sha256: value => "hash:" + value,
+  };
+  runtime.initializeOtaClient({ ...settings, adapter });
+  expect(await runtime.getInstallationId()).toBe("custom-uuid");
+  expect(await runtime.getDeviceId()).toContain("hash:");
+  expect(runtime.getOtaStorage()).toBe(adapter.storage);
+  expect(native.getItem).not.toHaveBeenCalled();
+  expect(native.digest).not.toHaveBeenCalled();
+});
+
+it("preserves pending analytics and postponed updates across a failed storage migration", async () => {
+  const { migrateOtaStorage } = await import("../src/migrate-storage");
+  const install = "@ota-client/installation-v1";
+  const postpone = "@ota-client/postponed-update";
+  const old = new Map([[install, '{"sequence":4,"pending":{"eventId":"pending"}}'], [postpone, "update"]]);
+  const next = new Map();
+  const store = map => ({
+    getItem: key => map.get(key) ?? null,
+    setItem: (key, value) => { map.set(key, value); },
+    removeItem: key => { map.delete(key); },
+  });
+  const destination = store(next);
+  await expect(migrateOtaStorage(store(old), { ...destination, setItem() { throw Error("disk"); } })).rejects.toThrow("disk");
+  expect(old.size).toBe(2);
+  await migrateOtaStorage(store(old), destination);
+  expect(JSON.parse(next.get(install)).pending.eventId).toBe("pending");
+  expect(next.get(postpone)).toBe("update");
+  expect(old.size).toBe(0);
+  await migrateOtaStorage(store(old), destination);
+  expect(next.size).toBe(2);
+});

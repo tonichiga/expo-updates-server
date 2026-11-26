@@ -1,9 +1,9 @@
 # Создание сервера через NPX {#create-a-server-with-npx}
 
-npm-инициализатор — самый быстрый способ создать самостоятельную копию Expo Updates Server. Требуется Node.js 20.9 или новее. Версия 0.6.2 создаёт сервер, команда `configure-app` которого устанавливает `expo-updates-server-client@0.1.0` в приложение Expo.
+npm-инициализатор — самый быстрый способ создать самостоятельную копию Expo Updates Server. Требуется Node.js 20.9 или новее. Версия 0.6.3 создаёт сервер, команда `configure-app` которого устанавливает `expo-updates-server-client@0.2.0` в приложение Expo.
 
 ```bash
-npx create-expo-updates-server@0.6.2 my-server
+npx create-expo-updates-server@0.6.3 my-server
 cd my-server
 ```
 
@@ -12,7 +12,7 @@ cd my-server
 ```bash
 mkdir my-server
 cd my-server
-npx create-expo-updates-server@0.6.2 .
+npx create-expo-updates-server@0.6.3 .
 ```
 
 `npx` скачивает опубликованный пакет инициализатора из npm. После запуска сам инициализатор не делает сетевых запросов: шаблон сервера и его манифест SHA-256 включены в пакет.

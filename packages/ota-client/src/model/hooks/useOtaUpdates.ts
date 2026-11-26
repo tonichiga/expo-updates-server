@@ -1,16 +1,16 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { OtaOptions, OtaController } from "../../types";
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import * as Updates from "expo-updates";
 import { AppState, Linking, Platform } from "react-native";
 import {
   enabled,
+  getOtaStorage,
   start,
   getInstallationId,
   getDeviceId,
   checkForUpdateAsync,
   fetchUpdateAsync,
-} from "../../runtime";
+} from "../../runtime-core";
 import { createUpdateController } from "../update-controller";
 
 const controller = createUpdateController({
@@ -20,11 +20,11 @@ const controller = createUpdateController({
     installationId: await getInstallationId(),
     deviceId: await getDeviceId(),
   }),
-  readPostponedId: () => AsyncStorage.getItem("@ota-client/postponed-update"),
-  writePostponedId: (id) =>
+  readPostponedId: async () => getOtaStorage().getItem("@ota-client/postponed-update"),
+  writePostponedId: async (id) =>
     id === null
-      ? AsyncStorage.removeItem("@ota-client/postponed-update")
-      : AsyncStorage.setItem("@ota-client/postponed-update", id),
+      ? getOtaStorage().removeItem("@ota-client/postponed-update")
+      : getOtaStorage().setItem("@ota-client/postponed-update", id),
   check: checkForUpdateAsync,
   fetch: fetchUpdateAsync,
   runningCandidate: () => ({ type: "new", manifest: Updates.manifest }),

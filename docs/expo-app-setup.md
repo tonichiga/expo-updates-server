@@ -28,7 +28,7 @@ npm run configure-app -- \
   --runtime-version 1.0.0
 ```
 
-The configurator runs `expo install` for `expo-updates-server-client@0.1.0` and its native dependencies. It updates `app.json` and `package.json`, copies the public signing certificate, installs the publisher and runs `expo prebuild`. It supports npm, pnpm, Yarn and Bun lockfiles.
+The configurator runs `expo install` for `expo-updates-server-client@0.2.0` and its native dependencies. It updates `app.json` and `package.json`, copies the public signing certificate, installs the publisher and runs `expo prebuild`. It supports npm, pnpm, Yarn and Bun lockfiles.
 
 It writes the public settings to `ota-client/config.json`. The generated `ota-entry.js` calls `initializeOtaClient(config)` and `start()` before loading the original entry. In a supported root, the configurator adds an import from `expo-updates-server-client` and mounts `<OtaUpdates />` beside navigation. It recognizes Expo Router’s `src/app/_layout` or `app/_layout`, and standard `App` components, including platform variants. The component checks automatically and prompts the user to download or restart. You can change its options in the root. See the [client lifecycle guide](./ota-client-lifecycle.md).
 
@@ -149,7 +149,7 @@ missing manual setup steps.
 For manual setup, install Expo-compatible versions of all client dependencies:
 
 ```bash
-npx expo install expo-updates-server-client@0.1.0 expo-updates expo-application expo-crypto expo-secure-store @react-native-async-storage/async-storage
+npx expo install expo-updates-server-client@0.2.0 expo-updates expo-application expo-crypto expo-secure-store @react-native-async-storage/async-storage
 ```
 
 The application does not send an admin access token when checking for an
@@ -611,3 +611,5 @@ Final device test:
 5. Run the application's update check.
 6. Download, reload and confirm the new update ID.
 7. Test rollback and an exact emergency redirect before production launch.
+
+The adapter is optional. To use your own storage and crypto in SDK 0.2.0, import from `expo-updates-server-client/custom` and pass `adapter` to initialization. The updated configurator accepts `--adapter ./ota-client/adapter.ts` (named export `otaAdapter`).

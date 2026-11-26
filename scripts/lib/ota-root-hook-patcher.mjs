@@ -51,7 +51,7 @@ function isDirective(node) {
 }
 
 /** Parse insertion locations without reprinting the application's existing code. */
-export function patchOtaRootHook(text, filename, appRoot) {
+export function patchOtaRootHook(text, filename, appRoot, sdkEntry = clientPackage) {
   const source = ts.createSourceFile(
     filename,
     text,
@@ -88,7 +88,7 @@ export function patchOtaRootHook(text, filename, appRoot) {
   const clientImports = imports.filter((node) => {
     if (!ts.isStringLiteral(node.moduleSpecifier)) return false;
     const specifier = node.moduleSpecifier.text;
-    if (specifier === clientPackage) return true;
+    if (specifier === clientPackage || specifier === clientPackage + "/custom") return true;
     if (!specifier.startsWith(".")) return false;
     const resolved = path.resolve(path.dirname(filename), specifier);
     return ["", "/index", "/index.js", "/index.ts"].some(
@@ -348,13 +348,13 @@ export function patchOtaRootHook(text, filename, appRoot) {
   }
   const migrateImportsOnly = !edits.length;
   for (const node of clientImports) {
-    if (node.moduleSpecifier.text !== clientPackage) {
+    if (node.moduleSpecifier.text !== sdkEntry) {
       const specifier = node.moduleSpecifier;
       const quote = text[specifier.getStart(source)];
       edits.push({
         start: specifier.getStart(source),
         end: specifier.end,
-        content: `${quote}${clientPackage}${quote}`,
+        content: `${quote}${sdkEntry}${quote}`,
       });
     }
   }
@@ -373,7 +373,7 @@ export function patchOtaRootHook(text, filename, appRoot) {
     edits.push({
       start: at,
       end: at,
-      content: `${newline}import { ${specifier} } from '${clientPackage}';${newline}`,
+      content: `${newline}import { ${specifier} } from '${sdkEntry}';${newline}`,
     });
   }
   for (const edit of edits.sort((a, b) => b.start - a.start))
@@ -489,7 +489,7 @@ function registersDefaultApp(filename) {
   );
 }
 
-export function planOtaRootHook({ appRoot, originalEntry }) {
+export function planOtaRootHook({ appRoot, originalEntry, sdkEntry }) {
   const candidates = (base) =>
     suffixes
       .flatMap((suffix) =>
@@ -540,7 +540,7 @@ export function planOtaRootHook({ appRoot, originalEntry }) {
       const filename = path.join(appRoot, name);
       return [
         name,
-        patchOtaRootHook(fs.readFileSync(filename, "utf8"), filename, appRoot),
+        patchOtaRootHook(fs.readFileSync(filename, "utf8"), filename, appRoot, sdkEntry),
       ];
     }),
     warnings: [],

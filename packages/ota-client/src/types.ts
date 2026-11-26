@@ -1,5 +1,18 @@
 import type { ReactNode } from "react";
 
+type MaybePromise<T> = T | Promise<T>;
+
+export interface OtaClientAdapter {
+  storage: {
+    getItem(key: string): MaybePromise<string | null>;
+    setItem(key: string, value: string): MaybePromise<void>;
+    removeItem(key: string): MaybePromise<void>;
+  };
+  randomUUID(): string;
+  /** Lowercase SHA-256 hex digest of the UTF-8 string. */
+  sha256(value: string): MaybePromise<string>;
+}
+
 export interface OtaClientConfig {
   channel: string;
   heartbeatUrl: string;
